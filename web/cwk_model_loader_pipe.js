@@ -65,7 +65,7 @@ const PIPE_ROWS = [
   { key: "scheduler",    label: "Scheduler", widget: "scheduler",    type: "list",  options: null },
   { key: "cfg",          label: "CFG",       widget: "cfg",          type: "float", min: 0, max: 30  },
   { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
-  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "list",  options: null },
+  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "list",  options: null, defaultValue: "-2" },
   { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
   { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
   { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
@@ -551,7 +551,8 @@ function drawNode(node, ctx) {
     const row     = PIPE_ROWS[i];
     const ry      = getRowY(i);
     const vr      = getValueRect(node, i);
-    const val     = vals[row.key] ?? (row.options ? row.options[0] : (row.type === "float" ? 7.0 : 1));
+    const val     = vals[row.key] ?? (row.defaultValue !== undefined ? row.defaultValue
+                    : (row.options ? row.options[0] : (row.type === "float" ? 7.0 : 1)));
     const isHov   = editMode && hover?.rowIdx === i;
     const hovPart = isHov ? hover.part : null;
 

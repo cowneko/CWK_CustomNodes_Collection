@@ -389,16 +389,12 @@ export class ModelBrowserPanel {
 
   async _populateDropdowns() {
     try {
-      const info       = await apiFetch("/object_info/CWK_ModelPresetManager");
-      const inputs     = info?.CWK_ModelPresetManager?.input;
-      const samplers   = (inputs?.optional?.override_sampler?.[0]   ?? []).filter(v => v !== "(preset)");
-      const schedulers = (inputs?.optional?.override_scheduler?.[0] ?? []).filter(v => v !== "(preset)");
-      this._fillSelect("sb-sampler",   samplers);
-      this._fillSelect("sb-scheduler", schedulers);
-      const clipTypes = (inputs?.optional?.override_clip_type?.[0] ?? []).filter(v => v !== "(preset)");
-      if (clipTypes.length) this._fillSelect("sb-clip-type", clipTypes);
-      const modelSamplingOpts = (inputs?.optional?.override_model_sampling?.[0] ?? []).filter(v => v !== "(preset)");
-      if (modelSamplingOpts.length) this._fillSelect("sb-model-sampling", modelSamplingOpts);
+      const { samplers, schedulers, clip_types, model_sampling_types } =
+        await apiFetch("/cwk/sampler_scheduler_list");
+      this._fillSelect("sb-sampler",   samplers   ?? []);
+      this._fillSelect("sb-scheduler", schedulers ?? []);
+      if (clip_types?.length)           this._fillSelect("sb-clip-type",     clip_types);
+      if (model_sampling_types?.length) this._fillSelect("sb-model-sampling", model_sampling_types);
     } catch {
       this._fillSelect("sb-sampler",   ["euler","euler_ancestral","dpmpp_2m","dpmpp_sde","ddim"]);
       this._fillSelect("sb-scheduler", ["normal","karras","exponential","sgm_uniform","simple"]);

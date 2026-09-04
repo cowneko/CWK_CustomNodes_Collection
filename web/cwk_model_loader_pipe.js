@@ -57,6 +57,7 @@ let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
 let RNGS              = ["default", "cpu", "gpu", "nv"];
 let MODEL_SAMPLING_TYPES = ["default", "eps", "v_prediction", "lcm", "x0", "img_to_img"];
+const CLIP_SKIP_OPTIONS = ["Disabled", ...Array.from({ length: 24 }, (_, i) => String(-(i + 1)))];
 
 // Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
 const PIPE_ROWS = [
@@ -64,7 +65,7 @@ const PIPE_ROWS = [
   { key: "scheduler",    label: "Scheduler", widget: "scheduler",    type: "list",  options: null },
   { key: "cfg",          label: "CFG",       widget: "cfg",          type: "float", min: 0, max: 30  },
   { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
-  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "int",   min: -24, max: 0  },
+  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "list",  options: CLIP_SKIP_OPTIONS },
   { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
   { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
   { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
@@ -390,7 +391,7 @@ async function _fetchAndApplyPreset(node, modelName) {
     scheduler:    preset.scheduler,
     cfg:          preset.cfg,
     steps:        preset.steps,
-    clip_skip:    preset.clip_skip,
+    clip_skip:    preset.clip_skip != null ? String(preset.clip_skip) : undefined,
     clip_name:    preset.clip_name,
     clip_type:    preset.clip_type,
     vae_name:     preset.vae_name,
@@ -653,7 +654,7 @@ app.registerExtension({
         scheduler:    "normal",
         cfg:          7.0,
         steps:        20,
-        clip_skip:    -2,
+        clip_skip:    "-2",
         clip_name:    "embedded",
         clip_type:    "stable_diffusion",
         vae_name:     "embedded",
@@ -675,7 +676,7 @@ app.registerExtension({
         const sc = getW("scheduler");    if (sc) sc.value = "normal";
         const cv = getW("cfg");          if (cv) cv.value = 7.0;
         const st = getW("steps");        if (st) st.value = 20;
-        const cs = getW("clip_skip");    if (cs) cs.value = -2;
+        const cs = getW("clip_skip");    if (cs) cs.value = "-2";
         const cn = getW("clip_name");    if (cn) cn.value = "embedded";
         const vn = getW("vae_name");     if (vn) vn.value = "embedded";
         const ct = getW("clip_type");    if (ct) ct.value = "stable_diffusion";

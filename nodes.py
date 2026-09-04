@@ -62,6 +62,11 @@ RNG_TYPES = ["cpu", "gpu", "nv"]
 # "default" sentinel = no RNG patch applied (pass model through untouched)
 RNG_TYPES_WITH_DEFAULT = ["default"] + RNG_TYPES
 
+# ─── Clip skip options ──────────────────────────────────────────────────────────
+
+# "Disabled" sentinel = skip clip.clip_layer() entirely (pass clip through untouched)
+CLIP_SKIP_OPTIONS = ["Disabled"] + [str(i) for i in range(-1, -25, -1)]
+
 
 # ─── Resolution presets ────────────────────────────────────────────────────────
 
@@ -161,7 +166,7 @@ def default_preset() -> Dict[str, Any]:
         "scheduler":       schedulers[0] if schedulers else "normal",
         "cfg":             7.0,
         "steps":           20,
-        "clip_skip":       -2,
+        "clip_skip":       "-2",
         "width":           1024,
         "height":          1024,
         "rng":             "default",
@@ -723,7 +728,7 @@ class CWK_ModelLoaderPipe:
                 "scheduler":    (schedulers,),
                 "cfg":          ("FLOAT", {"default": 7.0,  "min": 0.0, "max": 30.0, "step": 0.1}),
                 "steps":        ("INT",   {"default": 20,   "min": 1,   "max": 200,  "step": 1}),
-                "clip_skip":    ("INT",   {"default": -2,   "min": -24, "max": 0,    "step": 1}),
+                "clip_skip":    (CLIP_SKIP_OPTIONS, {"default": "-2"}),
             },
             "optional": {
                 "model_override": ("MODEL", {}),
@@ -764,7 +769,7 @@ class CWK_ModelLoaderPipe:
         scheduler:     str,
         cfg:           float,
         steps:         int,
-        clip_skip:     int,
+        clip_skip:     str,
         model_override = None,
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",
@@ -808,13 +813,20 @@ class CWK_ModelLoaderPipe:
                 print(f"[CWK Pipe] Warning: could not load VAE '{vae_name}': {e}")
 
         # ── Apply clip_skip ────────────────────────────────────────────────────
-        if clip is not None:
-            try:
-                clip = clip.clone()
-                clip.clip_layer(clip_skip)
-                pipe = {**pipe, "clip": clip}
-            except Exception as e:
-                print(f"[CWK Pipe] Warning: could not apply clip_skip={clip_skip}: {e}")
+        if clip_skip == "Disabled":
+            clip_skip_applied = "Disabled"
+            if clip is not None:
+                print("[CWK Pipe] clip_skip: Disabled (clip passed through untouched)")
+        else:
+            # Old workflows/presets may hold clip_skip as an int — normalize to str
+            clip_skip_applied = str(clip_skip)
+            if clip is not None:
+                try:
+                    clip = clip.clone()
+                    clip.clip_layer(int(clip_skip_applied))
+                    pipe = {**pipe, "clip": clip}
+                except Exception as e:
+                    print(f"[CWK Pipe] Warning: could not apply clip_skip={clip_skip_applied}: {e}")
 
         # ── Resolve sampler / scheduler ────────────────────────────────────────
         sampler_name, scheduler = resolve_sampler_scheduler(sampler_name, scheduler)
@@ -832,7 +844,7 @@ class CWK_ModelLoaderPipe:
             "scheduler":      scheduler,
             "cfg":            cfg,
             "steps":          steps,
-            "clip_skip":      clip_skip,
+            "clip_skip":      clip_skip_applied,
             "rng":            rng,
             "model_sampling": model_sampling,
         })
@@ -840,10 +852,10 @@ class CWK_ModelLoaderPipe:
         print(
             f"[CWK Pipe] model={pipe.get('model_name','?')} | "
             f"sampler={sampler_name} sched={scheduler} cfg={cfg} "
-            f"steps={steps} clip_skip={clip_skip} "
+            f"steps={steps} clip_skip={clip_skip_applied} "
             f"rng={rng} model_sampling={model_sampling}"
         )
-        return (pipe, model, clip, vae, latent, sampler_name, scheduler, cfg, steps, clip_skip, infos)
+        return (pipe, model, clip, vae, latent, sampler_name, scheduler, cfg, steps, clip_skip_applied, infos)
 
 
 # ─── Node: CWK_LatentImage ────────────────────────────────────────────────────

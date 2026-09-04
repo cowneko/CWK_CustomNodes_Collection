@@ -53,6 +53,7 @@ const BTN_COLOR = { border: "#313552", hoverBorder: "#a6e3a1", hoverText: "#a6e3
 let SAMPLERS   = ["euler","euler_ancestral","dpmpp_2m","dpmpp_2m_sde","dpmpp_sde","ddim","uni_pc","lcm"];
 let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"];
 let CLIPS      = ["embedded"];
+let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
 
 // Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
@@ -63,6 +64,7 @@ const PIPE_ROWS = [
   { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
   { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "int",   min: -24, max: 0  },
   { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
+  { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
   { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
 ];
 
@@ -71,6 +73,7 @@ function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "sampler_name").options = SAMPLERS;
   PIPE_ROWS.find(r => r.key === "scheduler").options    = SCHEDULERS;
   PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
+  PIPE_ROWS.find(r => r.key === "clip_type").options    = CLIP_TYPES;
   PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
 }
 _syncRowOptions();
@@ -85,11 +88,13 @@ async function _loadPipeOptions() {
     const inputs = data?.CWK_ModelLoaderPipe?.input;
     const samplers   = (inputs?.required?.sampler_name?.[0] ?? []);
     const schedulers = (inputs?.required?.scheduler?.[0]    ?? []);
+    const clipTypes  = (inputs?.optional?.clip_type?.[0]    ?? []);
     if (samplers.length)   { SAMPLERS   = samplers;   }
     if (schedulers.length) { SCHEDULERS = schedulers; }
+    if (clipTypes.length)  { CLIP_TYPES.length = 0; CLIP_TYPES.push(...clipTypes); }
     _syncRowOptions();
   } catch (e) {
-    console.warn("[CWK Pipe] Could not load sampler/scheduler options:", e);
+    console.warn("[CWK Pipe] Could not load sampler/scheduler/clip_type options:", e);
   }
   try {
     const [clipRes, vaeRes] = await Promise.all([
@@ -377,15 +382,13 @@ async function _fetchAndApplyPreset(node, modelName) {
     steps:        preset.steps,
     clip_skip:    preset.clip_skip,
     clip_name:    preset.clip_name,
+    clip_type:    preset.clip_type,
     vae_name:     preset.vae_name,
   };
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const val = map[PIPE_ROWS[i].key];
     if (val !== undefined) applyRowValue(node, i, val);
   }
-  // clip_type has no dedicated row, but still needs to reach the hidden widget
-  const ctW = node.widgets?.find(w => w.name === "clip_type");
-  if (ctW && preset.clip_type !== undefined) { ctW.value = preset.clip_type; ctW.callback?.(preset.clip_type); }
 
   return preset;
 }
@@ -478,6 +481,7 @@ async function handleUpdatePresets(node) {
     steps:        vals.steps,
     clip_skip:    vals.clip_skip,
     clip_name:    vals.clip_name,
+    clip_type:    vals.clip_type,
     vae_name:     vals.vae_name,
   };
 
@@ -637,6 +641,7 @@ app.registerExtension({
         steps:        20,
         clip_skip:    -2,
         clip_name:    "embedded",
+        clip_type:    "stable_diffusion",
         vae_name:     "embedded",
       };
       node.color   = NODE_COLOR;

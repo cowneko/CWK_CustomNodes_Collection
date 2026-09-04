@@ -128,6 +128,14 @@ def _get_clip_types() -> list:
     return sorted(set(clip_types))    
 
 
+def _default_clip_type(clip_types: list) -> str:
+    """Return the correct default clip_type, falling back gracefully if 'stable_diffusion'
+    isn't present in the (dynamically built) clip_types list."""
+    if "stable_diffusion" in clip_types:
+        return "stable_diffusion"
+    return clip_types[0] if clip_types else "stable_diffusion"
+
+
 def get_vae_list():
     """Return list of available VAE models with 'embedded' as first entry."""
     try:
@@ -605,7 +613,7 @@ class CWK_ModelLoader:
             },
             "optional": {
                 "clip_name": (clip_list,),
-                "clip_type": (clip_types,),
+                "clip_type": (clip_types, {"default": _default_clip_type(clip_types)}),
                 "vae_name":  (vae_list,),
             },
         }
@@ -723,7 +731,7 @@ class CWK_ModelLoaderPipe:
             "optional": {
                 "model_override": ("MODEL", {}),
                 "clip_name": (get_clip_list(),),
-                "clip_type": (_get_clip_types(),),
+                "clip_type": (_get_clip_types(), {"default": _default_clip_type(_get_clip_types())}),
                 "vae_name":  (get_vae_list(),),
             },
         }

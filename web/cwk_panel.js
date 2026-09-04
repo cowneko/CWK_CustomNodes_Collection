@@ -399,12 +399,11 @@ export class ModelBrowserPanel {
       if (clip_types?.length)           this._fillSelect("sb-clip-type",     clip_types);
       if (model_sampling_types?.length) this._fillSelect("sb-model-sampling", model_sampling_types);
       if (rng_types?.length)            this._fillSelect("sb-rng",           rng_types);
-      this._fillSelect("sb-clip-skip", CLIP_SKIP_OPTIONS);
     } catch {
       this._fillSelect("sb-sampler",   ["euler","euler_ancestral","dpmpp_2m","dpmpp_sde","ddim"]);
       this._fillSelect("sb-scheduler", ["normal","karras","exponential","sgm_uniform","simple"]);
-      this._fillSelect("sb-clip-skip", CLIP_SKIP_OPTIONS);
     }
+    this._fillSelect("sb-clip-skip", CLIP_SKIP_OPTIONS);
 
     // Populate CLIP and VAE dropdowns from dedicated endpoints
     try {
@@ -966,7 +965,7 @@ export class ModelBrowserPanel {
     document.getElementById("sb-height").value           = p.height;
     this._setSelectValue("sb-sampler",         p.sampler_name);
     this._setSelectValue("sb-scheduler",       p.scheduler);
-    this._setSelectValue("sb-clip-skip",       String(p.clip_skip));
+    this._setSelectValue("sb-clip-skip",       String(p.clip_skip ?? "-2"));
     this._setSelectValue("sb-rng",             p.rng ?? "default");
     this._setSelectValue("sb-model-sampling",  p.model_sampling ?? "default");
     this._setSelectValue("sb-clip-name",       p.clip_name ?? "embedded");

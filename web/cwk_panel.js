@@ -18,6 +18,11 @@ const DEFAULTS = {
 
 const NSFW_R = 2;
 
+// Clip skip is a dropdown: "Disabled" (CLIP untouched) or a numeric value -1..-24.
+const CLIP_SKIP_DISABLED = "Disabled";
+const CLIP_SKIP_OPTIONS  = [CLIP_SKIP_DISABLED,
+  ...Array.from({ length: 24 }, (_, i) => String(-(i + 1)))];
+
 function isNsfwModel(model) {
   const c = model.civitai;
   if (!c) return false;
@@ -192,8 +197,7 @@ export class ModelBrowserPanel {
           <div class="cwk-sidebar-row">
             <div class="cwk-sidebar-col">
               <div class="cwk-sidebar-title">Clip skip:</div>
-              <input class="cwk-sidebar-input" id="sb-clip-skip"
-                type="number" step="1" min="-24" max="-1" disabled/>
+              <select class="cwk-sidebar-input" id="sb-clip-skip" disabled></select>
             </div>
             <div class="cwk-sidebar-col">
               <div class="cwk-sidebar-title">RNG:</div>
@@ -388,6 +392,8 @@ export class ModelBrowserPanel {
   // ── Dropdowns ─────────────────────────────────────────────────────────────────
 
   async _populateDropdowns() {
+    // Static clip skip options: "Disabled" + "-1".."-24"
+    this._fillSelect("sb-clip-skip", CLIP_SKIP_OPTIONS);
     try {
       const { samplers, schedulers, clip_types, model_sampling_types } =
         await apiFetch("/cwk/sampler_scheduler_list");
@@ -956,11 +962,11 @@ export class ModelBrowserPanel {
     document.getElementById("sb-model-name").textContent = name;
     document.getElementById("sb-cfg").value              = p.cfg;
     document.getElementById("sb-steps").value            = p.steps;
-    document.getElementById("sb-clip-skip").value        = p.clip_skip;
     document.getElementById("sb-width").value            = p.width;
     document.getElementById("sb-height").value           = p.height;
     this._setSelectValue("sb-sampler",         p.sampler_name);
     this._setSelectValue("sb-scheduler",       p.scheduler);
+    this._setSelectValue("sb-clip-skip",       this._fmtClipSkip(p.clip_skip));
     this._setSelectValue("sb-rng",             p.rng ?? "cpu");
     this._setSelectValue("sb-model-sampling",  p.model_sampling ?? "eps");
     this._setSelectValue("sb-clip-name",       p.clip_name ?? "embedded");
@@ -976,13 +982,22 @@ export class ModelBrowserPanel {
     if (opt) sel.value = value;
   }
 
+  // Normalize a stored clip_skip value (int, numeric string, or "Disabled")
+  // to the string used by the sb-clip-skip dropdown.
+  _fmtClipSkip(v) {
+    if (v === undefined || v === null) return "-2";
+    const s = String(v).trim();
+    if (s.toLowerCase() === CLIP_SKIP_DISABLED.toLowerCase()) return CLIP_SKIP_DISABLED;
+    return CLIP_SKIP_OPTIONS.includes(s) ? s : "-2";
+  }
+
   _getSidebarPreset() {
     return {
       sampler_name:   document.getElementById("sb-sampler").value,
       scheduler:      document.getElementById("sb-scheduler").value,
       cfg:            parseFloat(document.getElementById("sb-cfg").value),
       steps:          parseInt(document.getElementById("sb-steps").value, 10),
-      clip_skip:      parseInt(document.getElementById("sb-clip-skip").value, 10),
+      clip_skip:      document.getElementById("sb-clip-skip").value,
       rng:            document.getElementById("sb-rng").value,
       model_sampling: document.getElementById("sb-model-sampling").value,
       width:          parseInt(document.getElementById("sb-width").value, 10),

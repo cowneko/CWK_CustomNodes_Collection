@@ -55,6 +55,9 @@ let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"]
 let CLIPS      = ["embedded"];
 let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
+// Clip skip dropdown: "Disabled" (CLIP passed through untouched) + "-1".."-24"
+const CLIP_SKIP_DISABLED = "Disabled";
+let CLIP_SKIPS = [CLIP_SKIP_DISABLED, ...Array.from({ length: 24 }, (_, i) => String(-(i + 1)))];
 
 // Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
 const PIPE_ROWS = [
@@ -62,7 +65,7 @@ const PIPE_ROWS = [
   { key: "scheduler",    label: "Scheduler", widget: "scheduler",    type: "list",  options: null },
   { key: "cfg",          label: "CFG",       widget: "cfg",          type: "float", min: 0, max: 30  },
   { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
-  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "int",   min: -24, max: 0  },
+  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "list",  options: null },
   { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
   { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
   { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
@@ -72,6 +75,7 @@ const PIPE_ROWS = [
 function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "sampler_name").options = SAMPLERS;
   PIPE_ROWS.find(r => r.key === "scheduler").options    = SCHEDULERS;
+  PIPE_ROWS.find(r => r.key === "clip_skip").options    = CLIP_SKIPS;
   PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
   PIPE_ROWS.find(r => r.key === "clip_type").options    = CLIP_TYPES;
   PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
@@ -88,9 +92,11 @@ async function _loadPipeOptions() {
     const inputs = data?.CWK_ModelLoaderPipe?.input;
     const samplers   = (inputs?.required?.sampler_name?.[0] ?? []);
     const schedulers = (inputs?.required?.scheduler?.[0]    ?? []);
+    const clipSkips  = (inputs?.required?.clip_skip?.[0]    ?? []);
     const clipTypes  = (inputs?.optional?.clip_type?.[0]    ?? []);
     if (samplers.length)   { SAMPLERS   = samplers;   }
     if (schedulers.length) { SCHEDULERS = schedulers; }
+    if (clipSkips.length)  { CLIP_SKIPS.length = 0; CLIP_SKIPS.push(...clipSkips); }
     if (clipTypes.length)  { CLIP_TYPES.length = 0; CLIP_TYPES.push(...clipTypes); }
     _syncRowOptions();
   } catch (e) {
@@ -367,6 +373,15 @@ function _findModelName(node, visited = new Set()) {
 
 // ─── Preset fetch / apply / status helpers ────────────────────────────────────
 
+// Normalize a stored clip_skip value (int, numeric string, or "Disabled")
+// to the string used by the clip_skip dropdown row.
+function _fmtClipSkip(v) {
+  if (v === undefined || v === null) return "-2";
+  const s = String(v).trim();
+  if (s.toLowerCase() === CLIP_SKIP_DISABLED.toLowerCase()) return CLIP_SKIP_DISABLED;
+  return CLIP_SKIPS.includes(s) ? s : "-2";
+}
+
 async function _fetchAndApplyPreset(node, modelName) {
   const res = await fetch(`/cwk/preset?model=${encodeURIComponent(modelName)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -380,7 +395,7 @@ async function _fetchAndApplyPreset(node, modelName) {
     scheduler:    preset.scheduler,
     cfg:          preset.cfg,
     steps:        preset.steps,
-    clip_skip:    preset.clip_skip,
+    clip_skip:    _fmtClipSkip(preset.clip_skip),
     clip_name:    preset.clip_name,
     clip_type:    preset.clip_type,
     vae_name:     preset.vae_name,
@@ -639,7 +654,7 @@ app.registerExtension({
         scheduler:    "normal",
         cfg:          7.0,
         steps:        20,
-        clip_skip:    -2,
+        clip_skip:    "-2",
         clip_name:    "embedded",
         clip_type:    "stable_diffusion",
         vae_name:     "embedded",
@@ -659,7 +674,7 @@ app.registerExtension({
         const sc = getW("scheduler");    if (sc) sc.value = "normal";
         const cv = getW("cfg");          if (cv) cv.value = 7.0;
         const st = getW("steps");        if (st) st.value = 20;
-        const cs = getW("clip_skip");    if (cs) cs.value = -2;
+        const cs = getW("clip_skip");    if (cs) cs.value = "-2";
         const cn = getW("clip_name");    if (cn) cn.value = "embedded";
         const vn = getW("vae_name");     if (vn) vn.value = "embedded";
         const ct = getW("clip_type");    if (ct) ct.value = "stable_diffusion";

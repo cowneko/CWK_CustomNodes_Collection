@@ -54,6 +54,30 @@ def save_last_used_model(model_name: str) -> None:
 
 MODEL_SAMPLING_TYPES = ["eps", "v_prediction", "lcm", "x0", "img_to_img"]
 
+# Clip skip is stored/transmitted as a string: "Disabled" (clip untouched)
+# or a numeric string "-1".."-24" matching ComfyUI's clip_layer() semantics.
+CLIP_SKIP_DISABLED = "Disabled"
+CLIP_SKIP_OPTIONS  = [CLIP_SKIP_DISABLED] + [str(-i) for i in range(1, 25)]
+
+
+def _normalize_clip_skip(value) -> Optional[int]:
+    """Convert a clip_skip value (int, numeric string, or 'Disabled') to an int,
+    or return None when clip skip is disabled / cannot be parsed."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        v = value.strip()
+        if v.lower() == CLIP_SKIP_DISABLED.lower():
+            return None
+        try:
+            value = int(v)
+        except (ValueError, TypeError):
+            return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
 
 # ─── Resolution presets ────────────────────────────────────────────────────────
 
@@ -709,9 +733,10 @@ class CWK_ModelLoaderPipe:
     """
     CWK Model Loader Pipe — companion pipeline node.
 
-    Accepts a PIPE_LOADER + LATENT, applies clip_skip, resolves sampler/scheduler,
-    and fans out all values. Optional model/clip inputs override what comes
-    from the pipe.
+    Accepts a PIPE_LOADER + LATENT, applies clip_skip (unless set to "Disabled",
+    which passes the CLIP through completely untouched), resolves
+    sampler/scheduler, and fans out all values. Optional model/clip inputs
+    override what comes from the pipe.
     """
 
     @classmethod
@@ -726,7 +751,7 @@ class CWK_ModelLoaderPipe:
                 "scheduler":    (schedulers,),
                 "cfg":          ("FLOAT", {"default": 7.0,  "min": 0.0, "max": 30.0, "step": 0.1}),
                 "steps":        ("INT",   {"default": 20,   "min": 1,   "max": 200,  "step": 1}),
-                "clip_skip":    ("INT",   {"default": -2,   "min": -24, "max": 0,    "step": 1}),
+                "clip_skip":    (CLIP_SKIP_OPTIONS, {"default": "-2"}),
             },
             "optional": {
                 "model_override": ("MODEL", {}),
@@ -765,7 +790,7 @@ class CWK_ModelLoaderPipe:
         scheduler:     str,
         cfg:           float,
         steps:         int,
-        clip_skip:     int,
+        clip_skip      = "-2",
         model_override = None,
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",
@@ -795,10 +820,13 @@ class CWK_ModelLoaderPipe:
                 print(f"[CWK Pipe] Warning: could not load VAE '{vae_name}': {e}")
 
         # ── Apply clip_skip ────────────────────────────────────────────────────
-        if clip is not None:
+        # "Disabled" (or any unparsable value) → pass the CLIP through completely
+        # untouched: no clip.clone() and no clip.clip_layer() call at all.
+        clip_skip_value = _normalize_clip_skip(clip_skip)
+        if clip is not None and clip_skip_value is not None:
             try:
                 clip = clip.clone()
-                clip.clip_layer(clip_skip)
+                clip.clip_layer(clip_skip_value)
                 pipe = {**pipe, "clip": clip}
             except Exception as e:
                 print(f"[CWK Pipe] Warning: could not apply clip_skip={clip_skip}: {e}")
@@ -819,7 +847,7 @@ class CWK_ModelLoaderPipe:
             "scheduler":      scheduler,
             "cfg":            cfg,
             "steps":          steps,
-            "clip_skip":      clip_skip,
+            "clip_skip":      clip_skip_value if clip_skip_value is not None else CLIP_SKIP_DISABLED,
             "rng":            pipe.get("rng",            "cpu"),
             "model_sampling": pipe.get("model_sampling", "eps"),
         })
@@ -827,9 +855,9 @@ class CWK_ModelLoaderPipe:
         print(
             f"[CWK Pipe] model={pipe.get('model_name','?')} | "
             f"sampler={sampler_name} sched={scheduler} cfg={cfg} "
-            f"steps={steps} clip_skip={clip_skip}"
+            f"steps={steps} clip_skip={clip_skip_value if clip_skip_value is not None else CLIP_SKIP_DISABLED}"
         )
-        return (pipe, model, clip, vae, latent, sampler_name, scheduler, cfg, steps, clip_skip, infos)
+        return (pipe, model, clip, vae, latent, sampler_name, scheduler, cfg, steps, clip_skip_value, infos)
 
 
 # ─── Node: CWK_LatentImage ────────────────────────────────────────────────────

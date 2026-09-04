@@ -1041,7 +1041,7 @@ async def handle_sampler_scheduler_list(req: web.Request) -> web.Response:
         "samplers":             list(comfy.samplers.KSampler.SAMPLERS),
         "schedulers":           list(comfy.samplers.KSampler.SCHEDULERS),
         "clip_types":           _get_clip_types(),
-        "model_sampling_types": MODEL_SAMPLING_TYPES,
+        "model_sampling_types": ["default"] + MODEL_SAMPLING_TYPES,
     })
 
 

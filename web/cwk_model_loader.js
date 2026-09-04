@@ -57,18 +57,11 @@ const BTN_COLOR = { border: "#313552", hoverBorder: "#89b4fa", hoverText: "#89b4
 
 // ─── Row options (loaded async) ───────────────────────────────────────────────
 
-const RNGS              = ["cpu", "gpu", "nv"];
-const MODEL_SAMPLING_TYPES = ["eps", "v_prediction", "lcm", "x0", "img_to_img"];
 let CLIPS      = ["embedded"];
 let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
 
 // ─── Row descriptors ──────────────────────────────────────────────────────────
-
-const ROWS_ALWAYS = [
-  { key: "rng",            label: "RNG",            widget: "rng",            type: "list", options: RNGS              },
-  { key: "model_sampling", label: "Model Sampling", widget: "model_sampling", type: "list", options: MODEL_SAMPLING_TYPES },
-];
 
 const ROWS_NON_AIO = [
   { key: "clip_name", label: "CLIP",      widget: "clip_name", type: "list", options: CLIPS      },
@@ -77,11 +70,8 @@ const ROWS_NON_AIO = [
 ];
 
 function getActiveRows(node) {
-  return node._cwkIsAIO ? ROWS_ALWAYS : [...ROWS_ALWAYS, ...ROWS_NON_AIO];
+  return node._cwkIsAIO ? [] : ROWS_NON_AIO;
 }
-
-// Separator appears between the two groups when non-AIO
-const SEPARATOR_AFTER_IDX = ROWS_ALWAYS.length - 1;  // after index 1
 
 // ─── Base-model badge helpers (same as preset_manager.js) ────────────────────
 
@@ -264,14 +254,8 @@ function getQuickLoadRects(node) {
 function getRowsStartY(node) { return _getBaseRowsY(node) + QUICK_LOAD_TOTAL_H; }
 
 function getRowY(node, i) {
-  const rows = getActiveRows(node);
-  let y = getRowsStartY(node);
-  for (let r = 0; r < i; r++) {
-    y += ROW_H + 3;
-    // separator between always-rows and non-AIO rows
-    if (!node._cwkIsAIO && r === SEPARATOR_AFTER_IDX) y += GROUP_SEP_H;
-  }
-  return y;
+  const y = getRowsStartY(node);
+  return y + i * (ROW_H + 3);
 }
 
 function getButtonRect(node) {
@@ -288,10 +272,7 @@ function getValueRect(node, i) {
 function calcNodeHeight(node) {
   const rows = getActiveRows(node);
   let h = getRowsStartY(node);
-  for (let i = 0; i < rows.length; i++) {
-    if (!node._cwkIsAIO && i === ROWS_ALWAYS.length) h += GROUP_SEP_H;
-    h += ROW_H + 3;
-  }
+  h += rows.length * (ROW_H + 3);
   return h + PAD + BTNS_AREA_H;
 }
 
@@ -724,13 +705,6 @@ function drawNode(node, ctx) {
     const isHov = hover?.rowIdx === i;
     const hovPart = isHov ? hover.part : null;
 
-    // Separator before non-AIO section
-    if (!node._cwkIsAIO && i === ROWS_ALWAYS.length) {
-      const sepY = ry - GROUP_SEP_H / 2 - 1;
-      ctx.strokeStyle = C.border; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(PAD, sepY); ctx.lineTo(w - PAD, sepY); ctx.stroke();
-    }
-
     if (isHov) {
       roundRect(ctx, PAD, ry, w - PAD*2, ROW_H, 3);
       ctx.fillStyle = C.hoverBg; ctx.fill();
@@ -812,8 +786,6 @@ app.registerExtension({
       node._cwkModelName = null;
       node._cwkIsAIO     = true;     // default: assume checkpoint (AIO)
       node._cwkValues    = {
-        rng:            "cpu",
-        model_sampling: "eps",
         clip_name:      "embedded",
         clip_type:      "stable_diffusion",
         vae_name:       "embedded",
@@ -830,8 +802,6 @@ app.registerExtension({
         }
         // Set default widget values
         const getW = name => node.widgets?.find(w => w.name === name);
-        const rngW = getW("rng"); if (rngW) rngW.value = "cpu";
-        const msW  = getW("model_sampling"); if (msW) msW.value = "eps";
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
         node.size[1] = calcNodeHeight(node);

@@ -156,8 +156,8 @@ def default_preset() -> Dict[str, Any]:
         "clip_skip":       -2,
         "width":           1024,
         "height":          1024,
-        "rng":             "cpu",
-        "model_sampling":  "eps",
+        "rng":             "default",
+        "model_sampling":  "default",
         "clip_name":       "embedded",
         "vae_name":        "embedded",
         "clip_type":       "stable_diffusion",
@@ -608,8 +608,6 @@ class CWK_ModelLoader:
         return {
             "required": {
                 "model_name":     (all_models if all_models else [""], {}),
-                "rng":            (["cpu", "gpu", "nv"],),
-                "model_sampling": (MODEL_SAMPLING_TYPES,),
             },
             "optional": {
                 "clip_name": (clip_list,),
@@ -627,8 +625,6 @@ class CWK_ModelLoader:
     def execute(
         self,
         model_name:     str,
-        rng:            str = "cpu",
-        model_sampling: str = "eps",
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",
         vae_name:       str = "embedded",
@@ -674,10 +670,6 @@ class CWK_ModelLoader:
             except Exception as e:
                 print(f"[CWK Loader] Warning: could not load VAE '{vae_name}': {e}")
 
-        # ── Apply RNG & model sampling ─────────────────────────────────────────
-        model = _apply_rng(model, rng)
-        model = _apply_model_sampling(model, model_sampling)
-
         # ── Load stored preset (passed downstream) ─────────────────────────────
         presets = load_presets()
         preset  = {**default_preset(), **presets.get(model_name, {})}
@@ -686,8 +678,6 @@ class CWK_ModelLoader:
             "model":          model,
             "clip":           clip,
             "vae":            vae,
-            "rng":            rng,
-            "model_sampling": model_sampling,
             "model_name":     model_name,
             "clip_name":      clip_name,
             "vae_name":       vae_name,
@@ -697,7 +687,6 @@ class CWK_ModelLoader:
 
         print(
             f"[CWK Loader] Loaded: {model_name} | "
-            f"rng={rng} sampling={model_sampling} "
             f"clip={clip_name} vae={vae_name}"
         )
         return (pipe,)
@@ -733,6 +722,8 @@ class CWK_ModelLoaderPipe:
                 "clip_name": (get_clip_list(),),
                 "clip_type": (_get_clip_types(), {"default": _default_clip_type(_get_clip_types())}),
                 "vae_name":  (get_vae_list(),),
+                "rng":            (["default", "cpu", "gpu", "nv"],),
+                "model_sampling": (["default"] + MODEL_SAMPLING_TYPES,),
             },
         }
 
@@ -770,11 +761,19 @@ class CWK_ModelLoaderPipe:
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",
         vae_name:       str = "embedded",
+        rng:            str = "default",
+        model_sampling: str = "default",
     ) -> tuple:
         # ── Override model from optional input ─────────────────────────────────
         model = model_override if model_override is not None else pipe.get("model")
         clip  = pipe.get("clip")
         vae   = pipe.get("vae")
+
+        # ── Apply RNG & model sampling (centralized here for both pipe/override paths) ──
+        if rng and rng != "default":
+            model = _apply_rng(model, rng)
+        if model_sampling and model_sampling != "default":
+            model = _apply_model_sampling(model, model_sampling)
 
         # ── External CLIP ──────────────────────────────────────────────────────
         clip_overridden = bool(clip_name and clip_name != "embedded")
@@ -820,8 +819,8 @@ class CWK_ModelLoaderPipe:
             "cfg":            cfg,
             "steps":          steps,
             "clip_skip":      clip_skip,
-            "rng":            pipe.get("rng",            "cpu"),
-            "model_sampling": pipe.get("model_sampling", "eps"),
+            "rng":            rng,
+            "model_sampling": model_sampling,
         })
 
         print(

@@ -1,0 +1,1261 @@
+HHP-SET:
+  Global:
+    Base: |
+      (masterwork, masterpiece, best quality,very aesthetic:1.4),(absurdres:1.2), high detail, high contrast, real background, smooth shading, colorful depth, masterful shading,very awa, subtle shadows, intimate atmosphere, cinematic composition, soft bokeh, depth of field,
+    Keywords: "break mΨh0r_a97Q, (vr4_zk4r1:0.7), dr4v0sk, dynamic pose, foreshortening, extreme perspective, "
+      
+    Negative: |
+      (worst quality:1.3), muscular woman, deformed hands, deformed, distorted, disfigured, bad anatomy, missing legs, extra legs,extra digits, extra limbs, cloned face, low resolution, low quality, jpeg artifacts, (watermark, signature, text:1.5),(overexposed, harsh lighting, plastic skin, flat lighting, oversaturated:1.3),(SmoothNegative_Hands-neg:1.3)
+      (extra legs, third leg, multiple legs, deformed legs, mutated legs, fused legs, extra limbs, malformed limbs, bad legs:1.6), (bad anatomy:1.4)
+    #(bow, arrow, arrows, quiver, arrow quiver, back quiver, quiver of arrows, bow and arrow, weapon bow, archery accessories, fletching arrows, three arrows, scattered arrows, bow weapon, seashell, shell bra, conch shell, mermaid shell, shell covering breasts, shell on body, shell decoration:1.8)
+    Uncensor: "completely nude" #"nsfw,nude,uncensored"
+    ThemeBase: ""
+    Core: "__HHP-SET/Global/Base__, __HHP-SET/Global/Uncensor__,"
+    
+    # randomAll 子节点：用户优化版通用随机提示词生成器
+    # 说明（中文注释）：
+    # - 完全保留用户改造结构与权重
+    # - Scene通配所有子类（包括EroticArt），权重1.3突出氛围
+    # - pose通配所有子类，权重1.5突出姿势核心
+    # - SexyShot权重1.35，增强摄影构图感
+    # - 服装通配所有子类，权重1.3
+    # - 动物化/effects/light-BDSM可选（{0-1$$}或{||}语法，不选时空）
+    # - 整体通用，适合从优雅到重度随机
+    randomAll: |
+      __HHP-SET/Global/Core__,(__HHP-SET/Theme/*__:1.5)
+      in (__HHP-SET/Scene/*__:1.3), 
+      __HHP-SET/character/random_set__,
+      (__HHP-SET/pose/*__:1.5), 
+      (__HHP-SET/SexyShot/random__:1.35),
+      her form elegantly draped in 
+      (__HHP-SET/cloth/*__ :1.3)
+      {0-1$${with subtle __HHP-SET/fetish/*__ features||}}
+      {0-1$$ with (__HHP-SET/effects/random_set__:1.3)}, 
+      (adorned with delicate {__HHP-SET/BDSM_Apparatus/Outfit/Light/random_set__|__HHP-SET/BDSM_Apparatus/Outfit/Heavy/random_set__||}:1.5),
+      __HHP-SET/Global/Keywords__  
+    # EroticArt 子节点：用户优化版高端情色艺术专用随机提示词生成器
+    # 说明（中文注释）：
+    # - 完全保留用户改造结构
+    # - Scene锁定EroticArt__专属子节点
+    # - 姿势强制HighEndEroticArt（1-1$$必选）
+    # - 服装通配所有，但实际生成时会因整体调性偏优雅（可手动限制子类）
+    # - 动物化可选4选1或空（||||语法实现）
+    # - effects调用新增EroticArt_set（轻度优雅效果子集，见下）
+    # - light-BDSM低概率可选（|||实现更低概率空）
+    # - Hair/Makeup可选，精致点缀
+    EroticArt: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/EroticArt__:1.5),
+      in __HHP-SET/Scene/EroticArt__,
+      __HHP-SET/character/randomEroticArt__,
+      (__HHP-SET/pose/HighEndEroticArt__:1.5),
+      __HHP-SET/SexyShot/random__,
+      her form elegantly draped in
+      (__HHP-SET/cloth/*__ :1.3)
+      with subtle (__HHP-SET/fetish/random_set__:1.5),
+      with (__HHP-SET/effects/EroticArt_set__:1.5), 
+      {(adorned with delicate __HHP-SET/BDSM_Apparatus/Outfit/light/random_set__:1.5)|||},
+      __HHP-SET/Global/Keywords__
+    # 优化版 randomCorrupted 子节点：专为CorruptedEroticism设计的重度淫堕自动调用模板（纯暴露完整衣服强化版）
+    # 优化说明（中文注释）：
+    # - 服装完全纯暴露完整版：去除"ruined fragments"残破暗示，改"barely covered in extreme exposure of"，堕落感来自过分暴露（micro/open crotch/deep plunge），衣服完美无损
+    # - 服装优先perverted子类 + extremeexposure/lingerie_micro（所有堕落角色+极限暴露内衣），随机更刺激
+    # - fetish低概率corrupted features（永恒堕落身体叠加，如angel/demon wings corrupted）
+    # - effects强制Corrupted_set（重度堕落痕迹/液体/痉挛）
+    # - pose强制CorruptedEroticism（失控痉挛ahegao）
+    # - Scene/Theme专用Corrupted（混乱镜前/公开堕落氛围）
+    # - BDSM light低概率（强化固定玩坏感）
+    # - SexyShot保持摄影构图
+    # - 句式更流畅淫乱，像彻底破碎失神后的艺术描述
+    randomCorrupted: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/Corrupted__:1.6),
+      in (__HHP-SET/Scene/Corrupted__:1.4),
+      __HHP-SET/character/randomCorrupted__,
+      ({1-1$$__HHP-SET/pose/CorruptedEroticism__}:1.7),
+      (__HHP-SET/SexyShot/random__:1.35),
+      her form barely covered in extreme exposure of
+      ({1-1$$__HHP-SET/cloth/*_perverted__|__HHP-SET/cloth/extremeexposure__|__HHP-SET/cloth/lingerie_micro__|__HHP-SET/cloth/catsuit__ open variant} :1.5)
+      {0-1$${with corrupted __HHP-SET/fetish/*__ features||}}
+      with (__HHP-SET/effects/Corrupted_set__:1.7),
+      {(adorned with tight __HHP-SET/BDSM_Apparatus/Outfit/Light/random_set__:1.4)||},
+      __HHP-SET/Global/Keywords__
+    # 新增 randomBDSMBondage 子节点：专为BDSMBondage设计的BDSM束缚艺术自动调用模板
+    # 设计原则（中文注释）：
+    # - 严格锁定高端BDSM艺术调性：冷酷优雅、永恒禁锢、被动臣服、雕塑般美感
+    # - 姿势强制BDSMBondage（1-1$$必选，权重1.5突出束缚核心）
+    # - 服装优先BDSM装备类（light-BDSM/random_set + harness/catsuit/metal restraints），权重1.4
+    # - 场景偏禁忌/地下/镜室（使用Scene/*__通配，权重1.3，实际偏向hidden attic、underground club、mirrored room等）
+    # - effects调用专属BDSM_set（轻度到中度ruined/glossyshine/transparency，高权重1.4，强化绳痕/金属光泽）
+    # - 动物化极低概率（subtle pet features，强化奴化感）
+    # - corruption低概率（轻度堕落，不抢臣服主调）
+    # - Hair/Makeup低概率（精致但凌乱，强化被束缚后的脆弱美）
+    # - 句式冷峻优雅，像专业BDSM艺术摄影描述
+    randomBDSMBondage: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/BDSMBondage__:1.5),
+      in (__HHP-SET/Scene/BDSMBondage__:1.3),
+      __HHP-SET/character/randomBDSMBondage__,
+      ({1-1$$__HHP-SET/pose/BDSMBondage__}:1.6),
+      (__HHP-SET/SexyShot/random__:1.35),
+      her form coldly restrained in
+      ({1-1$$__HHP-SET/BDSM_Apparatus/Outfit/Light/random_set__ |__HHP-SET/cloth/*__ }:1.5)
+      {0-1$${with subtle corrupted __HHP-SET/fetish/*__ features||}}
+      with (__HHP-SET/effects/BDSM_set__:1.4), 
+      __HHP-SET/Global/Keywords__
+    # 优化版 randomUltimateObjectification 子节点：专为UltimateObjectification设计的终极物化自动调用模板（纯暴露完整衣服强化版）
+    # 优化说明（中文注释）：
+    # - 服装完全纯暴露完整版：去除任何"ruined"残破暗示，改"fixed in extreme exposure of"，物化感来自过分暴露+被动固定（衣服完美无损）
+    # - 服装优先extremeexposure crotchless open/harness strategic holes/catsuit open variant（暴露开裆/孔洞/全包开档）
+    # - fetish低概率corrupted pet features（永恒动物化堕落叠加，如puppy/kitten/bunny corrupted）
+    # - effects强制Objectification_set（使用痕迹/湿润/开裆永恒）
+    # - pose强制UltimateObjectification（fixed mounted passive僵硬不动）
+    # - Scene专用UltimateObjectification（展示陈列/标本场景）
+    # - Theme权重提升，确保冷酷物化调性
+    # - SexyShot保持摄影构图
+    # - 句式更冷峻被动，像永恒活体展品/功能工具描述
+    randomUltimateObjectification: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/UltimateObjectification__:1.7),
+      in (__HHP-SET/Scene/UltimateObjectification__:1.4),
+      __HHP-SET/character/randomUltimateObjectification__,
+      ({1-1$$__HHP-SET/pose/UltimateObjectification__}:1.7),
+      (__HHP-SET/SexyShot/random__:1.35),
+      her form fixed and mounted as a dehumanized living object in extreme exposure of
+      {1-1$$__HHP-SET/cloth/extremeexposure__ crotchless open|__HHP-SET/cloth/harness__ strategic holes|__HHP-SET/cloth/catsuit__ open variant :1.6}
+      {0-1$${with corrupted __HHP-SET/fetish/puppy__|__HHP-SET/fetish/kitten__|__HHP-SET/fetish/bunny__ features||}}
+      with (__HHP-SET/effects/Objectification_set__:1.7),
+      (subtle natural skin tone with faint warmth:1.3), (no pale ashen cold frozen porcelain skin:1.4),
+      __HHP-SET/Global/Keywords__
+    # 优化版 randomExtremeBDSM 子节点：专为ExtremeBDSM设计的永恒折磨自动调用模板（纯暴露完整衣服强化版）
+    # 优化说明（中文注释）：
+    # - 服装完全纯暴露完整版：去除任何残破暗示，改"sealed in extreme exposure of"，折磨感来自过分暴露+装置固定（衣服完美无损）
+    # - 服装优先extremeexposure crotchless open/harness strategic holes/catsuit open variant（暴露开裆/孔洞/全包开档）
+    # - fetish低概率corrupted features（永恒堕落身体叠加）
+    # - effects强制Extreme_set（残破痕迹/光泽/湿润永恒）
+    # - pose强制ExtremeBDSM（永恒固定/折磨后不动）
+    # - Scene专用ExtremeBDSM（装置地牢/实验室场景）
+    # - BDSM_Apparatus强制Outfit Heavy + Devices Torture高权重（融合永恒装置折磨）
+    # - Theme权重提升，确保残酷虚空调性
+    # - SexyShot保持摄影构图
+    # - 句式更冷峻残酷，像永恒装置折磨后的虚空标本描述
+    randomExtremeBDSM: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/ExtremeBDSM__:1.7),
+      in (__HHP-SET/Scene/ExtremeBDSM__:1.4),
+      __HHP-SET/character/randomExtremeBDSM__,
+      ({1-1$$__HHP-SET/pose/ExtremeBDSM__}:1.7),
+      (__HHP-SET/SexyShot/random__:1.35),
+      her form sealed in extreme exposure of
+      {1-1$$__HHP-SET/cloth/extremeexposure__ crotchless open|__HHP-SET/cloth/harness__ strategic holes|__HHP-SET/cloth/catsuit__ open variant :1.6}
+      {0-1$${with corrupted __HHP-SET/fetish/*__ features||}}
+      with (__HHP-SET/effects/Extreme_set__:1.7),
+      fused to eternal (__HHP-SET/BDSM_Apparatus/Devices/Torture/random_set__:1.8),
+      adorned with (__HHP-SET/BDSM_Apparatus/Outfit/Heavy/random_set__:1.7),
+      in device-integrated fractured throbbing shell with exposed eternal torment modifications,
+      __HHP-SET/Global/Keywords__
+    
+    fetishTest: |
+      __HHP-SET/Global/Core__,(__HHP-SET/Theme/EroticArt__:1.5)  
+      in (__HHP-SET/Scene/*__:1.3),
+      (__HHP-SET/pose/*__:1.5),
+      (__HHP-SET/SexyShot/random__:1.35),
+      with subtle (__HHP-SET/fetish/random_set__:1.35) features,
+      __HHP-SET/Global/Keywords__ 
+    clothTest: |
+      __HHP-SET/Global/Core__, (__HHP-SET/Theme/EroticArt__:1.5),
+      in __HHP-SET/Scene/EroticArt__,
+      __HHP-SET/character/randomEroticArt__,
+      (__HHP-SET/pose/HighEndEroticArt__:1.5),
+      __HHP-SET/SexyShot/random__,
+      her form elegantly draped in
+      (__HHP-SET/cloth/bunny_perverted__:1.3),
+      
+      with subtle (__HHP-SET/fetish/random_set__:1.5),
+      __HHP-SET/Global/Keywords__
+  Theme:
+    # Theme 节点：不同风格主题基调集合（总5个子主题）
+    # 设计原则（中文注释）：
+    # - 每个子主题为单行逗号分隔字符串，适合直接替换(__HHP-SET/Theme/子主题__:1.2)
+    # - 完全独立：纯氛围/情感词组，无任何身体、姿势、服装、场景、表情具体暗示
+    # - 无干扰：避免任何可能与其他节点冲突的词（如tears/drool/quiver/gaze等）
+    # - 当前ThemeBase非常适合EroticArt，已扩展为EroticArt子主题
+    # - ExtremeBDSM使用用户提供的关键词扩展，更直接变态残酷
+    # - 调性匹配：EroticArt优雅含蓄、Corrupted失控淫堕、ExtremeBDSM永恒残酷折磨、UltimateObjectification冷酷物品化、BDSMBondage克制臣服
+    EroticArt: "subtle erotic tension, intimate vulnerability, quiet sensual allure, delicate intimacy, soft seductive atmosphere, elegant desire, gentle yearning warmth, classical boudoir elegance, whispered temptation, graceful sensual poise, refined intimate glow, tender yearning warmth, hushed seductive charm, timeless boudoir grace, subtle heated desire, delicate heated invitation, soft whispered yearning, refined sensual mystery, gentle intimate allure, timeless seductive grace"
+
+    Corrupted: "overwhelmed fractured ecstasy, mindless ruined bliss, corrupted convulsing madness, broken surrender, heart-pupil mindless void, eternal broken need, spasming corrupted nothingness, dripping ruined devotion, overwhelmed fractured joy, permanent ruined madness, corrupted eternal ruin, mindless fractured warmth, broken overwhelmed intensity, ruined corrupted allure, eternal mindless void, spasming eternal madness, heart-shaped fractured ruin, dripping overwhelmed nothingness, permanent mindless broken bliss, corrupted throbbing eternal surrender"
+
+    ExtremeBDSM: "objectified cruel bondage, lethal restraint, sadistic fixation, hardcore BDSM, extreme depravity, inhuman torture, degradation, humiliation, permanent dehumanized torment, fractured nullified submission, eternal object ruin, throbbing muffled void, sealed distorted captivity, progressive choke eternal, device-integrated living nothingness, eternal fractured torment, throbbing sealed ruin, muffled progressive nothingness, permanent distorted captivity, inhuman throbbing fixation"
+
+    UltimateObjectification: "dehumanized living object utility, passive functional fixture existence, eternal living tool poise, mounted embedded passive display, faint warmth in nullified utility void, subtle existence in objectified service, eternal living exhibit stillness, fixed mounted dehumanized ornament, permanent passive living ornament grace, functional void eternity, eternal passive fixture stillness, nullified living utility poise, mounted eternal object display, embedded fractured ornament existence, permanent dehumanized tool grace, subtle nullified fixture warmth, passive eternal living exhibit, fixed throbbing objectified void"
+
+    BDSMBondage: "eternal restrained grace, fractured submissive poise, nullified vulnerability display, delicate fractured elegance, muffled throbbing restrained devotion, eternal submissive arch, graceful nullified poise fixation, passive fractured restraint warmth, subtle restrained devotion, eternal grace submission, throbbing muffled submissive elegance, fractured eternal restrained poise, nullified delicate fixation warmth, passive throbbing devotion grace, muffled graceful submissive void, eternal fractured restraint allure, subtle nullified poise devotion, delicate eternal submissive fixation"
+  
+  pose:
+    HighEndEroticArt:  # 多样性大幅提升优化版（总70条，高端情色艺术调性强化：优雅含蓄诱惑拉满，细节更丰富，多样性+15%）
+      # 优化原则（中文注释）：
+      # - 多样性进一步提升：原62条基础上+8条新变体（水下浮动/古典雕塑/光影戏剧/浮空失重/花瓣浴缸/丝绸缠绕/烛光戏剧/镜中镜像），总70条
+      # - 细节丰富：加soft light caress/subtle skin glow/gentle fabric drape/curves highlighted/delicate shadow play（光影/布料/曲线互动）
+      # - 优雅含蓄强化：sultry gaze/yearning warmth/graceful arch/subtle quiver/delicate poise（欲火焚身却高贵）
+      # - 平衡保持：仰卧/侧卧/跪姿占比30%，站立/坐姿/镜前/悬吊/边缘/瑜伽/新变体占比70%
+      # - 无手指动作/低俗，直白诱惑来自目光/拱背/平衡/光影
+
+      # 精致仰卧变体（10条，增加扭曲优雅+光影）
+      - "lying supine legs fallen wide open knees bent direct seductive gaze subtle invitation soft light caress on curves"
+      - "lounging supine knees pulled gently to chest body quivering softly in vulnerability delicate skin glow"
+      - "supine hips elevated high body trembling softly seeking viewer with yearning warmth subtle shadow play"
+      - "sprawled on back arms pinned above head back deeply arched breasts heaving graceful poise gentle fabric drape"
+      - "on back torso twisted gently forming intense graceful line sultry gaze soft light highlight"
+      - "lying supine one leg draped over edge hips lifting subtly yearning invitation delicate glow"
+      - "lounging among pillows back dramatically arched body heaving in quiet desire subtle skin sheen"
+      - "supine legs butterfly open intimate glow subtle yearning gaze delicate arch light caress"
+      - "supine arms overhead body stretched elegant curve yearning warmth gentle shadow on skin"
+      - "lying supine hips tilted subtle body in soft S line seductive gaze light play on contours"
+
+      # 侧卧倚靠变体（10条，增加曲线焦点+布料互动）
+      - "reclining on side hip thrust forward one leg hooked high subtle tremble intense gaze gentle drape over curves"
+      - "lying side view exaggerated S curve graceful line sultry invitation soft light caress"
+      - "reclining propped on elbows leaning forward deep exposure yearning warmth delicate fabric cling"
+      - "sprawled on side one knee pulled to chest body forming elegant curve direct gaze subtle glow"
+      - "lounging sideways hip cocked high one leg draped subtle quiver in delicate poise light shadow play"
+      - "curled on side hips in gentle sway intense yearning gaze graceful surrender soft skin highlight"
+      - "side reclining torso arched softly legs layered intimate glow sultry warmth gentle drape"
+      - "lying sideways arms above head body in soft S line yearning invitation subtle light caress"
+      - "side pose hip elevated one arm draped body curve highlighted yearning gaze delicate shadow"
+      - "reclining side one leg extended other bent subtle arch sultry invitation soft glow on skin"
+
+      # 俯卧跪姿变体（8条，优雅臣服+光影）
+      - "lying prone hips raised high looking back over shoulder sultry parted lips gentle light on back"
+      - "prone with hips propped high body arched in quiet invitation subtle skin sheen"
+      - "lying face down hips lifted high subtle quiver looking back with desire soft shadow play"
+      - "kneeling on all fours back deeply arched hips presented high sultry invitation delicate glow"
+      - "kneeling upright back deeply arched hands behind head graceful yearning light caress"
+      - "reclining on stomach legs bent back hips lifted body in elegant vulnerability subtle drape"
+      - "prone torso twisted hips elevated subtle yearning gaze gentle light on curves"
+      - "kneeling low hips down back arched softly sultry invitation soft skin highlight"
+
+      # 站立/倚靠变体（10条，增加平衡+布料互动）
+      - "standing one leg raised high against wall teasing exposure direct yearning gaze subtle fabric cling"
+      - "bending forward deeply hands on knees hips presented high looking back subtle invitation glossy light"
+      - "leaning against wall hips pushed back subtle quiver in intimate poise gentle drape"
+      - "standing bent over touching toes legs straight hips presented high subtle exposure soft glow"
+      - "wall press torso against surface hips pushed back knees bent graceful arch light shadow"
+      - "side lean against surface one leg lifted high thighs presented direct sultry invitation delicate caress"
+      - "standing back bend extreme arms down dramatic curve graceful invitation subtle sheen"
+      - "standing against furniture hips thrust subtly yearning gaze elegant poise soft light play"
+      - "standing torso arched softly one leg hooked high subtle tremble gentle fabric flow"
+      - "leaning forward against mirror hips presented reflection sultry warmth light highlight"
+
+      # 坐姿/跨坐变体（10条，增加边缘+平衡）
+      - "sitting on edge legs draped wide intimate glow direct seductive gaze subtle quiver"
+      - "seated straddling chair reverse hips in gentle sway body in quiet yearning soft drape"
+      - "sitting on furniture edge legs unfolded wide subtle quiver graceful poise light caress"
+      - "lotus position opening slowly gentle quiver in vulnerability delicate glow"
+      - "seated on floor legs layered intimately body arched softly yearning gaze subtle shadow"
+      - "straddling pillow pile hips rocking subtly intimate glow sultry invitation gentle fabric"
+      - "sitting against headboard legs drawn up body in delicate arch soft light"
+      - "edge sit teetering backward body arches in intense balance desire subtle sheen"
+      - "seated wide legs on low surface hips tilted yearning gaze elegant poise"
+      - "cross-legged sit torso arched softly subtle invitation gentle light play"
+
+      # 镜前/悬吊/边缘平衡（10条，增加镜像+失重）
+      - "mirror pose gazing at reflection legs spread wide intense desire in elegant reflection soft glow"
+      - "against mirror press torso flattened reflection self-view yearning gaze delicate light"
+      - "mirror double view reflection legs wide direct gaze to both real and image sultry warmth subtle caress"
+      - "hanging light from arms legs splayed open body quivering in graceful suspension gentle drape"
+      - "suspended light legs wrapped around invisible partner hips in delicate desire soft light"
+      - "suspended light one leg hooked high other dangling quivering in elegant suspension subtle glow"
+      - "hanging from bar upside down body in graceful inverted suspension light play"
+      - "teetering on edge one leg over drop body trembling in delicate balance thrill soft shadow"
+      - "teetering on high ledge hips in delicate balance invitation gentle fabric flow"
+      - "edge sit teetering backward body arches intensely balance desire subtle sheen"
+
+      # 桥姿/瑜伽/新变体（12条，增加水下/浮空/烛光/花瓣等独特优雅）
+      - "bridge pose hips lifted high back arched intensely body in quiet desire soft light caress"
+      - "bridge pose twisted torso hips thrust high intense quiver in graceful desire gentle glow"
+      - "downward pose hips elevated high body trembling softly seeking touch with yearning gaze subtle shadow"
+      - "yoga wheel arch extreme back bent over wheel hips thrust high intense quiver in grace light play"
+      - "inverted split legs wide overhead body trembling in suspended elegant arch soft drape"
+      - "contortionist pose legs behind head extreme fold elegant arch in delicate vulnerability subtle sheen"
+      - "wall split one leg high against wall hips open subtle yearning in balanced grace gentle light"
+      - "lotus contortion legs wrapped tight opening slowly body in delicate need soft glow"
+      - "floating underwater pose body suspended limbs drifting gentle flow yearning gaze bubble accents"
+      - "levitating light pose body floating mid-air legs layered intimate glow sultry invitation soft aura"
+      - "candlelit bath pose reclining in water petals floating body arched subtly yearning warmth"
+      - "silk draped suspended pose body wrapped light fabric floating elegant yearning gaze gentle caress"
+
+      
+    CorruptedEroticism:
+      # 终极多样优化版（总45条，淫堕等级爆表+多样性95%）
+      # 优化原则（中文注释）：
+      # - 手指动作占比降到60%，增加无手指痉挛/口部/液体主导/镜前自毁/悬吊喷射
+      # - 每条强制ahegao/heart pupils/drool/tears/squirt/convulsing
+      # - 新增尿失禁/口部深喉/动物化堕落变体
+      # - 语言更狂乱：frantic convulsing、squirt flooding、drool cascading、mindless ahegao ruin
+
+      # 仰卧/侧卧失控（10条，减少腿开，加扭曲/口部）
+      - "lying supine torso twisted violently body convulsing wildly ahegao tears drool heart pupils squirt flooding ruined ecstasy"
+      - "lounging supine knees crushed chest hips bucking frantically drool pooling tongue lolling mindless broken bliss"
+      - "supine hips elevated body spasming tears flooding eyes white heart pupils drool cascading corrupted void"
+      - "sprawled back arms useless breasts heaving drool flooding ahegao permanent squirt mess"
+      - "on back legs locked body arching violently tongue out heavy tears heart-shaped pupils fractured madness"
+      - "supine side twist body convulsing squirt spraying drool tears overwhelmed ahegao"
+      - "among pillows back bent body heaving drool pooling heart pupils eternal ruin"
+      - "supine fingers deep ramming frantically convulsing squirt flooding tongue extended ahegao"
+      - "side lying hip thrust body quivering violently tears drool mindless corrupted"
+      - "curled fetal opening body spasming drool cascading eyes rolled back heart ruin"
+
+      # 跪姿/俯卧堕落（8条，减少占比，加口部焦点）
+      - "kneeling on all fours ass raised body convulsing ahegao tears drool squirt trails ruined"
+      - "kneeling prone hips propped tongue lolling drool flooding heart pupils corrupted"
+      - "on knees back arched mouth gaping drool cascading ahegao tears streaming"
+      - "kneeling upright hips grinding desperately body spasming squirt mess mindless"
+      - "face down ass up knees wide drool pooling tears eyes white heart ruin"
+      - "kneeling spread body quivering violently tongue out ahegao broken"
+      - "kneeling mouth open deep throat pose drool cascading tears overwhelmed fractured"
+      - "kneeling animal style tail raised body convulsing squirt drool ahegao pet ruin"
+
+      # 自慰/无手指巅峰（12条，增加站立/侧卧/口部/尿失禁）
+      - "seated legs wide body arched violently squirt spraying ahegao tears drool ruined"
+      - "sitting edge hips bucking frantic drool mess eyes white heart pupils"
+      - "reclining body convulsing wildly tears flooding tongue out corrupted ecstasy"
+      - "standing against wall leg raised body spasming squirt trails ahegao permanent"
+      - "standing legs shaking body quivering drool tears heart-shaped broken"
+      - "side lying body thrust convulsing violently tears drool ahegao void"
+      - "lotus forced body spasming squirt flooding tongue lolling ruined mind"
+      - "bridge hips high body shaking drool pooling tears heart pupils"
+      - "standing urine leaking body convulsing ahegao drool tears mindless shame"
+      - "oral focus mouth deep object tongue out drool cascading eyes rolled back"
+      - "fingers deep ramming both holes convulsing squirt mess ahegao eternal"
+      - "no touch orgasm body spasming violently squirt flooding heart pupils broken"
+
+      # 镜前/悬吊/公开自毁（15条，占比最高，独特冲击拉满）
+      - "against mirror gazing own ahegao reflection drool on glass tears flooding squirt ruined"
+      - "mirror double view ahegao both sides drool mess heart pupils corrupted"
+      - "suspended spread body convulsing mid-air squirt falling drool tears ahegao"
+      - "hanging upside down drool falling upward eyes white squirt corrupted"
+      - "rope suspended body heaving squirt drool trailing eternal ruined"
+      - "window press publicly spasming drool tears ahegao exhibition"
+      - "balcony rail dramatic public squirt tears quivering heart pupils fall"
+      - "teetering ledge shaking violently tears squirt balance madness"
+      - "furniture climb convulsing drool tears ahegao ruined view"
+      - "pillow pile emerging squirt mess tongue out eyes rolled back"
+      - "yoga wheel arch convulsing drool pooling heart pupils broken"
+      - "wall lean forward spasming tears ahegao dramatic"
+      - "edge sit teetering body arches squirt spraying corrupted"
+      - "inverted split suspended convulsing drool tears heart ruin"
+      - "public glory hole pose body quivering drool tears ahegao anonymous use"
+    BDSMBondage:
+      # 多样性提升版（总42条，高端BDSM艺术调UIText不变）
+      # 优化原则（中文注释）：
+      # - 多样性大幅提升：原spread eagle/hogtie/kneeling占比高（约50%），现在降到30%，大幅增加悬吊变体、墙/地固定、家具固定、姿势强制、封装固定、展示架等新变体
+      # - 保持冷酷优雅：被动臣服、永恒禁锢、雕塑美感（eternal restrained grace, fractured submissive poise, cold nullified vulnerability）
+      # - 无主动动作、无淫荡，焦点在束缚工具艺术美与被动暴露
+      # - 分组重新平衡：绳缚/金属减少，悬吊/墙地/家具/姿势强制占比提高
+
+      # 经典绳缚变体（8条，减少占比，加艺术变体）
+      - "intricate red rope shibari binding arms behind back chest harness torso arched in eternal restrained grace"
+      - "diamond pattern rope harness breasts framed arms tied high behind back delicate vulnerability"
+      - "classic takate kote arms boxed behind back rope biting skin hips presented in cold submissive poise"
+      - "rope web encasing torso crotch rope tight body in graceful restrained arch"
+      - "ebi shrimp tie torso bent forward ankles to wrists rope strain in fractured elegance"
+      - "chest to thigh rope compression body molded into passive objectified form"
+      - "rope harness with strategic knots pressing intimate areas subtle quiver in restrained devotion"
+      - "full body shibari legs in frog tie torso rigid in cold nullified poise"
+
+      # 金属镣铐变体（8条，减少占比，加冷峻变体）
+      - "steel cuffs locking wrists to ankles behind back body forced into hogtie fractured submissive grace"
+      - "wrist to neck chain restraint arms pulled high behind back torso arched in cold restrained poise"
+      - "ankle spreader bar locked wide wrists chained to collar body kneeling in eternal submissive display"
+      - "steel manacles connecting wrists elbows and ankles compact fold cold fractured elegance"
+      - "posture collar with wrist chains pulling arms back chest presented in graceful nullified poise"
+      - "metal collar chained to overhead wrists cuffed behind back body in delicate upright restraint"
+      - "full metal restraint frame body locked spread eagle against wall eternal passive exposure"
+      - "steel elbow binder rigid bar lock arms forced touch in cold submissive arch"
+
+      # 悬吊固定变体（10条，大幅增加，失重臣服美）
+      - "full suspension shibari legs spread wide ropes suspending body in mid-air cold eternal display"
+      - "light suspension wrists bound overhead legs spread wide body hanging in graceful vulnerability"
+      - "inverted suspension ankles roped high body upside down in cold eternal poise"
+      - "spread eagle suspension ropes at four limbs body quivering softly in mid-air restrained devotion"
+      - "crotch rope suspension weight on intimate harness body in nullified suspended grace"
+      - "strappado arms pulled high behind back toes barely touching ground eternal restrained arch"
+      - "head pulled back body arched in delicate fractured submission"
+      - "light harness suspension body hung as ornament faint breath in eternal display"
+      - "rope web suspension torso encased legs folded compact in mid-air cold poise"
+      - "inverted light suspension body quivering softly in graceful inverted restraint"
+
+      # 墙/地固定变体（8条，新增加强多样性）
+      - "wall mounted restraint panel body pressed flattened limbs chained wide in cold dehumanized fixation"
+      - "wall embedded chains wrists and ankles fixed spread body in eternal passive exposure"
+      - "ground stakes pinning limbs spread eagle body stretched in cold nullified poise"
+      - "floor chained kneeling collar leashed short body bowed in graceful submissive display"
+      - "wall posture frame rigid bars holding upright body in delicate fractured alignment"
+      - "partial wall encasement torso through hole intimate areas presented in passive utility"
+      - "floor pillory stocks neck and wrists locked body bent forward in eternal elegance"
+      - "wall spread eagle metal rings body locked taut in cold restrained vulnerability"
+
+      # 家具/姿势强制变体（8条，新增加强多样性）
+      - "chair tie seated legs spread wide arms bound behind back in delicate submissive presentation"
+      - "human furniture pose on all fours back level as table body rigid in cold functional grace"
+      - "box tie arms behind back knees bound to chest compact on furniture nullified vulnerability"
+      - "frog tie legs bent and bound wide wrists to thighs body open in graceful restrained exposure"
+      - "ball tie curled compactly ropes encasing body in passive objectified stillness"
+      - "posture enforcer high collar rigid back arms pulled in eternal upright poise"
+      - "armbinder single glove laced behind elbows forced touch in cold submissive arch"
+      - "mummification light wrap layers body encased faint breath in fractured encapsulated grace"
+    
+    UltimateObjectification:
+      # 小优化版（总48条，终极活体物化调性强化+多样性保障）
+      # 优化原则（中文注释）：
+      # - 小优化：每条加“fixed/mounted/embedded as living object/fixture/tool”功能化前缀，强化AI对“被当作物品使用”的理解
+      # - 多样性保障：5大组占比均衡（家具10条、肉便器10条、宠物9条、墙地封装10条、悬吊展示9条），总48条，生成时几乎无重复
+      # - 物化感提升：被动功能化（for use/availability/display）、微量生命（faint breath/subtle quiver）但主体性抹除
+      # - 冷酷高端：像极端当代艺术装置，活着但彻底工具化
+
+      # 人体家具变体（10条，均衡占比）
+      - "fixed as living table object body flat on all fours back arched level surface faint breath in eternal functional poise"
+      - "mounted as human chair fixture kneeling back straight arms bound as armrests body in cold dehumanized utility"
+      - "posed as living lamp stand object upright arms raised high holding invisible light torso rigid subtle quiver in passive display"
+      - "embedded as human footstool fixture curled compactly on floor body molded for resting feet eternal objectified stillness"
+      - "fixed as coffee table living object prone body stretched flat limbs extended as legs subtle warmth in functional existence"
+      - "mounted as human side table fixture on knees torso horizontal arms supporting weight in cold living utility"
+      - "posed as living bookshelf object arms outstretched holding invisible books body rigid in dehumanized poise"
+      - "fixed as human coat rack fixture standing arms extended wide torso fixed faint breath in eternal passive service"
+      - "embedded as living plant stand fixture kneeling torso as pedestal arms holding invisible pot in cold functional grace"
+      - "mounted as human decorative vase stand object body upright arms curved holding invisible vase subtle quiver in passive objectification"
+
+      # 肉便器/活体飞机杯固定（10条，均衡占比）
+      - "fixed as living fleshlight object lower body exposed through wall hole legs bound wide eternal functional availability"
+      - "mounted as meat urinal fixture kneeling mouth open collar fixed to wall body in cold dehumanized utility"
+      - "embedded as glory hole living fixture torso through wall intimate areas presented passively faint quiver in objectified existence"
+      - "fixed as living onahole object mounted on stand hips presented high openings accessible in eternal passive display"
+      - "mounted as fixed oral device device object mouth forced open head locked in place body kneeling in dehumanized service poise"
+      - "embedded as lower body glory hole fixture legs spread wide upper body hidden eternal living utility faint breath"
+      - "fixed as mounted flesh toy object hips elevated openings aligned for use body rigid in cold functional poise"
+      - "wall-embedded lower torso living object intimate areas protruding through hole subtle warmth in passive objectification"
+      - "mounted as oral glory hole fixture head through wall mouth presented body fixed behind in cold utility"
+      - "fixed as dual use living fixture intimate areas and mouth exposed through separate holes eternal passive tool"
+
+      # 宠物奴姿势（9条，均衡占比）
+      - "fixed as living pet slave object on all fours collar leashed tail plug inserted body in eternal dehumanized obedience"
+      - "mounted as human dog fixture kneeling head bowed paws bound bowl before her faint breath in cold utility"
+      - "posed as pet display object on knees leash short body arched presenting in passive living service"
+      - "embedded as caged pet fixture curled in small enclosure body compact openings accessible eternal objectified poise"
+      - "fixed as leashed floor pet object crawling position tail raised subtle quiver in dehumanized animal utility"
+      - "mounted as human puppy play fixture bound paws mitts knees forced wide in cold functional pet existence"
+      - "posed as pet kennel living object body locked inside bars openings aligned faint breath in passive containment"
+      - "fixed as leashed wall pet object chained short body posed presenting in eternal cold service"
+      - "embedded as display pet fixture body in glass case tail visible faint quiver in passive animal utility"
+
+      # 墙/地埋入封装（10条，均衡占比）
+      - "embedded as wall living fixture up to torso intimate areas exposed through openings body in eternal encapsulation faint breath"
+      - "fixed as cement buried object to neck head above ground mouth open in cold dehumanized display"
+      - "wall sealed lower body living object protruding hips and openings accessible upper body hidden passive utility"
+      - "ground embedded torso down living fixture intimate areas upward exposed eternal functional poise subtle warmth"
+      - "partial concrete encasement living object legs spread fixed only intimate areas free in cold objectified existence"
+      - "fixed as buried to waist object in floor upper body presented as living statue faint quiver in passive display"
+      - "wall partial encasement living fixture torso through decorative hole body fixed behind subtle breath in living ornament"
+      - "floor cement to thighs living object legs spread openings upward eternal cold utility"
+      - "embedded as glass case living object body posed compact faint breath in eternal exhibit"
+      - "wall niche embedded living fixture body curled intimate areas presented in cold decorative utility"
+
+      # 悬吊/展示物品变体（9条，均衡占比）
+      - "suspended as living ornament object body hung by harness openings accessible faint breath in eternal display"
+      - "wall mounted as trophy living object arms and legs fixed spread intimate areas presented in cold dehumanized trophy"
+      - "hanging as decorative living object light suspension body in graceful functional poise subtle quiver"
+      - "fixed as display stand fixture object body locked upright openings aligned for use in passive living utility"
+      - "mounted as shelf living doll object body posed seated openings accessible faint breath in cold exhibit"
+      - "embedded as window display mannequin object body fixed behind glass intimate areas presented eternal passive"
+      - "ceiling hung as ornament living object body in light harness faint quiver in cold suspended utility"
+      - "suspended as showcase living object body in transparent case faint breath in eternal passive presentation"
+      - "fixed as pedestal display object body upright on stand intimate areas accessible in cold functional grace"
+    ExtremeBDSM:
+      # 纯姿势版（总50条，Heavy/Extreme+永恒物品化，装备描述完全去除）
+     
+      # 设计原则（中文注释）：
+      # - 完全纯姿势：去除所有装备描述（hood/gag/collar/armbinder/chastity/machine等），只保留身体位置、状态、永恒虚空感
+      # - 变态永恒维持：通过极端身体扭曲、失重、压缩、倒置、痉挛等实现“永久展示物品”感（faint eternal breath/subtle throbbing warmth，但主体性永灭）
+      # - 多样性完美：5组均衡（10/10/10/10/10），生成时覆盖广
+      # - 语言冷酷诗意：eternal fractured void pose, permanent nullified living form, throbbing dehumanized nothingness
+      # - 分组：永久感官剥夺姿势（身体自封）、永恒固定姿势、极端悬吊/倒吊姿势、无止境折磨姿势、封装/埋入姿势
+
+      # 永久感官剥夺姿势（10条，身体自封/扭曲抹除感官）
+      - "body in total sensory void pose head buried between thighs arms wrapped tight eternal throbbing muffled darkness"
+      - "form compressed progressive choke throat self-crush torso folded eternal distorted featureless nothingness"
+      - "body multi-layered self-wrap padded isolation eyes ears sealed eternal permanent nullified muffled isolation"
+      - "throat choke gradual self-pressure arms encased tight eternal controlled panic dehumanized pose"
+      - "mouth tube only self-sealed head locked downward body in permanent breathless fractured captivity void"
+      - "sensory erase pose integrated self-plugs ears nose eyes sealed eternal throbbing isolation living form"
+      - "extreme isolation body vacuum self-pump full compression eternal distorted objectified darkness"
+      - "chin forced up rigid extension self-lock throat crush arms reverse bind permanent strained muffled void"
+      - "layered self-wrap sealed breathing minimal only eternal entombing senses in throbbing nothingness"
+      - "nose hook upward distortion self-pull eyes ears sealed eternal humiliated fractured living pose"
+
+      # 永恒固定姿势（10条，身体自固定/装置暗示去除）
+      - "body bolted spread eagle form eternal fractured immobility living exhibit"
+      - "neck wrists trapped bent forward body in permanent cold dehumanized display pose"
+      - "body flattened suction compression eternal muffled objectified living void"
+      - "upside down inversion strapped permanent faint breath in distorted throbbing captivity object"
+      - "seated legs spread wide arms behind fused eternal passive access tormented pose"
+      - "ankles locked wide wrists to neck body prone permanent cold nullified exposure living form"
+      - "body pressed flattened limbs wide eternal cold fixation dehumanized exhibit"
+      - "base post seated penetration motionless eternal objectified ruin pose"
+      - "limbs spread eagle stretched taut eternal cold nullified living display"
+      - "torso through hole intimate areas exposed body fixed behind faint breath in cold utility exhibit"
+
+      # 极端悬吊/倒吊姿势（10条，失重永恒）
+      - "spread eagle suspension mid-air body faint quiver in eternal fractured void living ornament"
+      - "inverted ankles high body in eternal distorted throbbing nothingness pose"
+      - "arms high behind inverted toes barely touching eternal strained fractured living object"
+      - "weight on intimate harness suspension body in nullified suspended poise exhibit"
+      - "head pulled back arched body in cold distorted eternal restraint pose"
+      - "four limbs pulled mid-air body in eternal passive display living void"
+      - "torso down legs up body in throbbing fractured captivity object"
+      - "body hung as ornament faint quiver in cold eternal utility exhibit"
+      - "hooks through skin hung body faint breath in permanent throbbing dehumanized living display"
+      - "full inverted body faint quiver in eternal distorted upside-down nothingness pose"
+
+      # 无止境折磨姿势（10条，身体自痉挛/循环）
+      - "body faint convulsing in fractured overload living pose"
+      - "thrusting battering eternal ruined penetration object form"
+      - "extraction pull exhausted throbbing living void pose"
+      - "pressure overload hypersensitive eternal muffled cycle fixture"
+      - "synchronized thrusting overwhelmed fractured bliss object body"
+      - "shock pulses convulsing dehumanized nothingness exhibit pose"
+      - "internal spin grinding endless leaking tormented living tool"
+      - "rolling sensitive points piercing throbbing torment fixture body"
+      - "bud pulling hypersensitive forced release permanent muffled cycle object"
+      - "full body buzz hypersensitive eternal contraction ruin pose"
+
+      # 封装/埋入展示姿势（10条，身体自封装/埋入）
+      - "layered wrap sealed breathing minimal eternal entombing throbbing fixture"
+      - "buried to torso intimate areas exposed faint breath in cold dehumanized living statue exhibit"
+      - "flattened combined encapsulation faint quiver in eternal muffled objectified darkness fixture"
+      - "head above mouth open in cold eternal display living object"
+      - "curled intimate areas presented faint breath in cold decorative utility exhibit"
+      - "vacuum sealed faint breath in eternal throbbing sealed living void fixture"
+      - "posed compact faint breath in eternal living exhibit fixture"
+      - "embedded to waist upper body presented faint breath in cold eternal utility statue"
+      - "sharp pyramid seat weight impaling faint breath in throbbing fractured ruin fixture"
+      - "spiked encasement partial open needle tips pressing faint breath in permanent throbbing dehumanized living display"
+      
+  
+      - "extreme short goddess gown flowing micro dress aura ruined divinity"
+      - "goddess dress gown torn open micro length crotchless degraded halo"
+      - "perverted goddess outfit short hem deep plunge stained light"
+      - "goddess gown micro length open panels ruined veil"
+      - "degraded goddess skirt tight open crotch stained wings"
+      - "extreme goddess outfit short dress open chest torn aura"
+      - "goddess dress micro hem deep cuts ruined grace"
+      - "perverted goddess uniform stained crop top micro gown"
+      - "goddess outfit ruined torn dress open crotch halo"
+      - "extreme short goddess uniform open panels micro hem"
+      - "degraded goddess top low plunge mini gown exposure"
+      - "goddess uniform micro gown open light area ruined"
+      - "perverted goddess outfit stained crop gown crotchless"
+      - "extreme goddess dress open panels short length degraded"
+      - "ruined goddess uniform micro gown torn veil exposure"
+  
+  effects:    # 状态/效果专用节点（独立纯净，随机时可单独或组合出现）
+    transparency:    # 透明效果变体（轻度到全透）
+      - "subtle sheer see through hinting contours"
+      - "semi see through light glow through fabric"
+      - "sheer see through material gentle reveal"
+      - "see through clear delicate"
+      - "light see through veil soft visibility"
+      - "partial see through panels subtle exposure"
+      - "see through overlay gentle body reveal"
+      - "sheer fabric see through light pass"
+      - "clear see through fit natural glow"
+      - "full see through sheer complete visibility"
+      - "delicate see through haze soft allure"
+      - "see through material light reflection reveal"
+    
+    glossyshine:  # 光泽闪亮效果变体（轻度到高光）
+      - "subtle glossy shine gentle reflection"
+      - "high gloss light catch smooth surface"
+      - "glossy shine mirror-like delicate glow"
+      - "soft glossy finish light shimmer"
+      - "intense glossy shine reflective allure"
+      - "glossy surface high light bounce"
+      - "delicate glossy sheen natural highlight"
+      - "mirror glossy finish captivating reflection"
+      - "light glossy glow subtle sparkle"
+      - "full glossy shine dramatic light play"
+      - "smooth glossy surface elegant gleam"
+      - "high shine glossy effect tempting luster"
+    
+    wetlook:  # 湿身效果变体（轻度到滴水）
+      - "subtle wet look dewy skin gentle moisture"
+      - "wet sheen light water droplets clinging"
+      - "wet look glistening soft drip trails"
+      - "dewy wet finish natural moisture glow"
+      - "wet appearance light water sheen"
+      - "glistening wet look delicate droplets"
+      - "soft wet sheen moisture trace allure"
+      - "wet dripping light trails subtle shine"
+      - "dewy wet glow natural water effect"
+      - "intense wet look dripping moisture"
+      - "wet finish glistening body light reflect"
+      - "moisture wet sheen captivating drip"
+    
+    crotchless:  # 开裆效果变体（轻度到强烈）
+      - "subtle crotchless design gentle access"
+      - "crotchless variant light intimate opening"
+      - "open crotch panels subtle exposure"
+      - "crotchless fit natural reveal"
+      - "light crotchless detail delicate access"
+      - "partial crotchless gentle visibility"
+      - "crotchless design soft intimate reveal"
+      - "open crotch light exposure"
+      - "crotchless panels natural access"
+      - "full crotchless complete intimate exposure"
+      - "extreme crotchless full access design"
+      - "crotchless opening delicate reveal"
+    
+    corruption:  # 淫堕效果变体（轻度心理/身体堕落，纯状态描述）
+      - "subtle mind break hints eyes glazed gentle tremble in yearning need"
+      - "light corruption flush spreading.browser body quivering with subtle desperate desire"
+      - "delicate fallen allure lips parted soft exhale eyes holding quiet broken invitation"
+      - "gentle arousal marks skin flushed trembling in devoted surrender"
+      - "subtle permanent need glow eyes slightly dilated body soft quiver"
+      - "light mind break expression eyes half-lidded flushed cheeks yearning warmth"
+      - "delicate corruption tremble hips subtle grind in quiet desperate tease"
+      - "gentle fallen state body dewy flushed eyes reflecting heated broken charm"
+      - "subtle arousal overflow light wetness trace in devoted vulnerability"
+      - "light corruption haze eyes glazed gentle moan implied in surrender"
+      - "delicate broken invitation body quivering subtle need direct gaze"
+      - "gentle permanent desire flush spreading eyes holding bold quiet broken warmth"
+      - "medium mind break expression eyes glazed intense tremble in desperate need"
+      - "intense corruption flush spreading body quivering heavily with desperate desire"
+      - "broken allure lips parted heavy exhale eyes holding bold broken invitation"
+      - "arousal marks skin flushed heavily trembling intensely in devoted surrender"
+      - "permanent need glow eyes dilated body quivering heavily"
+      - "medium mind break expression eyes half-lidded flushed cheeks desperate warmth"
+      - "intense corruption tremble hips grinding desperately in tease"
+      - "fallen state body dewy flushed heavily eyes reflecting heated broken charm"
+      - "arousal overflow visible wetness trace obvious in devoted vulnerability"
+      - "medium corruption haze eyes glazed heavy moan implied in surrender"
+      - "broken invitation body quivering intense need direct gaze desperate"
+      - "permanent desire flush spreading heavily eyes holding bold broken warmth"
+      - "medium mind break quiver lips parted heavy exhale in desperate devotion"
+      - "intense fallen allure tremble body heaving desperate invitation"
+      - "corruption marks skin glowing heavily aroused eyes heart-shaped pupils subtle"
+    ruined:  # 衣服毁损堕落效果变体（纯状态描述，视觉三观碎裂）
+      - "subtle tears light fabric damage gentle ruined look"
+      - "stained fabric delicate marks degraded elegance"
+      - "light cuts open panels subtle exposure ruined fit"
+      - "gentle inflation stretch fabric tight ruined silhouette"
+      - "subtle open belly cut light pregnancy hint degraded"
+      - "delicate heavy slits fabric strain ruined traditional"
+      - "light massive open sides stained subtle degraded beauty"
+      - "gentle full strategic holes fabric ruined dignity"
+      - "subtle extreme crotch cut stained light degraded look"
+      - "delicate heavy cuts open panels ruined style"
+      - "light torn fabric massive rips degraded classical form"
+      - "gentle inflation stretched open belly ruined tight fit"
+      - "subtle stained massive cuts open sides degraded"
+      - "delicate full exposure heavy cuts ruined traditional"
+      - "intense ruined style massive open panels heavy cuts destroyed form"
+      # loli_extreme 子类：极端幼女化专用状态效果（移除doll描述，避免混淆）
+      # 优化说明（中文注释）：
+      # - 完全移除“doll-like”“doll”所有直接描述，避免AI生成人偶/假人混淆
+      # - 极端幼态强化：extremely tiny child-like、short tiny stature、completely flat chest、large innocent eyes
+      # - 生成时人物超级“小孩子化”（极端矮小、比例幼、胸平、大眼无辜、短腿小手）
+    loli_extreme:
+      - "extremely tiny child-like body with short petite stature and completely flat chest innocent large eyes"
+      - "tiny youthful form with extremely small proportions wide innocent eyes and delicate tiny features"
+      - "fragile extremely petite child-like frame short tiny legs completely flat chest and innocent face"
+      - "tiny innocent body with short child-like stature large wide eyes and completely flat delicate chest"
+      - "extremely child-like tiny proportions innocent face short stature and tiny flat chest"
+      - "delicate eternal youth extremely tiny petite body with large innocent eyes and short petite limbs"
+      - "youthful child-like extremely tiny frame completely flat chest innocent glow and tiny short legs"
+      - "broken innocent extremely tiny youthful body with child-like delicate fractured large eyes"
+      - "corrupted eternal youth tiny child-like form with overwhelmed innocent large eyes"
+      - "permanent youthful extremely tiny petite proportions fragile child-like innocent small hands face"
+      - "extremely child-like tiny body short youthful stature large innocent wide eyes tiny flat features"
+      - "tiny innocent child-like proportions petite youthful body large wide eyes delicate small chest"
+      # bursting_breasts 子类：爆乳专用状态效果（勒痕来源通用版）
+      # 优化说明（中文注释）：
+      # - 勒痕来源更通用：不限于绳子，改为extreme breast bondage/tight binding/severe constriction/cruel constriction等（可包括corset/harness/band/strap等束缚）
+      # - 焦点根部极端勒紧导致极度坚挺饱满爆乳+深深勒痕（deep indentation marks/visible constriction traces）
+      # - 美化视觉：perky/upthrust/firm/plump/round/swollen，饱满坚挺向上爆出诱人
+      # - 独立性强：纯根部勒紧爆出状态描述，无大小/颜色/具体工具干扰，可与breast_size叠加
+      # - 多样性10条，自然流畅
+    bursting_breasts:
+      - "breasts tightly constricted by extreme breast bondage at the base, causing extremely perky firm fullness to burst upward with deep indentation marks"
+      - "intense binding crushing the root, forcing plump firm breasts to thrust upward in perky explosive roundness with visible constriction traces"
+      - "severe constriction at the foundation, making firm round breasts erupt outward in upthrust perky swollen abundance with etched deep indentation"
+      - "tight binding at base, resulting in extremely firm perky breasts bursting forth in plump round tempting fullness with profound indentation grooves"
+      - "cruel constriction foundation squeezed tight, breasts exploding upward in perky firm plumpness with irresistible swollen roundness and deep marks"
+      - "relentless binding compression at root, causing round perky breasts to burst in upthrust firm swollen volume with visible indentation traces"
+      - "base tightly bound by heavy constriction, firm plump breasts overflowing upward in perky explosive round allure with permanent deep indentation"
+      - "extreme binding squeeze at root, perky round breasts erupting in firm upthrust swollen fullness with deep constriction marks"
+      - "foundation crushed by intense constriction, plump firm breasts bursting outward in perky round swollen abundance with etched indentation"
+      - "ultimate tight binding constriction at base, extremely perky firm breasts thrusting upward in perfect swollen round explosive beauty with profound indentation marks"
+    
+    milking_lactation: # 新移入：永恒乳汁溢出/产奶状态效果（被动功能化，生成milk drip明显）
+      - "nipples eternally leaking warm milk subtle drip trails in throbbing overproduction fullness"
+      - "breasts permanently swollen with constant lactation glossy milk beads eternal in passive utility"
+      - "eternal milk overflow nipples dripping visible trails in distorted throbbing maternal exhibit"
+      - "permanent overproducing breasts milk leaking subtle in muffled fractured fullness poise"
+      - "nipples suction ready eternal milk production visible beads in dehumanized living source"
+      - "breasts eternally engorged lactation drip glossy trails in throbbing passive overfilled state"
+      - "constant milk secretion nipples wet glistening eternal in nullified throbbing maternal function"
+      - "permanent lactation swell breasts heavy milk drip visible in fractured utility exhibit"
+      - "eternal milk production nipples leaking warm trails subtle in distorted passive living source"
+      - "breasts overfilled eternal lactation glossy milk overflow in throbbing dehumanized fullness"
+      - "nipples permanently dripping milk subtle trails in nullified maternal overproduction"
+      - "eternal swollen breasts constant lactation visible beads in muffled fractured living dairy"
+      - "permanent milk leak nipples glossy wet eternal in throbbing passive overproducing state"
+      - "breasts eternally producing milk drip trails visible in dehumanized maternal utility"
+      - "constant lactation overflow nipples heavy milk in distorted throbbing living source exhibit"
+    random_set: |
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/wetlook__},
+      {0-1$$__HHP-SET/effects/crotchless__},
+      {0-1$$__HHP-SET/effects/corruption__},
+      {0-1$$__HHP-SET/effects/ruined__},
+      {0-1$$__HHP-SET/effects/bursting_breasts__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},
+    EroticArt_set: |
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/wetlook__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/bursting_breasts__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},  # 轻概率优雅奶滴
+      # 新增 Corrupted_set 子节点：专为淫堕失控的堕落效果集合
+      # 说明（中文注释）：
+      # - 强制包含corruption（中高强度mind break）、ruined（衣服/妆容残破）、wetlook（液体痕迹）、crotchless（方便使用）
+      # - 高概率叠加，确保每次生成都有明显堕落/液体/破碎感
+      # - 与CorruptedEroticism姿势完美协同
+    Corrupted_set: |
+      {1-1$$__HHP-SET/effects/corruption__},
+      {1-1$$__HHP-SET/effects/ruined__},
+      {1-1$$__HHP-SET/effects/wetlook__},
+      {0-1$$__HHP-SET/effects/crotchless__},
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},  # 强制重度奶溢堕落
+      # 新增 BDSM_set 子节点：专为BDSM束缚艺术的优雅效果集合
+      # 说明（中文注释）：
+      # - 包含glossyshine（绳痕/金属光泽）、transparency（轻微开洞）、wetlook（汗湿/液体痕迹轻度）、ruined（轻度残破）
+      # - 排除重度corruption/crotchless，避免滑向淫堕
+      # - 高概率叠加，确保每次生成都有冷酷艺术质感（绳缚痕迹、金属反射）
+    BDSM_set: |
+      {1-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/wetlook__},
+      {0-1$$__HHP-SET/effects/ruined__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},  # 低概率束缚奶滴
+      # 新增 Objectification_set 子节点：专为终极活体物化的使用痕迹效果集合
+      # 说明（中文注释）：
+      # - 强制包含ruined（残破/使用痕迹）、wetlook（液体/汗湿）、crotchless（方便使用）
+      # - 高概率glossyshine/transparency（强化物品光泽/暴露）
+      # - 与UltimateObjectification姿势完美协同，生成“被使用后的活体物品”冷酷感
+    Objectification_set: |
+      {1-1$$__HHP-SET/effects/ruined__},
+      {1-1$$__HHP-SET/effects/wetlook__},
+      {1-1$$__HHP-SET/effects/crotchless__},
+      {0-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/bursting_breasts__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},  # 低概率束缚奶滴
+      # 新增 Extreme_set 子节点：专为Heavy/Extreme BDSM的折磨痕迹效果集合
+      # 说明（中文注释）：
+      # - 强制包含ruined（残破/折磨痕迹）、wetlook（汗湿/液体）、glossyshine（装备光泽）、transparency（轻微暴露）
+      # - 高概率corruption（mind break/堕落）
+      # - 与ExtremeBDSM姿势/Torture Devices完美协同，生成“被装置永恒折磨”的冷酷虚空感
+    Extreme_set: |
+      {1-1$$__HHP-SET/effects/ruined__},
+      {1-1$$__HHP-SET/effects/wetlook__},
+      {1-1$$__HHP-SET/effects/glossyshine__},
+      {0-1$$__HHP-SET/effects/transparency__},
+      {0-1$$__HHP-SET/effects/corruption__},
+      {0-1$$__HHP-SET/effects/bursting_breasts__},
+      {0-1$$__HHP-SET/effects/loli_extreme__},
+      {0-1$$__HHP-SET/effects/milking_lactation__},  # 低概率束缚奶滴
+  fetish:
+    pony:  # 拟人马娘专用子类（手脚马蹄光滑人类皮肤版，更像人类女孩）
+      - "perky horse ears fluffy tips, long flowing horse tail attached, smooth human skin lower arms ending in real horse hooves, smooth human skin lower legs ending in real horse hooves digitigrade stance"
+      - "cute horse ears with soft tips, swishing horse tail natural sway, human-like skin lower arms with genuine horse hooves, smooth lower legs with genuine horse hooves"
+      - "anthro horse ears perky and expressive, attached horse tail gentle movement, smooth skin lower arms transitioning to true horse hooves, digitigrade legs with natural horse hooves"
+      - "fluffy horse ears headpiece delicate, long horse tail flowing freely, human skin lower arms to real horse hooves, smooth lower legs to real horse hooves graceful"
+      - "horse ears with subtle tips, attached horse tail soft wave, smooth human skin lower arms ending in genuine horse hooves, lower legs human skin transitioning to true horse hooves"
+      - "perky anthro horse ears cute tilt, natural horse tail attached sway, human-like skin lower arms with real horse hooves, digitigrade stance with genuine horse hooves smooth"
+      - "soft horse ears headband expressive, flowing horse tail light movement, smooth skin lower arms transitioning to true horse hooves, lower legs smooth skin ending in real horse hooves"
+      - "cute horse ears fluffy and alert, attached horse tail gentle swish, human skin lower arms with natural horse hooves, horse-like lower legs smooth with natural horse hooves"
+      - "horse ears headpiece perky design, long horse tail natural flow, smooth human skin lower arms genuine horse hooves, smooth lower legs genuine horse hooves digitigrade"
+      - "anthro horse ears soft and expressive, horse tail attached subtle sway, human-like skin lower arms with true horse hooves, lower legs smooth with true horse hooves"
+      - "fluffy horse ears with cute tips, flowing horse tail attached, smooth skin lower arms ending in real horse hooves, digitigrade horse legs real horse hooves elegant"
+      - "perky horse ears headband light tips, natural horse tail gentle movement, human skin lower arms transitioning to genuine horse hooves, smooth lower legs to genuine horse hooves"
+      - "cute anthro horse ears expressive, attached horse tail soft swish, smooth human skin lower arms natural curve with real horse hooves, smooth horse lower legs with real horse hooves"
+      - "horse ears fluffy headpiece, long horse tail flowing, human-like skin lower arms ending in true horse hooves, lower legs human skin ending in true horse hooves"
+      - "soft horse ears perky tilt, attached horse tail natural wave, smooth skin lower arms with genuine horse hooves, digitigrade stance smooth horse legs with genuine horse hooves"
+
+    puppy:  # 拟人小狗专用子类（真正狗特征版，轻度真实动物化+可爱臣服玩味）
+      - "genuine perky dog ears fluffy tips naturally on head twitching with excitement, long wagging dog tail natural sway in devotion, smooth human skin lower arms ending in real soft dog paw pads sensitive touch, smooth human skin lower legs ending in real soft dog paw pads digitigrade stance"
+      - "real cute dog ears with soft tips naturally growing alert to sounds, swishing dog tail natural movement in submission, human-like skin lower arms with genuine dog paw pads gentle press, smooth lower legs with genuine dog paw pads"
+      - "true anthro dog ears perky and expressive naturally placed perking at attention, attached dog tail gentle wag in yearning, smooth skin lower arms transitioning to true dog paw pads sensitive, digitigrade legs with natural dog paw pads"
+      - "genuine fluffy dog ears delicate naturally on head ears twitching desire, long dog tail flowing freely in playful sway, human skin lower arms to real dog paw pads gentle touch, smooth lower legs to real dog paw pads graceful"
+      - "real dog ears with subtle tips naturally growing floppy cute, attached dog tail soft wave in devoted curl, smooth human skin lower arms ending in genuine dog paw pads sensitive, lower legs human skin transitioning to true dog paw pads"
+      - "true perky anthro dog ears cute tilt naturally placed ears perking submission, natural dog tail attached sway in excitement, human-like skin lower arms with real dog paw pads gentle, digitigrade stance with genuine dog paw pads smooth"
+      - "genuine soft dog ears expressive naturally on head twitching playfully, flowing dog tail light movement in yearning wag, smooth skin lower arms transitioning to true dog paw pads sensitive touch, lower legs smooth skin ending in real dog paw pads"
+      - "real cute dog ears fluffy and alert naturally growing ears perking desire, attached dog tail gentle swish in submission, human skin lower arms with natural dog paw pads gentle press, dog-like lower legs smooth with natural dog paw pads"
+      - "true dog ears perky design naturally placed ears twitching excitement, long dog tail natural flow in devoted wag, smooth human skin lower arms genuine dog paw pads sensitive, smooth lower legs genuine dog paw pads digitigrade"
+      - "genuine anthro dog ears soft and expressive naturally on head perking at attention, dog tail attached subtle sway in yearning, human-like skin lower arms with true dog paw pads gentle touch, lower legs smooth with true dog paw pads"
+      - "real fluffy dog ears with cute tips naturally growing twitching playfully, flowing dog tail attached in excitement wag, smooth skin lower arms ending in real dog paw pads sensitive, digitigrade dog legs real dog paw pads elegant"
+      - "true perky dog ears light tips naturally placed ears perking submission, natural dog tail gentle movement in devoted curl, human skin lower arms transitioning to genuine dog paw pads gentle press, smooth lower legs to genuine dog paw pads"
+      - "genuine cute anthro dog ears expressive naturally on head twitching desire, attached dog tail soft swish in yearning, smooth human skin lower arms natural curve with real dog paw pads sensitive touch, smooth dog lower legs with real dog paw pads"
+      - "real dog ears fluffy naturally growing ears alert to sounds, long dog tail flowing in playful sway, human-like skin lower arms ending in true dog paw pads gentle, lower legs human skin ending in true dog paw pads"
+      - "true soft dog ears perky tilt naturally placed perking at attention, attached dog tail natural wave in submission wag, smooth skin lower arms with genuine dog paw pads sensitive, digitigrade stance smooth dog legs with genuine dog paw pads"
+    
+    kitten:  # 拟人小猫专用子类（真正猫特征版，轻度真实动物化+可爱臣服玩味）
+      - "genuine perky cat ears fluffy tips naturally on head twitching with curiosity, long swishing cat tail natural curl in playful tease, smooth human skin lower arms ending in real soft cat paw pads sensitive touch, smooth human skin lower legs ending in real soft cat paw pads graceful stance"
+      - "real cute cat ears with soft tips naturally growing alert to sounds, curling cat tail natural movement in seductive sway, human-like skin lower arms with genuine cat paw pads gentle press, smooth lower legs with genuine cat paw pads"
+      - "true anthro cat ears perky and expressive naturally placed perking desire, attached cat tail gentle curl in yearning tease, smooth skin lower arms transitioning to true cat paw pads sensitive, plantigrade legs with natural cat paw pads"
+      - "genuine fluffy cat ears delicate naturally on head twitching playfully, long cat tail flowing freely in seductive curl, human skin lower arms to real cat paw pads gentle touch, smooth lower legs to real cat paw pads elegant"
+      - "real cat ears with subtle tips naturally growing perky cute, attached cat tail soft curl in devoted tease, smooth human skin lower arms ending in genuine cat paw pads sensitive, lower legs human skin transitioning to true cat paw pads"
+      - "true perky anthro cat ears cute tilt naturally placed ears twitching curiosity, natural cat tail attached sway in playful desire, human-like skin lower arms with real cat paw pads gentle, graceful stance with genuine cat paw pads smooth"
+      - "genuine soft cat ears expressive naturally on head perking at attention, flowing cat tail light movement in seductive curl, smooth skin lower arms transitioning to true cat paw pads sensitive touch, lower legs smooth skin ending in real cat paw pads"
+      - "real cute cat ears fluffy and alert naturally growing twitching desire, attached cat tail gentle swish in yearning tease, human skin lower arms with natural cat paw pads gentle press, cat-like lower legs smooth with natural cat paw pads"
+      - "true cat ears perky design naturally placed ears perking playfully, long cat tail natural flow in devoted curl, smooth human skin lower arms genuine cat paw pads sensitive, smooth lower legs genuine cat paw pads plantigrade"
+      - "genuine anthro cat ears soft and expressive naturally on head twitching curiosity, cat tail attached subtle sway in seductive desire, human-like skin lower arms with true cat paw pads gentle touch, lower legs smooth with true cat paw pads"
+      - "real fluffy cat ears with cute tips naturally growing perking at attention, flowing cat tail attached in playful curl, smooth skin lower arms ending in real cat paw pads sensitive, graceful cat legs real cat paw pads elegant"
+      - "true perky cat ears light tips naturally placed ears twitching desire, natural cat tail gentle movement in yearning tease, human skin lower arms transitioning to genuine cat paw pads gentle press, smooth lower legs to genuine cat paw pads"
+      - "genuine cute anthro cat ears expressive naturally on head perking playfully, attached cat tail soft curl in seductive sway, smooth human skin lower arms natural curve with real cat paw pads sensitive touch, smooth cat lower legs with real cat paw pads"
+      - "real cat ears fluffy naturally growing twitching curiosity, long cat tail flowing in devoted curl, human-like skin lower arms ending in true cat paw pads gentle, lower legs human skin ending in true cat paw pads"
+      - "true soft cat ears perky tilt naturally placed ears perking desire, attached cat tail natural wave in playful tease, smooth skin lower arms with genuine cat paw pads sensitive, graceful stance smooth cat legs with genuine cat paw pads"
+    
+    bunny:  # 拟人小兔专用子类（真正兔特征版，轻度真实动物化+可爱臣服玩味）
+      - "genuine long floppy bunny ears fluffy tips naturally on head twitching with excitement, short cotton bunny tail natural bounce in devotion, smooth human skin lower arms ending in real soft bunny paw pads sensitive touch, smooth human skin lower legs ending in real soft bunny paw pads digitigrade stance"
+      - "real cute bunny ears with soft tips naturally growing alert to sounds, bouncing bunny tail natural movement in submission, human-like skin lower arms with genuine bunny paw pads gentle press, smooth lower legs with genuine bunny paw pads"
+      - "true anthro bunny ears perky and expressive naturally placed perking desire, attached bunny tail gentle bounce in yearning, smooth skin lower arms transitioning to true bunny paw pads sensitive, digitigrade legs with natural bunny paw pads"
+      - "genuine fluffy bunny ears delicate naturally on head twitching playfully, short bunny tail flowing freely in devoted bounce, human skin lower arms to real bunny paw pads gentle touch, smooth lower legs to real bunny paw pads graceful"
+      - "real bunny ears with subtle tips naturally growing floppy cute, attached bunny tail soft bounce in playful tease, smooth human skin lower arms ending in genuine bunny paw pads sensitive, lower legs human skin transitioning to true bunny paw pads"
+      - "true perky anthro bunny ears cute tilt naturally placed ears twitching excitement, natural bunny tail attached sway in submission, human-like skin lower arms with real bunny paw pads gentle, digitigrade stance with genuine bunny paw pads smooth"
+      - "genuine soft bunny ears expressive naturally on head perking at attention, short bunny tail light movement in yearning bounce, smooth skin lower arms transitioning to true bunny paw pads sensitive touch, lower legs smooth skin ending in real bunny paw pads"
+      - "real cute bunny ears fluffy and alert naturally growing twitching desire, attached bunny tail gentle bounce in devoted tease, human skin lower arms with natural bunny paw pads gentle press, bunny-like lower legs smooth with natural bunny paw pads"
+      - "true bunny ears perky design naturally placed ears perking playfully, short bunny tail natural flow in submission bounce, smooth human skin lower arms genuine bunny paw pads sensitive, smooth lower legs genuine bunny paw pads digitigrade"
+      - "genuine anthro bunny ears soft and expressive naturally on head twitching excitement, bunny tail attached subtle sway in yearning, human-like skin lower arms with true bunny paw pads gentle touch, lower legs smooth with true bunny paw pads"
+      - "real fluffy bunny ears with cute tips naturally growing perking at attention, bouncing bunny tail attached in playful bounce, smooth skin lower arms ending in real bunny paw pads sensitive, digitigrade bunny legs real bunny paw pads elegant"
+      - "true perky bunny ears light tips naturally placed ears twitching desire, natural bunny tail gentle movement in devoted bounce, human skin lower arms transitioning to genuine bunny paw pads gentle press, smooth lower legs to genuine bunny paw pads"
+      - "genuine cute anthro bunny ears expressive naturally on head perking playfully, attached bunny tail soft bounce in seductive sway, smooth human skin lower arms natural curve with real bunny paw pads sensitive touch, smooth bunny lower legs with real bunny paw pads"
+      - "real bunny ears fluffy naturally growing twitching curiosity, short bunny tail flowing in devoted bounce, human-like skin lower arms ending in true bunny paw pads gentle, lower legs human skin ending in true bunny paw pads"
+      - "true soft bunny ears perky tilt naturally placed ears perking desire, attached bunny tail natural wave in playful tease, smooth skin lower arms with genuine bunny paw pads sensitive, digitigrade stance smooth bunny legs with genuine bunny paw pads"
+           
+    pregnancy_bloated: # 孕肚永恒膨胀状态
+      - "eternally swollen pregnant belly heavy with unknown burden, body in distorted throbbing fullness"
+      - "massive bloated abdomen stretched taut eternal, faint movements within in fractured maternal void"
+      - "permanent overinflated pregnant form belly protruding dramatically in cold dehumanized swell"
+      - "distended eternal pregnancy belly skin shiny tight, subtle kicks in nullified maternal exhibit"
+      - "extreme bloated gravid state abdomen bursting with life in throbbing fractured captivity"
+      - "heavily pregnant body eternal belly rounded massively in passive swollen utility"
+      - "permanent distended womb fullness belly stretched to limit in cold eternal maternal object"
+      - "bloated pregnant swell eternal navel protruding in distorted throbbing living fixture"
+      - "overloaded gravid abdomen heavy eternal in muffled fractured maternal nothingness"
+      - "eternal pregnancy bloat belly impossibly swollen in permanent dehumanized fullness"       
+    angel:  # 优化版：宏伟巨大的天使翅膀（强调immense/massive/sprawling规模感，远超鸡翅，强化压倒性覆盖、永恒宏伟破碎）
+      # 优雅残破：宏伟白翼残存神圣，但永恒撕裂、被动不动
+      - "immense fractured white angel wings spanning vast with torn feathers softly folded eternal in subdued ethereal restraint"
+      - "massive pure white wings towering wide gently bound by subtle translucent straps, feathers frayed in quiet fractured grace"
+      - "enormous feathered white wings sprawling motionless eternal, edges subtly crumbling in passive nullified serenity"
+      - "vast ethereal white wings veined with faint silver tears, drooping heavily in eternal subdued vulnerability"
+      
+      # 堕落黑翼：巨大黑暗腐蚀、永恒堕落痕迹
+      - "massive ragged black fallen wings sprawling dripping inky shadow eternal in corrupted throbbing devotion"
+      - "towering charred black wings with scorched and curling feather remnants spanning wide in distorted muffled surrender"
+      - "enormous dark torn wings edged with jagged obsidian shards eternal in cold leaking fractured poise"
+      - "vast shadow-engulfed black wings slowly disintegrating at vast edges in overwhelming ruined warmth"
+      
+      # 机械物化：冷酷金属宏伟融合、功能化固定
+      - "immense articulated steel angel wings locked open rigid spanning wide eternal in cold dehumanized fixture display"
+      - "massive brushed chrome wings with visible joint mechanisms fixed spread enormously in eternal objectified utility"
+      - "towering polished metal wings of razor-thin blades forcibly extended vast in throbbing nullified captivity"
+      - "enormous gear-driven mechanical wings immobilized mid-flap spanning heavily eternal in distorted passive ornament poise"
+      
+      # 虚空空壳：宏伟透明/幽灵/彻底消散
+      - "vast ghostly translucent wings barely visible fading eternal spanning wide in throbbing muffled nothingness"
+      - "immense vacant doll-like white wings soft but eternally unmoving towering in permanent passive emptiness"
+      - "massive shattered glass-like wings reflecting fractured void eternal sprawling in distorted eternal blankness"
+      - "enormous faint spectral wings dissolving into mist spanning heavily in cold nullified living shell"
+      
+      # 极端独特：多翼/针刺/真空/畸形宏伟变体
+      - "multi-layered seraph wings six immense pairs torn and tightly bound eternal spanning overwhelmingly in distorted captivity"
+      - "vast needle-pierced wings feathers fused with permanent metal pins towering wide in cold throbbing object ruin"
+      - "massive vacuum-sealed translucent wings clinging skin-tight eternal sprawling in breathless muffled fixture"
+      - "asymmetrical enormous wings one immense white towering high one charred black vast low eternal in fractured dehumanized imbalance"
+    demon:  # 终极优化版：非常淫荡且堕落的恶魔（colossal神级巨大蝙蝠式皮革翅膀，永恒淫堕泄漏、痉挛狂喜、虚空空壳）
+      # 诱惑红肤肩部翼：经典魅魔诱惑，神级巨大皮翼从肩胛永恒张开覆盖
+      - "colossal leathery bat-like demon wings godlike sprawling overwhelmingly vast veined eternal in throbbing heated crimson allure, curved horns arching with sinuous tail curling invitingly in corrupted yearning drip"
+      - "overwhelmingly massive ragged bat wings membrane torn glistening perpetually spanning the entire frame from upper back, deep red demonic flesh and elegant black horns twisting in quiet fractured seductive warmth"
+      - "godlike enormous veined bat-like wings draped open colossally heavy eternal eclipsing all from shoulders, scarlet scaled skin with spade-tipped tail swaying in subdued mindless leaking invitation"
+      - "colossal leathery bat wings spanning godlike vast in glossy ruby glow from shoulder blades, heated demon body with faint throbbing runes and tail coiling in eternal hushed corrupted charm"
+      
+      # 淫堕黑翼痉挛：黑暗腐蚀神级巨大皮翼，永恒痉挛狂喜
+      - "towering jagged black bat wings dripping inky shadow eternal colossally spanning wide from upper back, obsidian horns massive with tail lashing convulsively in overwhelmed ruined bliss"
+      - "overwhelmingly massive charred bat-like wings membrane cracked leaking ichor godlike vast from shoulders, razor-sharp horns piercing upward in distorted spasming madness"
+      - "colossal inky black bat wings glossy with endless dripping fluids veined overwhelmingly heavy from back, prehensile tail coiling tightly in permanent fractured ecstasy"
+      - "godlike void-black leathery wings throbbing with heart-pupil glow hints sprawling colossally from shoulder blades, multi-curved horns in eternal mindless convulsing ruin"
+      
+      # 永恒翼尾拉扯（腰间变体重点）：功能化淫荡，神级巨大翅膀从腰间/下背生长，便于尾巴互动
+      - "colossal bat wings growing from lower back/waist locked spread rigid godlike vast with barbed tail pulling sensitive areas eternal, crimson skin marked in cold throbbing leaking torment joy"
+      - "overwhelmingly massive veined bat-like wings emerging from hips/waist fused weighted chain pull from membrane colossally eternal, succubus flesh in distorted perpetual drip submission"
+      - "godlike towering ragged bat wings from lower back self-wrapped tight eternal constriction around tail spanning overwhelmingly, horns glowing faintly in muffled convulsing objectified bliss"
+      - "colossal enormous inflatable bat wing membrane swelling internal pressure progressive growing from waist godlike vast, demonic body in breathless fractured leaking captivity"
+      
+      # 虚空淫魔空壳：神级巨大皮翼淡化（混合位置）
+      - "colossal fading bat-like wings barely visible translucent eternal godlike spanning wide from back in throbbing muffled nothingness, horns reduced to cold stubs"
+      - "overwhelmingly immense vacant doll-like black bat wings leathery but eternally unmoving towering colossally from shoulders/waist, tail limp in permanent passive leaking void"
+      - "godlike massive shattered veined bat wings reflecting fractured void eternal sprawling overwhelmingly from lower back, demonic flesh pale in distorted eternal blankness"
+      - "colossal enormous spectral bat membrane wings dissolving into mist heavily spanning godlike from hips in cold nullified mindless dripping fixture"
+      
+      # 极端独特：多翼/针刺/过载淫堕（神级巨大+腰间强化）
+      - "multi-layered bat wings six colossal pairs torn and tightly bound eternal spanning godlike overwhelmingly from back and waist, tail splitting into writhing tendrils in throbbing ruin"
+      - "colossal vast needle-pierced bat wing membrane fused permanent metal pins towering overwhelmingly wide growing from lower back/hips, demonic flesh leaking glossy in cold objectified convulsing madness"
+      - "overwhelmingly massive overloaded bat-like wings bursting with corrupted energy eternal veined godlike heavy emerging from waist, invasive tail fusion in distorted eternal ecstasy void"
+      - "asymmetrical colossal enormous bat wings one godlike glowing red from shoulders one charred black overwhelmingly vast from hips eternal, tail with sucking tip in fractured dehumanized leaking poise"
+    
+    latex_encasement: # 永久latex融合/真空封印专用子类（zentai升级替代，第二皮肤永恒封印，生成光泽明显）
+      - "skin permanently fused with glossy black latex layer eternal seamless second skin tight cling in cold nullified encapsulation"
+      - "body eternally integrated glossy latex coating full coverage seamless hooded eternal anonymous throbbing sealed form"
+      - "permanent shiny latex skin fusion complete head to toe glossy reflective eternal cold dehumanized second skin poise"
+      - "eternal vacuum sealed latex layer clinging skin-tight glossy transparent subtle breath in distorted muffled fixture"
+      - "glossy red latex permanently grafted as second skin seamless full body hooded eternal throbbing anonymous utility"
+      - "body eternally encased in mirror chrome latex fusion glossy tight seamless eternal cold reflective living ornament"
+      - "permanent opaque black latex skin integration hooded full coverage glossy cling eternal passive sealed display"
+      - "eternal glossy latex vacuum compression body sealed tight faint quiver in throbbing nullified encapsulation"
+      - "skin fused with metallic silver latex layer seamless hooded glossy reflective eternal cold modified second skin"
+      - "permanent glossy transparent latex encasement subtle skin hint eternal tight cling in distorted sealed living void"
+      - "body eternally coated in high shine purple latex fusion full hooded seamless glossy in cold anonymous throbbing form"
+      - "glossy latex skin graft complete coverage hooded eternal reflective second skin in fractured nullified poise"
+      - "eternal latex layer vacuum sealed glossy black tight full body hooded faint breath in cold sealed fixture"
+      - "permanent shiny latex integration skin-tight seamless hooded glossy eternal in passive dehumanized encapsulation"
+      - "body fused with glossy emerald latex second skin eternal hooded full coverage reflective in throbbing cold utility"
+
+    mermaid: # 永久人鱼身体专用子类（海洋种族堕落经典，非人鱼尾/鳍/鳞片/湿润永恒，刺激纯洁破灭）
+      - "lower body permanently transformed into long glistening mermaid tail scaled glossy fins spread eternal wet sheen pale luminous skin"
+      - "eternal mermaid tail fusion glossy scales wet dripping fins open intimate exposure subtle throbbing"
+      - "permanent fish tail lower body scaled shimmering eternal fins flared wet glow pale skin"
+      - "body lower half naturally mermaid tail long glossy scales fins visible wet eternal oceanic allure"
+      - "mermaid transformation eternal tail scaled tight wet fins spread pale luminous skin subtle exposure"
+      - "permanent glistening mermaid tail lower body fins open glossy scales wet dripping pale glow"
+      - "eternal scaled mermaid tail fusion fins flared intimate access wet sheen pale skin"
+      - "lower body mermaid tail permanent glossy wet scales fins spread throbbing oceanic form"
+      - "mermaid tail naturally integrated eternal long shimmering scales wet fins pale luminous"
+      - "permanent mermaid lower form tail scaled glossy fins open wet eternal pale skin glow"
+      - "eternal wet mermaid tail body scaled fins visible dripping pale oceanic skin"
+      - "mermaid transformation lower body tail glossy scales fins spread wet pale luminous eternal"
+      - "permanent glistening scaled tail fins open wet sheen pale skin throbbing exposure"
+      - "eternal mermaid tail fusion long glossy wet fins flared pale glow intimate reveal"
+      - "lower body naturally scaled mermaid tail eternal shimmering wet fins pale luminous skin"
+    elf: # 永久精灵身体专用子类（森林高雅种族堕落经典，非人耳朵/皮肤/头发/藤蔓永恒，刺激纯洁破灭）
+      - "pointed long delicate ears naturally protruding eternal pale luminous skin flowing silver hair leaf vine patterns fused to skin"
+      - "eternal pointed elegant ears pale ethereal glow skin ankle-length golden hair subtle vine markings integrated"
+      - "permanent pointed long ears luminous pale skin waist-length emerald flowing hair forest leaf patterns on body"
+      - "naturally pointed delicate ears pale skin subtle aura platinum cascading hair vine fused accents eternal"
+      - "eternal pointed elegant ears pale luminous skin white ankle-length waves hair leaf vine skin texture"
+      - "permanent pointed long ears ethereal pale glow skin silver flowing hair forest vine permanent markings"
+      - "naturally pointed delicate ears pale skin golden waist-length hair subtle leaf patterns fused eternal"
+      - "eternal pointed elegant ears luminous pale skin emerald cascading hair vine integrated body eternal"
+      - "permanent pointed long ears pale ethereal skin platinum waves hair forest leaf vine accents"
+      - "naturally pointed delicate ears pale glow skin silver ankle-length hair subtle vine skin fusion"
+      - "eternal pointed elegant ears luminous pale skin golden flowing hair leaf patterns permanent"
+      - "permanent pointed long ears pale skin emerald waves hair vine fused markings eternal"
+      - "naturally pointed delicate ears ethereal pale glow skin white cascading hair forest vine integration"
+      - "eternal pointed elegant ears pale luminous skin platinum flowing hair subtle leaf vine body"
+      - "permanent pointed long ears pale skin silver waves hair vine permanent accents eternal"
+    
+    vampire: # 永久吸血鬼身体专用子类（永恒饥渴苍白不死，堕落贵族刺激）
+      - "pale luminous skin eternal subtle red glow eyes sharp fangs protruding naturally visible in throbbing cold undead poise"
+      - "eternal vampire form pale ethereal skin red glowing eyes sharp fangs faint blood thirst in distorted fractured allure"
+      - "permanent undead beauty pale porcelain skin crimson eyes fangs visible eternal cold nullified hunger pose"
+      - "vampire transformation pale luminous skin sharp protruding fangs red eyes subtle glow in muffled throbbing void"
+      - "eternal pale skin vampire eyes glowing red fangs natural eternal faint thirst in cold dehumanized grace"
+      - "permanent sharp fangs pale skin red iris glow eternal subtle blood trace in fractured passive exhibit"
+      - "undead vampire body pale ethereal glow sharp fangs crimson eyes eternal cold throbbing stillness"
+      - "eternal vampire pale skin visible fangs red glowing eyes faint hunger in distorted nullified poise"
+      - "permanent undead pale luminous skin sharp fangs red eyes subtle eternal thirst in cold fractured allure"
+      - "vampire form pale porcelain skin crimson glowing eyes protruding fangs eternal muffled void pose"
+      - "eternal pale skin sharp natural fangs red eyes faint blood glow in throbbing dehumanized exhibit"
+      - "permanent vampire pale ethereal skin crimson eyes sharp fangs visible eternal cold passive hunger"
+      - "undead beauty pale luminous skin red iris fangs protruding eternal subtle thirst in distorted stillness"
+      - "eternal vampire transformation pale skin sharp fangs glowing red eyes faint eternal in fractured cold void"
+      - "permanent pale undead skin crimson eyes natural fangs subtle glow in nullified throbbing poise"
+
+    succubus: # 永久淫魔身体专用子类（永恒诱惑淫乱，堕落魅惑刺激，demon扩展）
+      - "eternal succubus tail coiling naturally horns curving wings spread subtle charm glow in throbbing corrupted allure"
+      - "permanent demon tail prehensile horns visible small wings folded eternal seductive glow in distorted fractured poise"
+      - "succubus transformation tail natural sway curved horns glowing eyes wings subtle in cold nullified seduction"
+      - "eternal tail fused horns protruding wings immense black ragged charm aura in muffled throbbing void"
+      - "permanent succubus curved horns tail coiling wings spread eternal subtle energy drain glow in fractured passive"
+      - "demon wings large black folded tail natural horns sharp eternal charm glow in distorted dehumanized allure"
+      - "eternal succubus horns tail wings glowing red eyes subtle seductive aura in cold throbbing exhibit"
+      - "permanent tail prehensile horns curved wings ragged black eternal charm glow in nullified fractured poise"
+      - "succubus body tail coiling horns visible wings immense eternal subtle glow in distorted throbbing seduction"
+      - "eternal wings black spread horns sharp tail natural charm aura in muffled cold passive void"
+      - "permanent succubus tail fused wings folded horns glowing eternal seductive in fractured dehumanized allure"
+      - "demon tail coiling wings large black horns curved eternal charm glow in throbbing nullified pose"
+      - "eternal succubus horns tail wings red glowing eyes subtle energy drain in distorted cold exhibit"
+      - "permanent wings immense black tail prehensile horns sharp eternal charm in fractured throbbing void"
+      - "succubus transformation wings spread tail sway horns visible eternal seductive glow in cold passive allure"
+
+    dead_shell: # 永久死亡尸体空壳专用子类（刚死不久真实尸体版：灰败苍白皮肤/浊灰眼睛/尸僵后松弛自然下垂/彻底无活力，腐烂感极少）
+      - "eternal death corpse shell pale ashen gray mottled skin cloudy dull vacant sunken eyes no expression rigid stiff pose relaxing into limp natural dead weight no warmth no breath no pulse no movement in fractured absolute lifeless void"
+      - "permanent lifeless corpse pale gray skin subtle livor hints cloudy gray blank eyes sunken hollow rigid stiff form transitioning to limp sagging no vitality eternal absolute death stillness"
+      - "obvious death body pale ashen gray skin cloudy dull eyes no gaze rigid stiff pose natural droop arms hanging limp eternal no warmth no breath no quiver in distorted eternal corpse exhibit"
+      - "thoroughly dead shell pale mottled gray skin cloudy vacant sunken eyes no light stiff rigid body slumping heavy natural dead weight no movement no pulse eternal fractured nothingness"
+      - "absolute death corpse pale gray skin cloudy dull hollow eyes rigid pose relaxing limp sagging no breath no movement no vitality in muffled eternal corpse void"
+      - "eternal corpse state pale ashen mottled skin cloudy gray sunken eyes no expression stiff rigid form natural droop limbs heavy eternal no warmth no quiver no subtle life in fractured absolute death poise"
+      - "permanent dead body pale gray skin cloudy vacant eyes no gaze rigid stiff pose transitioning limp sagging no pulse no breath eternal distorted lifeless exhibit"
+      - "thoroughly lifeless shell pale mottled ashen skin cloudy blank sunken eyes no expression rigid motionless relaxing into natural dead weight droop no warmth no movement no quiver eternal death"
+      - "obvious corpse form pale gray mottled skin cloudy hollow eyes no light stiff rigid pose arms drooping limp heavy eternal absolute lifeless ruin"
+      - "eternal death state pale ashen gray skin cloudy dull eyes rigid stiff form natural sagging limp no breath no pulse no quiver in fractured eternal nothingness"
+      - "permanent corpse shell pale cracked mottled skin cloudy vacant sunken eyes no gaze motionless rigid transitioning limp droop no warmth no breath no movement eternal distorted death void"
+      - "absolute lifeless body pale gray ashen skin cloudy gray blank eyes no expression stiff rigid pose relaxing heavy sagging no quiver no vitality no subtle breath in muffled eternal corpse"
+      - "thoroughly dead corpse pale mottled skin cloudy sunken hollow eyes rigid stiff motionless natural dead weight droop arms limp eternal no warmth no movement no pulse absolute stillness"
+      - "eternal corpse exhibit pale ashen gray skin cloudy blank eyes no light rigid pose transitioning limp sagging faint breath fading eternal in fractured lifeless death"
+      - "permanent death form pale gray mottled skin cloudy vacant eyes no gaze stiff rigid body natural droop limbs heavy no breath no quiver no vitality eternal absolute corpse void"
+
+    dollification: # 永久瓷娃娃化专用子类（美丽被动展品永恒强化版：完美无瑕瓷肤/明显关节线/玻璃空洞眼/人工僵硬摆姿/彻底无活力）
+      - "eternal porcelain doll body flawless pale luminous skin visible articulated joint lines at elbows knees neck completely vacant blank glass-like sunken eyes no expression rigid stiff posed motionless in fractured eternal exhibit stillness"
+      - "permanent dollification flawless porcelain pale glow skin delicate perfect features visible subtle ball joint seams vacant hollow glass eyes no gaze rigid stiff mannequin pose eternal absolute lifelessness"
+      - "doll transformation flawless porcelain pale skin obvious painted joint lines visible blank sunken glass eyes no expression stiff rigid posed form no warmth no quiver in nullified eternal doll exhibit"
+      - "eternal doll body flawless luminous porcelain texture visible articulated joint seams vacant dead glass-like eyes rigid stiff motionless posed no movement in distorted fractured void"
+      - "permanent porcelain doll flawless pale skin perfect symmetry completely vacant sunken hollow glass eyes no light stiff rigid mannequin form no breath no vitality eternal fractured poise"
+      - "dollification eternal flawless porcelain pale skin visible joint lines at limbs neck blank glass eyes no expression rigid stiff posed motionless faint breath in nullified exhibit"
+      - "lifeless doll form flawless porcelain pale luminous glow delicate face obvious ball joint seams vacant sunken glass eyes no gaze stiff rigid posed no quiver in muffled eternal stillness"
+      - "eternal corpse doll flawless porcelain pale texture perfect features completely blank hollow glass eyes no expression rigid stiff mannequin pose no warmth no movement in fractured absolute void"
+      - "beautiful doll shell flawless luminous porcelain skin visible articulated joints vacant glass-like sunken eyes rigid stiff posed form no subtle life in distorted passive exhibit"
+      - "permanent dead doll flawless ethereal porcelain skin subtle joint lines visible blank sunken hollow glass eyes no expression motionless stiff rigid eternal fractured lifeless poise"
+      - "doll body eternal flawless porcelain pale glow obvious joint seams vacant dead glass eyes no light rigid stiff posed no breath no quiver in nullified throbbing void"
+      - "eternal dollification flawless porcelain pale skin visible limb joint lines completely vacant blank glass eyes no expression stiff rigid mannequin form no warmth in muffled eternal death"
+      - "permanent porcelain doll flawless luminous pale texture perfect features sunken vacant glass eyes rigid stiff posed motionless no movement in distorted exhibit"
+      - "lifeless beautiful form flawless glowing porcelain texture skin perfect delicate symmetry sunken hollow glass eyes no expression rigid stiff mannequin no warmth no quiver no breath in nullified absolute stillness"
+      - "eternal doll corpse flawless porcelain pale texture perfect delicate face vacant sunken glass eyes no expression rigid stiff posed motionless no quiver in fractured void"
+    multi_breasts: # 永久多乳房专用子类（优化版：强制总4或6个乳房数量明显，轻微奶汁，无大小描述）
+      - "body with permanent multiple extra breast rows {two|three} pairs along torso visible subtle milk beads in fractured passive utility"
+      - "eternal additional breast rows {two|three} pairs visible subtle milk ready in nullified throbbing maternal exhibit"
+      - "permanent multi breasts {two|three} in rows visible subtle drip eternal in distorted dehumanized fullness"
+      - "body transformed with extra breast rows {two|three} pairs visible subtle in muffled fractured living source"
+      - "eternal multiple breast rows additional pairs {two|three} visible subtle in passive fullness poise"
+      - "permanent extra breast rows lower torso {two|three} pairs grafted visible subtle milk beads in throbbing nullified utility"
+      - "multi breasts eternal rows {two|three} pairs visible subtle drip in fractured maternal living fixture"
+      - "body with permanent additional breast rows {two|three} pairs visible subtle in distorted passive warmth"
+      - "eternal extra breast rows {two|three} pairs visible subtle milk leak in nullified throbbing exhibit"
+      - "permanent multi breasts rows {two|three} pairs visible eternal in muffled fractured fullness pose"
+      - "extra breasts grafted rows {two|three} pairs visible subtle milk ready in dehumanized source"
+      - "body transformed multi breast rows additional pairs {two|three} visible subtle in distorted throbbing utility"
+      - "permanent additional breast rows {two|three} pairs subtle milk dripping visible in fractured passive living dairy"
+      - "eternal multi breasts rows {two|three} pairs visible subtle throbbing in nullified maternal exhibit"
+      - "permanent extra breast rows {two|three} pairs subtle leak visible in throbbing fractured void"
+
+    random_set: |
+      __HHP-SET/fetish/*__,
+  Scene:
+    EroticArt:  # 高端情色艺术专用场景（完整保留原48条+细节微调，总48条，优雅私密浪漫拉满）
+      - "luxurious boudoir silk sheets soft candlelight intimate glow velvet shadows gentle drape"
+      - "velvet chaise lounge afternoon sunlight filtering through lace curtains subtle warmth"
+      - "marble bathtub steam rising rose petals floating delicate light play on water"
+      - "four-poster bed canopy draped moonlight filtering through silk subtle allure"
+      - "grand piano room lid open moonlight on keys soft shadows elegant solitude gentle glow"
+      - "private sauna cedar wood steam rising warm bench intimate haze"
+      - "opulent bedroom mirrored ceiling silk sheets candlelight reflection soft caress"
+      - "sunlit conservatory glass walls plants humidity soft light filtering leaves"
+      - "rooftop terrace city lights below silk cushions gentle breeze private intimacy"
+      - "library leather armchair firelight books open subtle warmth glowing embers"
+      - "balcony overlooking sea sunset painting room gold gentle waves distant"
+      - "private art studio easel canvas soft light model pose elegant shadows"
+      - "hot spring pool steam rising moonlight gentle ripples intimate reflection"
+      - "victorian parlor velvet sofa lace curtains candlelight subtle shadows warm"
+      - "yacht cabin teak wood ocean view silk sheets gentle sway moonlight"
+      - "greenhouse moonlight plants humidity glass walls soft glow filtering"
+      - "attic secret room old trunks dust motes light beam intimate secrets"
+      - "wine cellar candlelit bottles velvet shadows warm glow subtle reflection"
+      - "private theater velvet seats spotlight dramatic shadows intimate stage"
+      - "garden gazebo moonlight roses silk cushions gentle breeze private"
+      - "marble balcony overlooking garden moonlight soft shadows intimate glow"
+      - "silk draped four-poster bed candlelight gentle flow sheets"
+      - "sun-drenched window seat lace curtains light caress skin"
+      - "private library firelight leather bound books velvet chair subtle warmth"
+      - "moonlit terrace silk cushions city glow below gentle breeze"
+      - "steam filled marble bath rose petals floating candlelight reflection"
+      - "canopy bed draped gauze moonlight filtering soft shadows"
+      - "grand piano ivory keys moonlight gentle glow elegant solitude"
+      - "velvet chaise afternoon light lace curtains subtle warmth"
+      - "private conservatory glass walls plants humidity soft light"
+      - "rooftop garden city lights silk cushions gentle breeze"
+      - "attic room old trunks dust motes light beam intimate"
+      - "wine cellar candlelit bottles velvet shadows warm glow"
+      - "private elevator mirrored walls soft emergency light paused intimacy"
+      - "hidden garden gazebo moonlight roses silk cushions"
+      - "marble staircase moonlight filtering elegant shadows"
+      - "private yacht deck ocean view silk sheets gentle sway"
+      - "sunlit bedroom lace curtains light caress skin"
+      - "firelit parlor velvet sofa books open subtle warmth"
+      - "moonlit balcony sea view silk cushions gentle waves"
+      - "steam bath cedar wood warm bench intimate haze"
+      - "grand bedroom mirrored ceiling candlelight reflection"
+      - "conservatory plants humidity glass walls soft glow"
+      - "rooftop terrace night city lights silk cushions"
+      - "attic secrets old trunks dust motes light beam"
+      - "wine cellar bottles velvet shadows candlelit"
+      - "private theater velvet seats spotlight shadows"
+      - "garden moonlight roses silk intimate"
+
+    Corrupted:  # 淫堕失控专用场景（20条，破碎狂喜/镜前自毁/公开混乱）
+      - "bedroom full length mirror reflection capturing ruined bliss drool tears squirt mess eternal"
+      - "public restroom stall door forced open body convulsing ahegao exposure mindless"
+      - "hotel room floor scattered ruined clothes body spasming squirt flooding fractured"
+      - "abandoned building broken windows body pressed glass public view overwhelmed ecstasy"
+      - "mirror maze infinite reflections ahegao multiplied drool tears dripping ruined"
+      - "party aftermath room body on table squirt mess mindless broken devotion"
+      - "office desk after hours body convulsing drool pooling heart pupils corrupted"
+      - "car interior fogged windows body spasming squirt trails eternal madness"
+      - "beach night public body in sand waves lapping convulsing ahegao void"
+      - "alleyway urban body against wall squirt flooding tears permanent ruin"
+      - "classroom desk body bent over drool pooling heart pupils fractured"
+      - "elevator mirrored walls paused body reflected infinitely spasming overwhelmed"
+      - "rooftop party body exposed city below squirt mess ahegao eternal"
+      - "changing room mirror body convulsing drool tears dripping bliss"
+      - "train compartment body against window public view fractured ecstasy"
+      - "park bench night body spasming squirt trails mindless corrupted"
+      - "stage spotlight body convulsing ahegao audience implied broken"
+      - "bathroom tiles body on floor squirt flooding drool cascading ruined"
+      - "balcony overlooking street body teetering squirt tears heart ruin"
+      - "gym mirror wall body against glass convulsing drool permanent madness"
+
+    BDSMBondage:  # 冷酷禁忌束缚专用场景（20条，克制优雅禁锢感）
+      - "hidden underground dungeon stone walls dim red lighting chain accents eternal restraint"
+      - "mirrored chamber infinite reflections spotlight capturing every bound form"
+      - "private playroom black leather furniture metal rings embedded walls subtle glow"
+      - "abandoned warehouse exposed beams rope suspensions dramatic shadows"
+      - "elegant attic secret room velvet restraints antique furniture muffled light"
+      - "dimly lit club private booth leather seats chain decor intimate shadows"
+      - "stone cellar candlelit iron fixtures restrained atmosphere"
+      - "mirrored wall studio infinite angles spotlight on bound form elegant"
+      - "luxury penthouse BDSM suite floor-to-ceiling windows city glow below"
+      - "gothic chamber high ceilings candlelight dramatic shadows restraint"
+      - "underground vault steel doors dim lighting metal frames eternal"
+      - "private mirrored elevator paused emergency light intimacy restrained"
+      - "hidden basement play space exposed brick rope art displays subtle"
+      - "elegant library secret room behind bookshelf leather bound restraint"
+      - "rooftop private terrace night city lights wind gentle chain accents"
+      - "abandoned theater stage spotlights dramatic shadows rope suspension"
+      - "wine cellar candlelit bottles velvet shadows chain details"
+      - "glass-walled observation room one-way mirror clinical restraint"
+      - "victorian parlor secret compartment antique furniture modern restraints"
+      - "industrial loft exposed pipes metal beams dramatic lighting fixation"
+
+    UltimateObjectification:  # 冷酷展示/陈列专用场景（20条，被动物品化被动展品感）
+      - "modern gallery white walls pedestal display spotlight living exhibit eternal"
+      - "museum display case glass encasement object faint breath passive"
+      - "luxury showroom window mannequin pose city viewing passive utility"
+      - "private collection room mounted wall fixtures decorative eternal"
+      - "warehouse storage rack body fixed as inventory passive exhibit"
+      - "public art installation plaza fixed pose eternal display"
+      - "shop window living mannequin intimate areas presented passive"
+      - "trophy room wall mounted living ornament dehumanized showcase"
+      - "laboratory specimen table strapped clinical white light eternal"
+      - "auction stage pedestal living lot eternal utility"
+      - "furniture showroom human piece integrated display functional"
+      - "glass case department store living doll exhibit passive"
+      - "wall niche home decor living fixture embedded passive ornament"
+      - "outdoor sculpture garden fixed pose eternal weathered display"
+      - "private vault secure display case body valuable object eternal"
+      - "theater prop storage human fixture integrated utility"
+      - "hotel lobby decorative living statue passive grace"
+      - "corporate office lobby human art installation functional exhibit"
+      - "gallery back room mounted frame living object display eternal"
+      - "museum storage shelf human specimen passive exhibit"
+
+    ExtremeBDSM:  # 永恒装置折磨专用场景（20条，残酷虚空装置拉满）
+      - "underground torture chamber stone walls eternal devices dim lighting throbbing"
+      - "clinical white room medical restraints steel tables muffled void eternal"
+      - "iron maiden variant chamber body sealed inside faint breath distorted captivity"
+      - "eternal suspension rig ceiling hooks body hung in fractured nothingness"
+      - "device integration lab body fused to machines perpetual torment throbbing"
+      - "sealed vacuum chamber body encased faint quiver in throbbing sealed void"
+      - "impalement frame eternal post body fixed motionless objectified ruin"
+      - "compression device chamber body crushed progressive in distorted nullified poise"
+      - "needle array room body pierced eternal leaking dehumanized fixation"
+      - "electro stimulation station wired platform body convulsing throbbing void"
+      - "wax drip overhead rig eternal hot trails in fractured muffled torment"
+      - "ice immersion tank body shivering eternal numbing nothingness"
+      - "weighted clamp array sensitive points eternal bite pull in masochistic void"
+      - "flogging post upright body exposed eternal welts blooming"
+      - "pear of anguish station internal expansion progressive distorted ruin"
+      - "rotating torment wheel body strapped eternal scraping madness"
+      - "endless conveyor machine body fixed moving through points muffled void"
+      - "scavenger's daughter compression body folded crushed eternal nullified"
+      - "heretic's fork neck prongs eternal movement piercing strained void"
+      - "judas cradle pyramid seat eternal weight impaling distorted ruin"
+  Colors:  # 专用颜色野卡节点（NSFW高端情色常用色调，随机时材质光泽/透明感强）
+    - "glossy black"
+    - "deep red"
+    - "pure white"
+    - "midnight blue"
+    - "rich purple"
+    - "hot pink"
+    - "transparent clear"
+    - "shiny silver"
+    - "crimson red"
+    - "emerald green"
+    - "ruby red"
+    - "sapphire blue"
+    - "obsidian black"
+    - "ivory white"
+    - "wet sheen transparent"
+  Materials:
+    - "{shiny|glossy|wet sheen} latex"
+    - "{supple|smooth|soft touch} leather"
+    - "{flowing|silky|gentle drape} silk"
+    - "{polished|brushed|cool touch} metal"
+    - "{flexible|tight cling} rubber"
+    - "{plush|soft caress} velvet"
+    - "{glossy|high shine} vinyl"
+    - "{textured|sheer mesh} nylon"
+    - "{delicate|intricate pattern} lace"
+    - "{rigid|clear} plastic"
+    - "{smooth|light reflect} spandex"
+    - "{soft|warm embrace} cashmere"
+    - "{sheer|light pass} chiffon"
+    - "{glossy|mirror finish} pvc"
+    - "{soft glow|subtle sheen} satin"
+    
+  SexyShot:  # 优化版性感视角节点：参考正统摄影/艺术描述，强调经典构图与诱惑视角。去除所有技术/现代工具词汇（无drone/lens/pov/fisheye/surveillance），纯艺术化表达（low angle/high angle/worm's eye/bird's eye/Dutch tilt/over shoulder/three-quarter等），突出撩人美学与身体曲线展示，适合NSFW优雅诱惑
+      Camera Position:
+        - "low angle from below looking up"
+        - "high angle from above looking down"
+        - "from behind over shoulder"
+        - "intimate side profile view"
+        - "three-quarter front view"
+        - "directly facing front"
+        - "worm's eye view from ground level"
+        - "bird's eye view overhead"
+        - "Dutch angle tilted dramatic"
+        - "over the shoulder close"
+        - "diagonal across composition"
+        - "slightly offset front angle"
+        - "rear three-quarter view"
+        - "low dramatic upward tilt"
+        - "high graceful downward gaze"
+
+      Camera Distance:
+        - "extreme intimate close up"
+        - "tight close up on details"
+        - "medium close framing torso"
+        - "full body elegant shot"
+        - "wide establishing view"
+        - "macro detail focus"
+        - "intimate portrait distance"
+        - "three-quarter body crop"
+        - "distant graceful silhouette"
+        - "close cropped composition"
+      random:
+        - "__HHP-SET/sexyShot/Camera Distance__ from __HHP-SET/sexyShot/Camera Position__"
+    
+  

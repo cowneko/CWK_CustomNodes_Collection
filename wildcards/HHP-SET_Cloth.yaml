@@ -1,0 +1,812 @@
+HHP-SET:
+  cloth:
+    classic:  # 优雅诱人类（纯服装类型，优化版：多样性大幅提升，总25条：变体丰富，包括裸感/袍子/内衣/连衣裙/披肩/围巾/睡袍/材质颜色/袖子领口长度组合）
+      # 纯裸感/自然变体（5条，基础优雅裸体）
+      - "completely nude natural skin gentle curves soft light highlight subtle body glow"
+      - "bare skin only delicate contours intimate natural allure soft shadow play"
+      - "nothing but skin flawless smooth gentle curves natural graceful form"
+      - "unadorned nude body soft light caress subtle intimate glow"
+      - "natural grace bare skin gentle flow light tracing curves elegant poise"
+
+      # 袍子/披肩/围巾变体（8条，宽松优雅层叠）
+      - "silk robe half-open soft belt tied loosely revealing collarbone midriff ivory white gentle drape"
+      - "cashmere wrap warm beige draped softly over shoulders subtle embrace long sleeves"
+      - "chiffon robe flowing layers semi-sheer light pass pearl white soft volume"
+      - "satin robe long sleeves open front gentle glide over skin deep burgundy rich texture"
+      - "velvet robe deep neckline loose fit rich texture midnight blue soft caress"
+      - "organza wrap transparent ivory gentle volume draped elegantly wide sleeves"
+      - "silk scarf pearl-white draped strategically soft folds across chest hips long trailing"
+      - "lace shawl delicate pattern draped over bare shoulders soft white subtle shimmer"
+
+      # 内衣/连衣裙/睡袍变体（12条，贴身含蓄诱惑）
+      - "lace lingerie soft cream barely there delicate patterns tracing skin thin straps"
+      - "satin slip pearl-white thin straps sliding softly off shoulders clinging to curves short length"
+      - "chiffon nightgown rose-tinted flowing layers semi-sheer gentle volume ankle length"
+      - "lace-trimmed camisole thin straps delicate hem soft white gentle cling mid-thigh"
+      - "silk chemise ivory white loosely draped gentle flow over hips long sleeves"
+      - "velvet camisole deep burgundy rich texture deep neckline gentle drape short"
+      - "organza babydoll transparent ivory gentle volume layered soft movement micro hem"
+      - "satin babydoll deep plunge short length soft slide lace accents pearl white"
+      - "lace teddy bodysuit soft panels intimate fit delicate straps cream white"
+      - "chiffon chemise flowing short length lace trim gentle drape rose-tinted"
+      - "silk slip dress thin straps gentle glide over curves pearl-white mid-length"
+      - "cashmere camisole warm tones soft embrace delicate neckline short sleeves beige"
+
+    stockings:  # 丝袜腿部焦点（优化版：多样性大幅提升，总20条：颜色/透明度/图案/配件/撕裂/开裆变体丰富）
+      # 经典thigh-high变体（8条，lace tops/garter/seam核心）
+      - "black thigh-high stockings lace tops clinging smoothly to thighs subtle garter accents glossy"
+      - "nude thigh-high stockings ultra-sheer invisible look lace band tops gentle skin glow"
+      - "back seam thigh-high stockings classic line garter clips visible subtle sheen"
+      - "white lace-top thigh-high stockings delicate pattern clinging to curves glossy hold"
+      - "red thigh-high stockings glossy finish lace tops bold accent garter belt"
+      - "sheer black thigh-high stockings seamless lace tops gentle compression glow"
+      - "fishnet thigh-high stockings wide mesh garter attached dramatic pattern glossy"
+      - "patterned thigh-high stockings floral lace thighs gentle climb garter-free silicone band"
+
+      # pantyhose全腿变体（5条，seamless/crotchless/sheer/opaque）
+      - "sheer black pantyhose seamless full leg coverage gentle sheen on skin glossy"
+      - "crotchless black pantyhose open design seamless leg cling glossy exposure"
+      - "ultra-sheer nude pantyhose light control subtle compression natural glow"
+      - "opaque black pantyhose matte finish strong coverage full leg seamless"
+      - "patterned pantyhose floral mesh full leg glossy subtle design seamless"
+
+      # fishnet/tears变体（4条，网状/撕裂刺激）
+      - "wide mesh fishnet stockings thigh-high dramatic holes glossy exposure"
+      - "fishnet pantyhose full leg strategic larger holes glossy tease"
+      - "thigh-high stockings with subtle tears at thighs delicate distressed look glossy"
+      - "fishnet thigh-high stockings garter belt attached wide mesh glossy dramatic"
+
+      # crotchless/open变体（3条，开裆暴露焦点）
+      - "crotchless thigh-high stockings lace tops open design glossy full access"
+      - "open crotch pantyhose sheer black seamless glossy intimate exposure"
+      - "crotchless fishnet stockings thigh-high glossy wide mesh exposure"
+
+    extremeexposure:  # 超级暴露专用子类（纯暴露完整版，多样性大幅提升，总40条：变体丰富，micro挑逗+open直接+结合刺激三重平衡）
+      # 纯micro“引而不发”挑逗（12条，极限小布料随时暴露张力拉满，tiniest/barely there/thin strings/teasing shift）
+      - "extreme micro bikini tiniest triangles thin strings barely covering nipples and mound teasing subtle shift glossy"
+      - "single string sling bikini virtually nothing thin thread barely there intimate teasing movement glossy"
+      - "micro thong tiniest front patch back string only barely covering gentle tease glossy"
+      - "string bikini top bottom microscopic patches thin threads barely holding teasing exposure glossy"
+      - "extreme micro triangle bikini thin strings barely concealing nipples mound teasing reveal glossy"
+      - "barely-there micro dress ultra short hem strings sides open barely covering curves teasing shift glossy"
+      - "tiniest micro bottoms single thread front patch matching top barely there intimate tease glossy"
+      - "sling shot bikini extreme exposure single string barely across teasing full access glossy"
+      - "micro monokini string only tiniest patches barely covering teasing exposure glossy"
+      - "tiny micro bikini patches thin strings barely holding nipples mound teasing movement glossy"
+      - "extreme micro skirt thin strings barely covering lower intimate teasing shift glossy"
+      - "micro g-string tiniest back string front patch barely there teasing exposure glossy"
+
+      # 纯openexposure直接全露（12条，直接无遮挡，crotchless/open-cup/open back/full holes/strategic panels）
+      - "crotchless bodysuit seamless full exposure strategic opening glossy"
+      - "open-cup bra set crotchless panties delicate straps complete access glossy"
+      - "open back dress extreme high slits sides complete leg reveal glossy"
+      - "open-front top deep side cutouts no coverage front glossy"
+      - "crotchless lingerie set thin straps open intimate design glossy"
+      - "fishnet body full mesh strategic larger holes exposure glossy"
+      - "high slit dress open sides to waist complete access seamless glossy"
+      - "backless dress deep side slits front open complete exposure glossy"
+      - "open chest bodysuit crotchless full exposure glossy"
+      - "open nipple panels lingerie set crotchless delicate glossy"
+      - "full side open dress extreme slits complete access glossy"
+      - "open lower panels bodysuit seamless exposure glossy"
+
+      # 结合变态暴露（16条，micro + open混合，最刺激双重张力）
+      - "extreme micro bikini crotchless design open nipple cutouts thin strings glossy"
+      - "single string sling bikini crotchless open side panels thin thread glossy"
+      - "micro thong open-cup bra combo full holes exposure thin strings glossy"
+      - "string bikini microscopic patches crotchless backless thin threads glossy"
+      - "extreme micro triangle bikini open chest panels crotchless thin strings glossy"
+      - "barely-there micro dress crotchless ultra short full side slits strings glossy"
+      - "tiniest micro bottoms crotchless matching open top single thread glossy"
+      - "sling shot bikini crotchless extreme exposure strategic holes thin string glossy"
+      - "micro monokini string only crotchless open back cutouts glossy"
+      - "tiny micro bikini patches crotchless full exposure panels thin strings glossy"
+      - "extreme micro skirt crotchless open nipple side slits thin strings glossy"
+      - "micro g-string crotchless open nipple bra tear exposure thin glossy"
+      - "extreme micro bodysuit crotchless open chest panels glossy"
+      - "micro dress open crotch full side slits ultra short glossy"
+      - "tiny micro top open panels crotchless micro bottom glossy"
+      - "barely there micro lingerie open nipple crotchless thin straps glossy"
+
+    roleplay:  # 角色扮演服装子类（优化版：多样性大幅提升，总30条：角色变体丰富，包括经典/暴露/配件组合/上衣下身多样）
+      # 经典核心角色变体（10条，基础完整服装）
+      - "french maid dress short frilled skirt white apron black headpiece thigh garters lace trim bow collar"
+      - "nurse uniform short white dress red cross cap low neckline mini skirt thigh high stockings gloves"
+      - "schoolgirl uniform pleated mini skirt sailor collar blouse knee socks red ribbon bow loafers school badge"
+      - "bunny girl suit strapless bodice high cut legs fluffy tail ears headband neck ribbon glossy cuffs"
+      - "secretary outfit tight pencil skirt button-up blouse glasses high waist belt thigh high stockings heels"
+      - "cheerleader uniform cropped top pleated mini skirt pom-poms hair ribbons glossy sneakers"
+      - "police woman uniform fitted jacket short skirt hat badge utility belt high boots gloves"
+      - "flight attendant dress fitted jacket mini skirt scarf hat name tag thigh high stockings heels"
+      - "teacher outfit pencil skirt blouse glasses chalkboard pointer tight sweater thigh high stockings heels"
+      - "playboy bunny suit classic corset style ears tail cuffs neck ribbon glossy high heels"
+
+      # 暴露微型变体（8条，micro/short/open重点）
+      - "extreme micro maid outfit frilled mini skirt white apron black headpiece open crotch lace trim bow"
+      - "micro nurse uniform white mini dress red cross cap open chest thigh stockings gloves"
+      - "micro schoolgirl uniform pleated micro skirt sailor crop top open red ribbon thigh socks loafers"
+      - "micro bunny outfit strapless micro bodysuit high cut open fluffy tail ears headband"
+      - "micro secretary outfit tight micro pencil skirt crop blouse open glasses thigh stockings heels"
+      - "micro cheerleader uniform crop top micro pleated skirt open pom-poms hair ribbons sneakers"
+      - "micro police uniform fitted micro jacket mini skirt open hat badge thigh boots gloves"
+      - "micro flight attendant outfit fitted micro jacket mini skirt open scarf hat thigh stockings heels"
+
+      # 配件组合变体（7条，头饰/道具/鞋子多样）
+      - "maid outfit short dress frilled skirt white apron no headpiece thigh garters lace gloves bell collar"
+      - "nurse uniform short dress red cross no cap thigh stockings long gloves syringe stethoscope"
+      - "schoolgirl uniform pleated mini skirt sailor blouse no ribbon knee socks loafers book bag"
+      - "bunny girl suit high cut bodysuit fluffy tail no ears headband glossy cuffs high heels"
+      - "secretary outfit pencil skirt blouse glasses no belt thigh stockings clipboard heels"
+      - "teacher outfit pencil skirt blouse no glasses chalk pointer book tight sweater flats"
+      - "police uniform short skirt jacket hat no badge utility belt boots handcuffs sunglasses"
+
+      # 混合堕落变体（5条，crop/open/crotchless组合）
+      - "crop maid top micro frilled skirt open crotch white apron black headpiece glossy stockings gloves"
+      - "open nurse dress micro length crotchless white skirt red cross cap thigh stockings gloves"
+      - "crop schoolgirl top micro pleated skirt open sailor collar red ribbon knee socks loafers"
+      - "open bunny bodysuit micro high cut crotchless fluffy tail ears headband glossy"
+      - "crop police jacket micro skirt open crotchless hat badge thigh boots gloves baton"
+
+    catsuit:  # catsuit专用子类（无缝全包紧身，优化版：多样性大幅提升，总20条：变体丰富，包括zipper/open crotch/cutout/high neck/low back/asymmetrical/sleeveless/short sleeve等组合）
+      # 经典无缝全包变体（8条，核心catsuit）
+      - "full body seamless catsuit tight fit smooth coverage second skin glossy high neck long sleeves"
+      - "high neck catsuit long sleeves legs seamless cling glossy full body smooth line"
+      - "back zipper catsuit full body easy access seamless glossy high collar"
+      - "front zipper catsuit complete coverage intimate opening seamless glossy long sleeves"
+      - "open crotch catsuit variant full exposure seamless glossy high neck"
+      - "hoodless catsuit full body smooth tight embrace second skin glossy long sleeves"
+      - "high collar catsuit full coverage seamless poise glossy long legs"
+      - "low back catsuit seamless deep plunge glossy full body cling"
+
+      # cutout/开放变体（5条，战略开口焦点）
+      - "cutout catsuit strategic holes seamless exposure glossy high neck long sleeves"
+      - "catsuit open panels side cuts seamless glossy full body tight"
+      - "perverted catsuit open chest panels seamless glossy long sleeves legs"
+      - "catsuit open back deep cutout seamless glossy high collar"
+      - "degraded catsuit open crotch panels seamless glossy full coverage otherwise"
+
+      # short sleeve/sleeveless变体（4条，上身多样）
+      - "short sleeve catsuit micro length seamless fit glossy high neck"
+      - "sleeveless catsuit high cut legs seamless glossy full body"
+      - "asymmetrical sleeve catsuit one long one short seamless glossy cling"
+      - "strapless catsuit tube style seamless tight glossy full coverage"
+
+      # zipper/配件变体（3条，拉链位置+配件组合）
+      - "side zipper catsuit seamless glossy full body alternative access long sleeves"
+      - "double zipper catsuit front back seamless glossy intimate options high neck"
+      - "catsuit no zipper seamless pull-on glossy full body tight second skin long sleeves"
+
+    qipao:  # 超级性感旗袍专用子类（纯服装类型，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/collar variant等）
+      # 经典gown+skirt变体（8条，核心旗袍装）
+      - "extreme short qipao high slits to waist deep V-neck tight fit embroidered silk high collar frog buttons wide sleeves"
+      - "qipao dress gown open micro length side slits to hips plunging neckline high collar glossy frog closure wide sleeves"
+      - "sexy qipao short hem deep plunge high slits low back fitted tight high collar embroidered glossy wide sleeves"
+      - "qipao gown micro length open panels side slits extreme high deep neckline high collar silk sheen frog buttons"
+      - "degraded qipao skirt tight high collar extreme slits plunging front fitted tight glossy embroidered wide sleeves"
+      - "extreme qipao outfit short gown high slits to waist high collar frog buttons silk glossy wide sleeves"
+      - "qipao dress micro hem deep cuts side slits complete leg exposure plunging neckline high collar embroidered wide sleeves"
+      - "sexy qipao uniform crop top micro gown high slits deep V high collar frog buttons glossy wide sleeves"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop qipao top open deep plunge micro skirt high slits high collar frog buttons glossy embroidered wide sleeves"
+      - "qipao crop blouse open micro length side slits plunging neckline high collar silk wide sleeves"
+      - "sexy crop qipao top cropped high mini skirt high slits deep plunge high collar glossy frog closure"
+      - "qipao top open panels short skirt side slits extreme high high collar embroidered glossy wide sleeves"
+      - "degraded crop qipao top low plunge micro skirt high slits high collar silk sheen wide sleeves"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro qipao shorts open fitted crop top high slits high collar frog buttons glossy embroidered wide sleeves"
+      - "qipao tight shorts crop blouse side slits plunging neckline high collar silk wide sleeves"
+      - "sexy qipao pants open crotch micro length crop top high slits deep V high collar glossy"
+      - "qipao uniform micro shorts deep plunge crop top side slits high collar frog closure embroidered wide sleeves"
+
+      # collar optional/配件变体（3条，高领可选+配件组合）
+      - "extreme short qipao uniform no high collar fitted micro gown high slits deep V frog buttons glossy embroidered hairpin wide sleeves"
+      - "qipao outfit high collar optional open deep plunge micro length side slits plunging neckline frog closure glossy fan accessory wide sleeves"
+      - "sexy qipao dress short hem no high collar deep plunge high slits fitted gown frog buttons glossy pearl hairpin wide sleeves"
+
+    qipao_perverted:  # 超级变态旗袍专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/collar variant等）
+      # 经典qipao+gown变体（8条，核心旗袍装）
+      - "extreme short qipao high slits to waist crotchless deep V-neck tight fit embroidered silk high collar frog buttons"
+      - "qipao dress gown open micro length crotchless side slits to hips plunging neckline high collar glossy frog closure"
+      - "perverted qipao outfit short hem deep plunge high slits low back fitted tight high collar embroidered glossy"
+      - "qipao gown micro length open panels side slits extreme high deep neckline high collar silk sheen frog buttons"
+      - "degraded qipao skirt tight open crotch high collar extreme slits plunging front fitted tight glossy embroidered"
+      - "extreme qipao outfit short gown open chest high slits to waist high collar frog buttons silk glossy"
+      - "qipao dress micro hem deep cuts side slits complete leg exposure plunging neckline high collar embroidered"
+      - "perverted qipao uniform crop top micro gown high slits deep V high collar frog buttons glossy"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop qipao top open deep plunge micro skirt high slits high collar frog buttons glossy embroidered"
+      - "qipao crop blouse open micro length crotchless side slits plunging neckline high collar silk"
+      - "perverted qipao crop top cropped high mini skirt high slits deep V high collar glossy frog closure"
+      - "qipao top open panels short skirt side slits extreme high high collar embroidered glossy"
+      - "degraded qipao crop top low plunge micro skirt high slits open crotch high collar silk sheen"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro qipao shorts open fitted crop top high slits high collar frog buttons glossy embroidered"
+      - "qipao tight shorts crotchless crop blouse side slits plunging neckline high collar silk"
+      - "perverted qipao pants open crotch micro length crop top high slits deep V high collar glossy"
+      - "qipao uniform micro shorts deep plunge crop top side slits high collar frog closure embroidered"
+
+      # collar optional/配件变体（3条，高领可选+配件组合）
+      - "extreme short qipao uniform no high collar fitted micro gown high slits deep V frog buttons glossy embroidered hairpin"
+      - "qipao outfit high collar optional open deep plunge micro length side slits plunging neckline frog closure glossy fan accessory"
+      - "perverted qipao dress short hem no high collar deep plunge high slits fitted gown frog buttons glossy pearl hairpin"
+
+    lingerie:  # 内衣专用子类（纯内衣类型，多样性大幅提升，总20条：款式变体丰富，包括bra/panties/babydoll/teddy/corset/chemise/bustier/bralette/garter/bodysuit等组合）
+      # 经典bra+panies变体（6条，核心内衣）
+      - "lace bra and panties set delicate floral straps soft embrace lace trim glossy"
+      - "sheer lace bra matching thong thin straps delicate patterns gentle coverage"
+      - "satin bra deep plunge panties set glossy finish soft slide"
+      - "strappy bra high waist panties delicate bands lace accents"
+      - "balconette bra push up effect matching briefs lace edges glossy"
+      - "wireless bralette soft cup panties set delicate floral lace gentle drape"
+
+      # babydoll/chemise变体（5条，短上衣焦点）
+      - "sheer babydoll short length flowing hem lace trim glossy gentle float"
+      - "satin babydoll deep neckline short hem soft drape lace accents"
+      - "lace chemise short length delicate trim glossy gentle glide over curves"
+      - "chiffon babydoll flowing layers semi-sheer lace hem soft volume"
+      - "velvet babydoll short hem rich texture deep plunge glossy"
+
+      # corset/bustier变体（4条，紧身腰部焦点）
+      - "corset top light boning garter straps attached lace edges glossy"
+      - "bustier fitted waist push up lace up front delicate reveal glossy"
+      - "underbust corset boning high waist panties matching glossy"
+      - "lace corset top garter belt attached stockings light glossy"
+
+      # bodysuit/teddy变体（3条，全身连体）
+      - "teddy bodysuit lace panels intimate seamless fit glossy"
+      - "lace body stocking full coverage delicate mesh glossy gentle cling"
+      - "satin teddy bodysuit deep plunge snap crotch glossy soft embrace"
+
+      # garter/配件变体（2条，配件组合）
+      - "garter belt attached stockings light sheer hold lace glossy matching bra"
+      - "strappy harness bra light thong matching garter accents glossy delicate bands"
+
+    lingerie_micro:  # 超级性感micro内衣专用子类（纯服装类型，多样性大幅提升，总20条：变体丰富，包括bra/thong/string/bikini/crop/bralette/triangle/set等组合）
+      # 经典bra+thong变体（8条，核心micro内衣）
+      - "extreme micro bra tiniest triangles thin strings barely covering nipples lace edges teasing shift glossy"
+      - "micro thong tiniest front patch back string only barely there intimate tease glossy"
+      - "tiny bralette string sides barely covering soft fit lace teasing exposure glossy"
+      - "barely covering lace panties micro design thin straps teasing movement glossy"
+      - "extreme micro triangle bra thin strings barely concealing nipples teasing reveal glossy"
+      - "micro string bikini top bottom tiniest patches thin threads barely holding glossy"
+      - "tiny lace bralette barely covering delicate floral straps teasing shift glossy"
+      - "micro thong back string only gentle front patch barely there tease glossy"
+
+      # crop top only无bra变体（5条，上身开放焦点）
+      - "extreme crop micro bralette open deep plunge tiny coverage thin straps teasing exposure glossy"
+      - "crop lace top micro length barely covering nipples thin strings teasing shift glossy"
+      - "perverted crop bralette cropped high tiny coverage delicate straps teasing movement glossy"
+      - "crop micro top open panels barely there lace teasing reveal glossy"
+      - "degraded crop lace top low plunge micro coverage thin bands teasing exposure glossy"
+
+      # shorts/pants变体（4条，下身多样）
+      - "extreme micro lingerie shorts open fitted crop bralette tiny coverage thin strings teasing glossy"
+      - "micro thong shorts crotchless crop top barely there tease glossy"
+      - "perverted micro lingerie pants open crotch tiny coverage crop bralette glossy"
+      - "lingerie micro shorts deep plunge crop top thin strings barely holding glossy"
+
+      # string optional/配件变体（3条，细带可选+配件组合）
+      - "extreme micro lingerie uniform no strings fitted tiniest bra thong barely covering lace accents glossy"
+      - "lingerie outfit string optional open deep plunge micro coverage glossy pearl strands lace trim"
+      - "perverted micro lingerie dress short hem no strings deep plunge tiniest pieces glossy ribbon accents"
+
+    swimsuit:  # 泳装专用子类（纯泳装类型，多样性大幅提升，总20条：款式变体丰富，包括bikini/one piece/monokini/sling/micro/cutout/high leg/thong/string/open variant等）
+      # 经典bikini变体（8条，核心泳装）
+      - "extreme micro bikini thin strings tiniest triangles barely covering glossy high cut legs"
+      - "bikini top bottom open crotchless micro patches thin ties glossy thigh accents"
+      - "perverted bikini short hem deep plunge micro triangles string sides glossy open back"
+      - "swimsuit bikini micro length open panels thin strings glossy high leg cut"
+      - "degraded bikini tight open crotch micro top bottom glossy string ties"
+      - "extreme bikini outfit short top open chest micro bottom glossy thin strings"
+      - "bikini dress micro hem deep cuts thin ties glossy open side panels"
+      - "perverted bikini uniform crop top micro bottom thin strings open crotch glossy"
+
+      # one piece/monokini变体（5条，全身连体焦点）
+      - "extreme micro one piece swimsuit high leg cut open crotch glossy deep plunge"
+      - "monokini one piece open side panels micro coverage glossy high cut legs"
+      - "perverted one piece swimsuit cropped high mini coverage glossy open back"
+      - "swimsuit one piece open panels deep plunge glossy high leg thong back"
+      - "degraded monokini tight open crotch glossy micro fabric deep cuts"
+
+      # shorts/pants变体（4条，下身多样）
+      - "extreme micro swimsuit shorts open fitted crop top glossy high cut sides"
+      - "swimsuit tight shorts crotchless crop bikini top glossy string accents"
+      - "perverted swimsuit pants open crotch micro length crop top glossy high leg"
+      - "swimsuit uniform micro shorts deep plunge crop top glossy open panels"
+
+      # string/sling optional变体（3条，细带可选+配件组合）
+      - "extreme short swimsuit uniform no strings fitted micro bikini glossy high cut legs pearl accents"
+      - "swimsuit outfit string optional open deep plunge micro coverage glossy high leg cut shell accents"
+      - "perverted swimsuit dress short hem no strings deep plunge glossy micro fabric open crotch pearl strands"
+
+    hanfu:  # 正常传统汉服专用子类（纯服装类型，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/sash variant等）
+      # 经典gown+skirt变体（8条，核心汉服装）
+      - "long flowing ruqun wide sleeves layered skirt embroidered edges silk smooth sash tie"
+      - "shenyi robe straight collar tied sash elegant layers wide sleeves glossy finish"
+      - "high-waisted mamian skirt matching top wide sleeves sash tie delicate floral embroidery"
+      - "aoqun set short jacket pleated long skirt flowing hem wide sleeves embroidered"
+      - "beizi coat over ruqun long flowing wide sleeves layered soft drape silk"
+      - "daopao robe straight cut wide sleeves belt closure embroidered patterns"
+      - "banbi short jacket long skirt sash tie delicate vine embroidery wide sleeves"
+      - "zhiju robe straight front closure embroidered belt wide sleeves layered hem"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "crop hanfu top short wide sleeves layered micro skirt embroidered sash loose glossy"
+      - "hanfu crop blouse open short length pleated skirt wide sleeves sash accent"
+      - "traditional crop top cropped high mini layered skirt wide sleeves embroidered glossy"
+      - "hanfu top short sleeves layered skirt sash tie visible wide sleeves"
+      - "degraded crop hanfu top low neckline micro skirt wide sleeves sash embroidered"
+
+      # pants/shorts变体（4条，下身多样）
+      - "hanfu micro shorts fitted crop top wide sleeves sash loose embroidered glossy"
+      - "traditional tight shorts crop blouse wide sleeves sash belt glossy"
+      - "hanfu pants open crotch micro length crop top wide sleeves embroidered"
+      - "hanfu uniform micro shorts deep neckline crop top wide sleeves sash glossy"
+
+      # sash optional/配件变体（3条，腰带可选+配件组合）
+      - "hanfu uniform no sash fitted micro layered skirt wide sleeves embroidered glossy hairpin accessory"
+      - "hanfu outfit sash optional layered short skirt wide sleeves glossy fan hairpin"
+      - "traditional hanfu dress short hem no sash deep neckline wide sleeves glossy pearl hairpin embroidered"
+
+    hanfu_sexy:  # 超级性感汉服专用子类（纯服装类型，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/sash variant等）
+      # 经典gown+skirt变体（8条，核心汉服装）
+      - "extreme short hanfu high slits to waist deep V-neck tight fit embroidered silk wide sleeves layered skirt sash loose"
+      - "hanfu dress gown open micro length crotchless side slits to hips plunging neckline wide sleeves sash accent glossy"
+      - "sexy hanfu short hem deep plunge high slits low back flowing wide sleeves embroidered sash belt"
+      - "hanfu gown micro length open panels side slits extreme high deep neckline layered skirt sash tie glossy"
+      - "degraded hanfu skirt tight open crotch high collar extreme slits plunging front wide sleeves sash loose"
+      - "extreme hanfu outfit short gown open chest high slits to waist layered skirt wide sleeves sash embroidered"
+      - "hanfu dress micro hem deep cuts side slits complete leg exposure plunging neckline wide sleeves sash glossy"
+      - "sexy hanfu uniform crop top micro layered skirt high collar high slits deep V wide sleeves sash accent"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop hanfu top open deep plunge micro layered skirt high slits wide sleeves sash loose glossy"
+      - "hanfu crop blouse open micro length crotchless pleated skirt high collar plunging neckline sash belt"
+      - "sexy crop hanfu top cropped high mini layered skirt high slits deep plunge wide sleeves glossy"
+      - "hanfu top open panels short layered skirt side slits extreme high sash accent glossy"
+      - "degraded crop hanfu top low plunge micro layered skirt high slits open crotch wide sleeves sash"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro hanfu shorts open fitted crop top high slits wide sleeves sash loose glossy"
+      - "hanfu tight shorts crotchless crop blouse side slits plunging neckline sash belt"
+      - "sexy hanfu pants open crotch micro length crop top high slits deep V glossy"
+      - "hanfu uniform micro shorts deep plunge crop top side slits wide sleeves sash glossy"
+
+      # sash optional/配件变体（3条，腰带可选+配件组合）
+      - "extreme short hanfu uniform no sash fitted micro layered skirt high slits deep V wide sleeves glossy embroidered hairpin"
+      - "hanfu outfit sash optional open deep plunge micro length side slits plunging neckline wide sleeves glossy fan accessory"
+      - "sexy hanfu dress short hem no sash deep plunge high slits flowing wide sleeves glossy pearl hairpin"
+
+    kimono_sexy:  # 超级性感和服专用子类（纯服装类型，多样性大幅提升，总20条：服装变体丰富，包括kimono/skirt only/crop top/pants/shorts/obi variant等）
+      # 经典kimono+skirt变体（8条，核心和服装）
+      - "extreme short kimono high slits to waist deep V-neck tight fit obi loose wide sleeves glossy"
+      - "kimono dress open micro length crotchless side slits to hips plunging neckline wide sleeves obi accent"
+      - "sexy kimono short hem deep plunge high slits low back flowing sleeves obi belt glossy"
+      - "kimono gown micro length open panels side slits extreme high deep neckline wide sleeves obi"
+      - "degraded kimono skirt tight open crotch high collar extreme slits plunging front obi loose glossy"
+      - "extreme kimono outfit short gown open chest high slits to waist wide sleeves obi belt"
+      - "kimono dress micro hem deep cuts side slits complete leg exposure plunging neckline obi glossy"
+      - "sexy kimono uniform crop top micro length high slits deep V wide sleeves obi accent"
+
+      # crop top only无kimono变体（5条，上身开放焦点）
+      - "extreme crop kimono top open deep plunge micro skirt high slits obi loose wide sleeves glossy"
+      - "kimono crop blouse open micro length crotchless side slits plunging neckline obi belt"
+      - "sexy crop kimono top cropped high mini skirt high slits deep plunge wide sleeves glossy"
+      - "kimono top open panels short skirt side slits extreme high obi accent glossy"
+      - "degraded crop kimono top low plunge micro skirt high slits open crotch wide sleeves obi"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro kimono shorts open fitted crop top high slits obi loose wide sleeves glossy"
+      - "kimono tight shorts crotchless crop blouse side slits plunging neckline obi belt"
+      - "sexy kimono pants open crotch micro length crop top high slits deep V glossy"
+      - "kimono uniform micro shorts deep plunge crop top side slits wide sleeves obi glossy"
+
+      # obi optional/配件变体（3条，腰带可选+配件组合）
+      - "extreme short kimono uniform no obi fitted micro gown high slits deep V wide sleeves glossy flower hairpin"
+      - "kimono outfit obi optional open deep plunge micro length side slits plunging neckline wide sleeves glossy fan accessory"
+      - "sexy kimono dress short hem no obi deep plunge high slits flowing sleeves glossy hair ornament"
+
+    cheerleader_perverted:  # 超级变态啦啦队专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括top/skirt only/crop top/pants/shorts/ribbons variant等）
+      # 经典cropped top+pleated skirt变体（8条，核心啦啦队装）
+      - "extreme short cheerleader uniform cropped top pleated micro skirt pom-poms hair ribbons glossy sneakers open chest"
+      - "cheerleader outfit top open micro length crotchless pleated skirt pom-poms hair ribbons thigh high socks sneakers"
+      - "perverted cheer uniform short hem deep plunge cropped top mini pleated skirt pom-poms glossy hair bow sneakers"
+      - "cheerleader dress micro length open panels cropped top pleated skirt pom-poms visible hair ribbons thigh socks"
+      - "degraded cheer skirt tight open crotch cropped top glossy pleated micro skirt pom-poms hair ribbons sneakers"
+      - "extreme cheerleader outfit short crop top open chest pleated skirt pom-poms hair bow thigh high socks glossy"
+      - "cheer uniform micro hem deep cuts cropped top pleated skirt glossy pom-poms hair ribbons sneakers"
+      - "perverted cheerleader uniform crop top micro pleated skirt pom-poms open crotch hair bow glossy thigh socks"
+
+      # crop top only无skirt变体（5条，上身开放焦点）
+      - "extreme crop cheerleader top open deep plunge micro shorts pom-poms hair ribbons glossy sneakers"
+      - "cheerleader crop top open micro length crotchless shorts pom-poms hair bow thigh high socks sneakers"
+      - "perverted cheer crop top cropped high mini shorts pom-poms glossy hair ribbons sneakers"
+      - "cheer top open panels short shorts pom-poms visible hair bow thigh socks glossy"
+      - "degraded cheer crop top low plunge micro shorts pom-poms open crotch hair ribbons sneakers"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro cheerleader shorts open fitted crop top pom-poms hair ribbons glossy sneakers"
+      - "cheerleader tight shorts crotchless crop top pom-poms hair bow thigh high socks glossy"
+      - "perverted cheerleader pants open crotch micro length crop top pom-poms glossy hair ribbons sneakers"
+      - "cheer uniform micro shorts deep plunge crop top pom-poms hair bow thigh socks glossy"
+
+      # ribbons optional/配件变体（3条，发饰可选+配件组合）
+      - "extreme short cheerleader uniform no ribbons fitted micro pleated skirt cropped top pom-poms glossy sneakers hair clips"
+      - "cheerleader outfit ribbons optional open deep plunge micro skirt cropped top pom-poms glossy thigh socks sneakers megaphone accent"
+      - "perverted cheer uniform short hem no ribbons deep plunge pleated micro skirt cropped top pom-poms glossy hair clips sneakers"
+
+    police_perverted:  # 超级变态警察专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括jacket/shirt only/skirt/shorts/pants/hat variant等）
+      # 经典jacket+skirt变体（8条，核心警察装）
+      - "extreme short police uniform fitted micro jacket mini skirt police hat large badge glossy utility belt handcuffs baton holster high boots gloves"
+      - "police outfit jacket open deep plunge micro skirt crotchless police cap prominent badge thigh high boots long gloves handcuffs radio"
+      - "perverted police dress short hem deep plunge fitted jacket mini skirt police hat glossy badge utility belt boots sunglasses gloves"
+      - "police uniform micro length open panels tight jacket short skirt police cap visible large badge high boots handcuffs gloves baton"
+      - "degraded police skirt tight open crotch fitted micro jacket police hat glossy badge utility belt thigh boots long gloves radio"
+      - "extreme police outfit short jacket open chest mini skirt police cap large emblem high thigh boots gloves handcuffs baton"
+      - "police dress micro hem deep cuts fitted jacket short skirt glossy police hat badge utility belt boots handcuffs sunglasses"
+      - "perverted police uniform crop jacket micro skirt police cap open crotch badge glossy high boots long gloves baton holster"
+
+      # shirt only无jacket变体（5条，开放上身焦点）
+      - "extreme short police shirt open deep plunge micro skirt police hat large badge glossy utility belt handcuffs high boots gloves"
+      - "police blouse open micro length crotchless pleated skirt police cap prominent badge thigh high boots long gloves baton"
+      - "perverted police shirt cropped high mini skirt police hat glossy badge utility belt boots handcuffs sunglasses"
+      - "police top open panels short skirt police cap visible large emblem high boots gloves radio baton"
+      - "degraded police blouse low plunge micro skirt police hat glossy open crotch badge utility belt thigh boots long gloves"
+
+      # shorts/pants变体（4条，下身多样）
+      - "extreme micro police shorts open fitted jacket police hat large badge glossy utility belt handcuffs high boots gloves"
+      - "police tight shorts crotchless crop jacket police cap prominent badge thigh high boots long gloves baton holster"
+      - "perverted police pants open crotch micro length fitted jacket police hat glossy badge utility belt boots handcuffs"
+      - "police uniform micro shorts deep plunge blouse police cap large emblem high boots gloves radio sunglasses"
+
+      # hatless/配件变体（3条，帽子可选+配件组合）
+      - "extreme short police uniform no hat fitted micro jacket mini skirt large badge glossy utility belt handcuffs high boots long gloves sunglasses"
+      - "police outfit hatless open deep plunge micro skirt crotchless prominent badge thigh high boots gloves baton radio"
+      - "perverted police dress short hem no hat deep plunge fitted jacket mini skirt glossy badge utility belt boots handcuffs holster"
+
+    teacher_perverted:  # 超级变态老师专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括skirt/blouse only/crop top/pants/shorts/glasses variant等）
+      # 经典pencil skirt+blouse变体（8条，核心老师装）
+      - "extreme short teacher outfit pencil micro skirt tight blouse open deep plunge glasses chalkboard pointer ruler book glossy high heels"
+      - "teacher uniform blouse open micro length crotchless pencil skirt glasses pointer tight sweater high heels book"
+      - "perverted teacher dress short hem deep plunge pencil micro skirt blouse glasses glossy ruler book high heels"
+      - "teacher outfit micro length open panels tight blouse pencil skirt glasses visible chalk pointer sweater book"
+      - "degraded teacher skirt tight open crotch pencil micro skirt blouse glossy glasses ruler high heels sweater"
+      - "extreme teacher outfit short blouse open chest pencil skirt glasses chalkboard pointer book tight sweater"
+      - "teacher dress micro hem deep cuts pencil skirt tight blouse glossy glasses pointer ruler high heels"
+      - "perverted teacher uniform crop blouse micro pencil skirt glasses open chalk pointer book sweater"
+
+      # crop top only无blouse变体（5条，上身开放焦点）
+      - "extreme crop teacher top open deep plunge micro pencil skirt glasses chalkboard pointer ruler book glossy high heels"
+      - "teacher crop blouse open micro length crotchless pencil skirt glasses pointer tight sweater high heels"
+      - "perverted teacher crop top cropped high mini pencil skirt glasses glossy ruler book high heels"
+      - "teacher top open panels short pencil skirt glasses visible chalk pointer sweater book"
+      - "degraded teacher crop top low plunge micro pencil skirt glasses open crotch ruler high heels sweater"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro teacher shorts open fitted crop blouse glasses chalkboard pointer ruler book glossy high heels"
+      - "teacher tight shorts crotchless crop sweater glasses pointer book high heels ruler"
+      - "perverted teacher pants open crotch micro length crop top glasses glossy chalk pointer sweater"
+      - "teacher uniform micro shorts deep plunge crop blouse glasses ruler book high heels pointer"
+
+      # glasses optional/配件变体（3条，眼镜可选+配件组合）
+      - "extreme short teacher uniform no glasses fitted micro pencil skirt tight blouse chalkboard pointer ruler book glossy high heels sweater"
+      - "teacher outfit glasses optional open deep plunge micro pencil skirt blouse glossy pointer book high heels ruler accent"
+      - "perverted teacher dress short hem no glasses deep plunge pencil micro skirt blouse chalk pointer sweater book high heels"
+
+    maid_perverted:  # 超级变态女仆专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括dress/skirt only/crop top/apron only/pants/shorts/headpiece variant等）
+      # 经典dress+skirt变体（8条，核心女仆装）
+      - "extreme short maid dress frilled micro skirt white apron black headpiece lace trim open chest thigh high stockings gloves glossy bow collar"
+      - "maid outfit dress open micro length crotchless frilled skirt white apron black maid cap low neckline stockings long gloves bell collar"
+      - "perverted maid uniform short hem deep plunge frilled micro skirt white apron black headpiece glossy lace thigh stockings gloves bow"
+      - "maid dress micro length open panels frilled skirt white apron black maid cap visible thigh stockings lace gloves bell accent"
+      - "degraded maid skirt tight open crotch frilled micro dress white apron black headpiece glossy stockings long gloves bow collar"
+      - "extreme maid outfit short dress open chest frilled skirt white apron black maid cap thigh high stockings gloves bell"
+      - "maid dress micro hem deep cuts frilled skirt white apron glossy black headpiece stockings lace gloves bow"
+      - "perverted maid uniform crop white top micro frilled skirt black apron maid cap open crotch stockings gloves bell collar"
+
+      # crop top/apron only变体（5条，上身开放焦点）
+      - "extreme crop maid top open deep plunge micro frilled skirt white apron black headpiece glossy thigh stockings gloves bow"
+      - "maid crop blouse open micro length crotchless frilled skirt white apron black maid cap thigh high stockings long gloves bell"
+      - "perverted maid crop top cropped high mini frilled skirt white apron black headpiece glossy lace stockings gloves bow collar"
+      - "maid top open panels short frilled skirt white apron black maid cap visible thigh stockings gloves bell accent"
+      - "degraded maid crop blouse low plunge micro frilled skirt white apron black headpiece glossy open crotch stockings bow"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro maid shorts open fitted crop top white apron black headpiece glossy utility belt stockings long gloves bow"
+      - "maid tight shorts crotchless crop blouse white apron black maid cap thigh high stockings gloves bell collar"
+      - "perverted maid pants open crotch micro length crop top white apron black headpiece glossy stockings gloves bow"
+      - "maid uniform micro shorts deep plunge crop blouse white apron black maid cap thigh stockings long gloves bell"
+
+      # headpiece optional/配件变体（3条，头饰可选+配件组合）
+      - "extreme short maid uniform no headpiece fitted micro dress frilled skirt white apron glossy thigh stockings long gloves bow collar bell"
+      - "maid outfit headpiece optional open deep plunge micro frilled skirt white apron glossy thigh high stockings gloves handcuff accent bow"
+      - "perverted maid dress short hem no headpiece deep plunge frilled micro skirt white apron glossy lace stockings long gloves bell collar"
+
+    JK_perverted:  # 超级变态JK专用子类（纯暴露完整版，多样性大幅提升，总20条：丝袜/鞋子/绝对领域拉满）
+      - "extreme short JK uniform pleated micro skirt sailor collar blouse open deep plunge red ribbon bow overknee socks loafers glossy school badge absolute territory"
+      - "JK outfit blouse open micro length crotchless pleated skirt sailor collar red ribbon tie thigh high socks loafers school badge zettai ryouiki"
+      - "perverted JK uniform short hem deep plunge pleated micro skirt sailor blouse red bow knee socks glossy loafers ribbon tie thigh gap"
+      - "JK dress micro length open panels sailor collar blouse pleated skirt red ribbon bow visible overknee socks school badge loafers"
+      - "degraded JK skirt tight open crotch sailor top glossy pleated micro skirt red ribbon tie thigh high socks loafers absolute territory"
+      - "extreme JK outfit short blouse open chest sailor collar pleated skirt red bow knee socks loafers ribbon thigh exposed"
+      - "JK uniform micro hem deep cuts pleated skirt sailor blouse glossy red ribbon bow overknee socks school badge loafers"
+      - "perverted JK uniform crop sailor top micro pleated skirt red bow open crotch thigh high socks glossy ribbon tie zettai ryouiki"
+      - "JK outfit open crotch short pleated skirt sailor blouse red ribbon tie glossy knee socks loafers school badge"
+      - "extreme short JK uniform open panels micro hem sailor collar blouse pleated skirt red bow overknee socks loafers"
+      - "degraded JK top low plunge mini pleated skirt sailor blouse red ribbon bow glossy thigh high socks absolute territory"
+      - "JK uniform micro pleated skirt open red bow area sailor collar blouse knee socks loafers school badge"
+      - "perverted JK outfit crop blouse crotchless pleated micro skirt red ribbon tie glossy overknee socks loafers"
+      - "extreme JK dress open panels short length sailor top pleated skirt red bow thigh high socks zettai ryouiki"
+      - "JK uniform micro skirt plunging sailor blouse red ribbon bow knee socks glossy loafers thigh gap"
+      - "extreme crop JK top open deep plunge micro pleated skirt red ribbon bow overknee socks loafers glossy school badge"
+      - "JK crop blouse open micro length crotchless pleated skirt red ribbon tie thigh high socks loafers ribbon absolute territory"
+      - "perverted JK crop top cropped high mini pleated skirt red bow knee socks glossy loafers school badge"
+      - "JK top open panels short pleated skirt red ribbon bow visible thigh high socks loafers ribbon tie"
+      - "degraded JK crop top low plunge micro pleated skirt red ribbon bow glossy open crotch overknee socks school badge"
+
+    nurse_perverted:  # 超级变态护士专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括dress/skirt only/crop top/pants/shorts/cap variant等）
+      # 经典dress+skirt变体（8条，核心护士装）
+      - "extreme short nurse uniform white micro dress red cross cap open chest glossy thigh high stockings long gloves syringe stethoscope"
+      - "nurse outfit dress open micro length crotchless white skirt red cross hat low neckline thigh stockings gloves thermometer"
+      - "perverted nurse dress short hem deep plunge white uniform red cross cap glossy open panels stockings mask stethoscope"
+      - "nurse uniform micro length open panels white dress red cross badge visible cap thigh stockings gloves medical clipboard"
+      - "degraded nurse skirt tight open crotch white micro dress red cross hat glossy stockings long gloves syringe prop"
+      - "extreme nurse outfit short dress open chest white uniform red cross cap high thigh stockings gloves stethoscope badge"
+      - "nurse dress micro hem deep cuts white skirt red cross embroidered cap glossy stockings mask thermometer nurse shoes"
+      - "perverted nurse uniform crop white top micro skirt red cross cap open crotch stockings gloves syringe"
+
+      # crop top only无dress变体（5条，上身开放焦点）
+      - "extreme crop nurse top open deep plunge micro skirt red cross cap glossy thigh high stockings long gloves stethoscope"
+      - "nurse crop blouse open micro length crotchless pleated skirt red cross hat thigh stockings gloves thermometer"
+      - "perverted nurse crop top cropped high mini skirt red cross cap glossy stockings mask syringe"
+      - "nurse top open panels short skirt red cross badge visible cap thigh stockings gloves medical clipboard"
+      - "degraded nurse crop top low plunge micro skirt red cross hat glossy open crotch stockings long gloves stethoscope"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro nurse shorts open fitted crop white top red cross cap glossy thigh high stockings long gloves syringe"
+      - "nurse tight shorts crotchless crop blouse red cross hat thigh stockings gloves thermometer stethoscope"
+      - "perverted nurse pants open crotch micro length crop top red cross cap glossy stockings mask medical badge"
+      - "nurse uniform micro shorts deep plunge crop white blouse red cross hat thigh stockings long gloves clipboard"
+
+      # cap optional/配件变体（3条，帽子可选+配件组合）
+      - "extreme short nurse uniform no cap fitted micro dress white skirt red cross badge glossy thigh stockings long gloves syringe stethoscope"
+      - "nurse outfit cap optional open deep plunge micro skirt white top red cross glossy thigh high stockings gloves thermometer mask"
+      - "perverted nurse dress short hem no cap deep plunge white uniform red cross badge glossy stockings long gloves clipboard stethoscope"
+
+    
+
+    shrine_maiden_perverted:  # 超级变态巫女专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括hakama/top only/crop top/pants/shorts/headpiece variant等）
+      # 经典hakama+top变体（8条，核心巫女装）
+      - "extreme short shrine maiden outfit red hakama micro white kosode top open bells gohei tamagushi veil glossy"
+      - "miko uniform hakama open micro length crotchless white kosode deep plunge bells gohei veil"
+      - "perverted miko dress short hem deep plunge red hakama white kosode bells glossy tamagushi headpiece"
+      - "shrine maiden outfit micro length open panels red hakama white kosode bells visible gohei veil"
+      - "degraded miko hakama tight open crotch white micro kosode bells glossy tamagushi headpiece"
+      - "extreme miko outfit short hakama open chest white kosode bells gohei veil glossy"
+      - "miko dress micro hem deep cuts red hakama white kosode glossy bells tamagushi veil"
+      - "perverted shrine maiden uniform crop white kosode micro red hakama bells open gohei headpiece"
+
+      # crop top only无kosode变体（5条，上身开放焦点）
+      - "extreme crop miko top open deep plunge micro red hakama bells gohei tamagushi veil glossy"
+      - "miko crop kosode open micro length crotchless red hakama bells gohei veil headpiece"
+      - "perverted miko crop top cropped high mini hakama bells glossy tamagushi veil"
+      - "shrine maiden top open panels short red hakama bells visible gohei headpiece glossy"
+      - "degraded miko crop kosode low plunge micro hakama bells open crotch tamagushi veil"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro miko shorts open fitted crop white top red accents bells gohei tamagushi veil glossy"
+      - "miko tight shorts crotchless crop kosode red hakama style bells gohei headpiece"
+      - "perverted shrine maiden pants open crotch micro length crop top bells glossy tamagushi veil"
+      - "miko uniform micro shorts deep plunge crop white kosode bells gohei tamagushi headpiece glossy"
+
+      # headpiece optional/配件变体（3条，头饰可选+配件组合）
+      - "extreme short miko uniform no headpiece red hakama micro white kosode bells gohei tamagushi veil glossy ofuda accents"
+      - "shrine maiden outfit headpiece optional open deep plunge micro hakama white top bells glossy gohei tamagushi veil"
+      - "perverted miko dress short hem no headpiece deep plunge red hakama white kosode bells tamagushi gohei glossy"
+
+    superheroine_perverted:  # 超级变态女英雄专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括bodysuit/cape only/crop top/pants/shorts/mask variant等）
+      # 经典bodysuit+cape变体（8条，核心英雄装）
+      - "extreme short superheroine outfit long dramatic cape micro bodysuit open chest mask large emblem high boots gloves power belt glossy"
+      - "heroine uniform bodysuit open deep plunge micro length crotchless long flowing cape full face mask prominent emblem thigh high boots long gloves"
+      - "perverted superheroine dress short cape deep cuts micro bodysuit mask large emblem glossy high boots gloves power belt"
+      - "superheroine outfit micro length open panels bodysuit long cape full mask emblem visible thigh boots long gloves power belt"
+      - "degraded heroine bodysuit tight open crotch dramatic cape full face mask bold emblem high boots long gloves wide power belt"
+      - "extreme superheroine outfit short bodysuit open chest long flowing cape mask large emblem high thigh boots gloves power belt"
+      - "heroine dress micro hem deep cuts bodysuit glossy long cape full mask prominent emblem boots long gloves"
+      - "perverted superheroine uniform crop bodysuit micro length long cape mask open crotch emblem glossy high boots gloves power belt"
+
+      # crop top only无bodysuit变体（5条，上身开放焦点）
+      - "extreme crop superheroine top open deep plunge micro skirt long dramatic cape full face mask large emblem high boots gloves power belt"
+      - "heroine crop blouse open micro length crotchless pleated skirt long cape mask prominent emblem thigh high boots long gloves"
+      - "perverted superheroine crop top cropped high mini skirt dramatic cape full mask bold emblem glossy boots gloves"
+      - "superheroine top open panels short skirt long flowing cape mask emblem visible high boots long gloves power belt"
+      - "degraded heroine crop top low plunge micro skirt long cape full face mask large emblem glossy thigh boots gloves"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro superheroine shorts open fitted crop top long dramatic cape full mask large emblem high boots gloves power belt"
+      - "heroine tight shorts crotchless crop bodysuit long cape mask prominent emblem thigh high boots long gloves"
+      - "perverted superheroine pants open crotch micro length crop top dramatic cape full mask bold emblem glossy boots"
+      - "superheroine uniform micro shorts deep plunge crop blouse long flowing cape mask emblem high boots gloves power belt"
+
+      # mask optional/配件变体（3条，面罩可选+配件组合）
+      - "extreme short superheroine uniform no mask fitted micro bodysuit long cape large emblem high boots gloves power belt sunglasses glossy"
+      - "heroine outfit mask optional open deep plunge micro bodysuit dramatic cape emblem glossy thigh boots long gloves power belt radio"
+      - "perverted superheroine dress short hem no mask deep plunge fitted bodysuit long cape large emblem glossy boots gloves utility accents"
+
+    princess_perverted:  # 超级变态公主专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/tiara variant等）
+      # 经典gown+skirt变体（8条，核心公主装）
+      - "extreme short princess gown layered micro skirt tiara crown jewelry pearl necklace deep plunge corset top gloves glossy"
+      - "princess dress gown open micro length crotchless layered skirt tiara pearl strands corset tight veil"
+      - "perverted princess outfit short hem deep plunge layered micro gown tiara jewelry lace gloves glossy"
+      - "princess gown micro length open panels layered skirt tiara pearl crown visible corset top gloves"
+      - "degraded princess skirt tight open crotch layered micro dress tiara pearl jewelry corset glossy veil"
+      - "extreme princess outfit short gown open chest layered skirt tiara crown pearl necklace gloves"
+      - "princess dress micro hem deep cuts layered gown tiara pearl bracelets corset glossy veil"
+      - "perverted princess uniform crop top micro layered skirt tiara crown open crotch pearl jewelry gloves"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop princess top open deep plunge micro layered skirt tiara jewelry pearl strands glossy gloves"
+      - "princess crop blouse open micro length crotchless layered skirt tiara pearl crown corset veil"
+      - "perverted princess crop top cropped high mini layered skirt tiara jewelry lace gloves glossy"
+      - "princess top open panels short layered skirt tiara pearl necklace visible corset gloves"
+      - "degraded princess crop blouse low plunge micro layered skirt tiara pearl jewelry open crotch veil"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro princess shorts open fitted crop top tiara jewelry pearl strands glossy gloves"
+      - "princess tight shorts crotchless crop gown tiara pearl crown corset veil"
+      - "perverted princess pants open crotch micro length crop top tiara jewelry lace gloves glossy"
+      - "princess uniform micro shorts deep plunge crop blouse tiara pearl necklace corset gloves"
+
+      # tiara optional/配件变体（3条，王冠可选+配件组合）
+      - "extreme short princess uniform no tiara fitted micro gown layered skirt pearl jewelry corset glossy veil gloves"
+      - "princess outfit tiara optional open deep plunge micro layered skirt pearl strands corset light glossy gloves crown accent"
+      - "perverted princess dress short hem no tiara deep plunge layered micro gown pearl necklace corset glossy veil jewelry"
+
+    
+    demon_queen_perverted:  # 超级变态恶魔女王专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/crown variant等）
+      # 经典gown+skirt变体（8条，核心女王装）
+      - "extreme short demon queen gown layered micro skirt immense ragged black wings horns crown tail scepter glossy"
+      - "demon queen dress gown open micro length crotchless colossal charred black wings horns crown tail glossy"
+      - "perverted demon queen outfit short hem deep plunge massive inky black wings horns crown tail scepter"
+      - "demon queen gown micro length open panels vast obsidian black wings horns crown tail visible glossy"
+      - "degraded demon queen skirt tight open crotch enormous shadow black wings horns crown tail scepter"
+      - "extreme demon queen outfit short gown open chest immense fallen black wings horns crown tail glossy"
+      - "demon queen dress micro hem deep cuts colossal dark wings horns crown tail scepter glossy"
+      - "perverted demon queen uniform crop top micro gown massive corrupted black wings horns crown tail"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop demon queen top open deep plunge micro skirt immense ragged black wings horns crown tail glossy"
+      - "demon queen crop blouse open micro length crotchless pleated skirt colossal charred black wings horns crown tail"
+      - "perverted demon queen crop top cropped high mini skirt massive inky black wings horns crown tail scepter"
+      - "demon queen top open panels short skirt vast obsidian black wings horns crown tail visible glossy"
+      - "degraded demon queen crop blouse low plunge micro skirt enormous shadow black wings horns crown tail glossy"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro demon queen shorts open fitted crop top immense fallen black wings horns crown tail glossy"
+      - "demon queen tight shorts crotchless crop gown colossal dark wings horns crown tail scepter"
+      - "perverted demon queen pants open crotch micro length crop top massive corrupted black wings horns crown glossy"
+      - "demon queen uniform micro shorts deep plunge crop blouse vast black wings horns crown tail glossy"
+
+      # crown optional/配件变体（3条，皇冠可选+配件组合）
+      - "extreme short demon queen uniform no crown fitted micro gown frilled skirt immense ragged black wings horns tail scepter glossy"
+      - "demon queen outfit crown optional open deep plunge micro skirt colossal charred black wings horns tail glossy wings accent"
+      - "perverted demon queen dress short hem no crown deep plunge fitted gown massive inky black wings horns tail scepter"
+
+    goddess_perverted:  # 超级变态女神专用子类（纯暴露完整版，多样性大幅提升，总20条：服装变体丰富，包括gown/skirt only/crop top/pants/shorts/halo variant等）
+      # 经典gown+skirt变体（8条，核心女神装）
+      - "extreme short goddess gown flowing micro dress glowing halo veil open chest pearl jewelry divine aura glossy layered skirt"
+      - "goddess dress gown open micro length crotchless flowing layers halo veil deep plunge pearl necklace divine light"
+      - "perverted goddess outfit short hem deep plunge flowing micro gown halo veil pearl strands glossy divine jewelry"
+      - "goddess gown micro length open panels flowing skirt halo veil visible pearl crown divine aura layered hem"
+      - "degraded goddess skirt tight open crotch flowing micro dress halo veil glossy pearl jewelry divine glow"
+      - "extreme goddess outfit short gown open chest flowing layers halo veil pearl necklace divine light"
+      - "goddess dress micro hem deep cuts flowing gown halo veil glossy pearl bracelets divine aura"
+      - "perverted goddess uniform crop top micro flowing skirt halo veil open crotch pearl jewelry divine glow"
+
+      # crop top only无gown变体（5条，上身开放焦点）
+      - "extreme crop goddess top open deep plunge micro flowing skirt glowing halo veil pearl jewelry divine aura glossy"
+      - "goddess crop blouse open micro length crotchless layered skirt halo veil pearl strands divine light"
+      - "perverted goddess crop top cropped high mini flowing skirt halo veil pearl crown glossy divine jewelry"
+      - "goddess top open panels short layered skirt halo veil visible pearl necklace divine aura"
+      - "degraded goddess crop blouse low plunge micro flowing skirt halo veil glossy open crotch pearl bracelets"
+
+      # pants/shorts变体（4条，下身多样）
+      - "extreme micro goddess shorts open fitted crop top glowing halo veil pearl jewelry divine aura glossy"
+      - "goddess tight shorts crotchless crop gown halo veil pearl strands divine light"
+      - "perverted goddess pants open crotch micro length crop top halo veil pearl crown glossy"
+      - "goddess uniform micro shorts deep plunge crop blouse halo veil pearl necklace divine aura"
+
+      # halo optional/配件变体（3条，光环可选+配件组合）
+      - "extreme short goddess uniform no halo fitted micro gown flowing skirt pearl jewelry divine aura glossy veil pearl crown"
+      - "goddess outfit halo optional open deep plunge micro layered skirt pearl strands divine light glossy veil accessories"
+      - "perverted goddess dress short hem no halo deep plunge flowing micro gown pearl necklace divine aura glossy veil jewelry"
+    gothic_lolita:  # 哥特洛丽塔专用子类（优雅到堕落，frilled layers/petticoat/headbow/platform shoes）
+      - "gothic lolita dress frilled layers petticoat headbow platform shoes lace trim glossy"
+      - "lolita outfit short frilled skirt crop blouse headbow petticoat thigh socks glossy"
+      - "perverted gothic lolita micro dress open panels frilled petticoat headbow platform shoes"
+      - "gothic dress micro length deep plunge layered frills headbow lace gloves glossy"
+      - "degraded lolita skirt tight open crotch frilled layers headbow petticoat glossy"
+      - "extreme gothic outfit short crop top micro petticoat headbow open chest platform shoes"
+      - "lolita gown micro hem deep cuts frilled skirt headbow lace trim glossy"
+      - "perverted lolita uniform crop blouse micro frilled skirt headbow open crotch petticoat"
+      - "gothic lolita dress open crotch short layers headbow platform shoes glossy lace"
+      - "extreme short gothic uniform open panels micro hem frilled petticoat headbow glossy"
+      - "degraded gothic top low plunge mini frilled skirt headbow petticoat glossy"
+      - "lolita uniform micro gown open headbow area frilled layers platform shoes glossy"
+      - "perverted gothic outfit crop petticoat crotchless short dress headbow lace glossy"
+      - "extreme gothic dress open panels short length frilled skirt headbow platform shoes"
+      - "gothic lolita uniform micro skirt plunging crop top headbow petticoat glossy"
+      - "lolita outfit short hem open deep plunge frilled micro dress headbow glossy"
+      - "perverted gothic gown micro length open crotch layered frills headbow platform shoes"
+      - "degraded lolita top crop open micro petticoat headbow lace trim glossy"
+      - "gothic uniform micro hem deep cuts frilled skirt headbow petticoat glossy"
+      - "extreme lolita dress open panels micro length headbow platform shoes frilled layers"
+
+    leather_dress:  # 皮革紧身裙装专用子类（glossy tight/supple leather，BDSM轻度诱惑）
+      - "tight leather micro dress glossy high slits deep plunge belt accents"
+      - "leather outfit open micro length crotchless fitted skirt glossy straps"
+      - "perverted leather dress short hem deep plunge tight pencil skirt glossy"
+      - "leather gown micro length open panels glossy high neck belt"
+      - "degraded leather skirt tight open crotch micro dress glossy harness accents"
+      - "extreme leather outfit short dress open chest glossy tight fit belt"
+      - "leather dress micro hem deep cuts glossy pencil style high slits"
+      - "perverted leather uniform crop top micro skirt glossy open crotch belt"
+      - "leather outfit open crotch short dress glossy tight pencil"
+      - "extreme short leather uniform open panels micro hem glossy belt accents"
+      - "degraded leather top low plunge mini skirt glossy open crotch"
+      - "leather uniform micro skirt open belt area glossy tight fit"
+      - "perverted leather outfit crop dress crotchless micro length glossy"
+      - "extreme leather dress open panels short length glossy high slits"
+      - "leather uniform micro gown plunging glossy pencil tight belt"
+      - "tight leather short hem open deep plunge micro dress glossy"
+      - "perverted leather skirt micro open crotch fitted top glossy belt"
+      - "degraded leather top crop open micro pencil skirt glossy"
+      - "leather dress micro length deep cuts glossy tight fit"
+      - "extreme leather outfit open crotch micro pencil glossy belt accents"
+
+    evening_gown_sexy:  # 性感晚礼服专用子类（long flowing/deep plunge/gloves/jewelry，高端优雅暴露）
+      - "long flowing evening gown deep plunge high slits pearl jewelry gloves glossy"
+      - "evening dress gown open back micro train crotchless deep neckline pearl necklace"
+      - "sexy evening outfit short hem deep plunge long flowing skirt jewelry gloves glossy"
+      - "gown micro length open panels flowing layers pearl crown gloves"
+      - "degraded evening skirt tight open crotch long gown pearl jewelry glossy"
+      - "extreme evening outfit short gown open chest flowing train pearl necklace gloves"
+      - "evening dress micro hem deep cuts long flowing glossy pearl bracelets"
+      - "perverted evening uniform crop top micro flowing skirt pearl jewelry open crotch gloves"
+      - "evening outfit open crotch short flowing dress pearl necklace glossy"
+      - "extreme short evening uniform open panels micro hem long train pearl crown gloves"
+      - "degraded evening top low plunge mini flowing skirt pearl jewelry glossy"
+      - "evening uniform micro gown open jewelry area pearl strands flowing layers"
+      - "perverted evening outfit crop gown crotchless long flowing pearl necklace gloves"
+      - "extreme evening dress open panels short length flowing skirt pearl crown glossy"
+      - "evening uniform micro gown plunging pearl jewelry long sleeves gloves"
+      - "long evening gown high slits deep V pearl accents glossy gloves"
+      - "perverted evening skirt micro open crotch flowing train pearl necklace"
+      - "degraded evening top crop open long flowing skirt pearl jewelry glossy"
+      - "evening dress micro train deep plunge glossy pearl crown gloves"
+      - "extreme evening outfit open back long gown pearl strands flowing glossy"
+    bunny_perverted:  # 超级变态兔女郎专用子类（纯暴露完整版，经典Playboy兔女郎特征拉满：strapless corset bodysuit/satin glossy/black ribbon bow/white cuffs/sheer black stockings/opaque black tights/high heels/fluffy cottontail/bunny ears headband）
+      - "extreme micro playboy bunny outfit strapless corset bodysuit high cut legs open crotch fluffy cottontail bunny ears headband black ribbon bow white cuffs sheer black stockings high heels glossy satin"
+      - "playboy bunny suit bodysuit open deep plunge micro high cut crotchless fluffy cottontail bunny ears glossy black ribbon bow white cuffs opaque black tights high heels"
+      - "perverted playboy bunny uniform short hem deep plunge strapless corset micro bodysuit high cut fluffy cottontail ears headband glossy black ribbon bow cuffs thigh high black stockings high heels"
+      - "bunny outfit micro length open panels strapless corset bodysuit high cut fluffy cottontail bunny ears visible black ribbon bow white cuffs glossy sheer black stockings high heels"
+      - "degraded playboy bunny bodysuit tight open crotch strapless corset micro high cut fluffy cottontail ears glossy headband black ribbon bow cuffs opaque black tights high heels"
+      - "extreme playboy bunny outfit short corset bodysuit open chest high cut legs fluffy cottontail bunny ears headband black ribbon bow white cuffs glossy thigh high black stockings high heels"
+      - "playboy bunny dress micro hem deep cuts strapless corset bodysuit high cut glossy fluffy cottontail ears black ribbon bow cuffs sheer black stockings high heels"
+      - "perverted playboy bunny uniform crop corset top micro high cut open crotch fluffy cottontail bunny ears headband glossy black ribbon bow white cuffs opaque black tights high heels"
+      - "playboy bunny outfit open crotch short corset bodysuit high cut fluffy cottontail ears glossy black ribbon bow cuffs thigh high black stockings high heels"
+      - "extreme short playboy bunny uniform open panels micro hem strapless corset bodysuit high cut fluffy cottontail bunny ears headband black ribbon bow white cuffs glossy high heels"
+      - "degraded playboy bunny top low plunge mini corset bodysuit high cut fluffy cottontail ears glossy open crotch black ribbon bow cuffs sheer black stockings high heels"
+      - "playboy bunny uniform micro corset bodysuit open emblem area fluffy cottontail bunny ears headband glossy black ribbon bow white cuffs opaque black tights"
+      - "perverted playboy bunny outfit crop corset crotchless high cut fluffy cottontail ears glossy black ribbon bow cuffs thigh high black stockings high heels"
+      - "extreme playboy bunny dress open panels short length strapless corset bodysuit high cut fluffy cottontail bunny ears black ribbon bow white cuffs glossy"
+      - "playboy bunny uniform micro bodysuit plunging fluffy cottontail bunny ears headband glossy black ribbon bow cuffs sheer black stockings high heels"
+      - "extreme crop playboy bunny top open deep plunge micro high cut shorts fluffy cottontail bunny ears headband black ribbon bow white cuffs glossy opaque black tights high heels"
+      - "playboy bunny crop top open micro length crotchless high cut skirt fluffy cottontail ears black ribbon bow glossy cuffs thigh high black stockings high heels"
+      - "perverted playboy bunny crop top cropped high mini high cut shorts fluffy cottontail ears glossy black ribbon bow cuffs sheer black stockings high heels"
+      - "playboy bunny top open panels short high cut skirt fluffy cottontail ears visible headband black ribbon bow cuffs glossy opaque black tights"
+      - "degraded playboy bunny crop top low plunge micro high cut shorts fluffy cottontail ears open crotch black ribbon bow cuffs glossy high heels"

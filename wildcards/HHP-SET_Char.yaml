@@ -1,0 +1,240 @@
+HHP-SET:
+  character:
+    # character 节点：人物外貌统一描述库（figure + head_state + body_state完整合并）
+    # 设计原则（中文注释）：
+    # - 统一管理整体人物外貌：overall（原figure整体气质/框架）、head（头发/妆容/表情）、body（生理唤起/乳房大小/身材比例）
+    # - 子类完全独立：可单独或组合调用，叠加灵活
+    # - 调用方式：random模板直接选子类叠加（如__HHP-SET/character/overall__ + __HHP-SET/character/head/Hair__ + __HHP-SET/character/body/general__ + __HHP-SET/character/body/breast_average_natural__ + __HHP-SET/character/body/proportion_slender__）
+    # - 生成时人物外貌细节独立控制，与pose/cloth/effects不冲突
+
+    overall: # 原figure整体气质/身材框架（年龄中性）
+      - "a seductive figure with petite slender proportions and delicate sensual allure"
+      - "an alluring form with soft natural proportions and gentle aroused glow"
+      - "an erotic presence with average balanced proportions and captivating sensual warmth"
+      - "a sensual body with toned athletic proportions and magnetic erotic intensity"
+      - "an intoxicating figure with curvy soft proportions and irresistible heated charm"
+      - "a provocative form with slender graceful proportions and subtle yearning allure"
+      - "an exquisite presence with petite delicate proportions and quiet intimate glow"
+      - "a mesmerizing body with natural balanced proportions and overwhelming sensual magnetism"
+      - "a ravishing figure with toned slender proportions and glowing aroused skin"
+      - "an enchanting form with curvy gentle proportions and hushed seductive charm"
+      - "a captivating presence with petite toned proportions and timeless sensual grace"
+      - "an intense body with average natural proportions and fractured erotic intensity"
+      - "a broken alluring figure with slender petite proportions and overwhelmed sensual glow"
+      - "a corrupted seductive form with soft curvy proportions and ruined yearning warmth"
+      - "an eternal erotic presence with balanced gentle proportions and nullified intimate allure"
+      - "a fractured sensual body with toned average proportions and throbbing muffled desire"
+      - "a nullified provocative figure with petite delicate proportions and cold eternal warmth"
+      - "a dehumanized intoxicating form with curvy soft proportions and passive fractured glow"
+      - "a passive mesmerizing presence with slender toned proportions and eternal subtle allure"
+      - "a utility captivating body with natural balanced proportions and cold functional warmth"
+      - "an exhibit alluring figure with petite graceful proportions and permanent passive glow"
+      - "a fixture erotic form with toned slender proportions and distorted throbbing charm"
+      - "an object seductive presence with curvy gentle proportions and muffled eternal intensity"
+      - "a tool sensual body with average natural proportions and fractured nullified warmth"
+      - "a display intoxicating figure with petite delicate proportions and cold dehumanized allure"
+
+    head:
+      Hair: # 原Hair（高度独立纯净发型/发态）
+        - "long flowing silky hair in soft cascading waves"
+        - "wet hair damp and clinging in glossy strands"
+        - "gentle tousled bedroom hair soft disheveled waves"
+        - "elegant updo with loose tendrils softly escaping"
+        - "sweat-dampened hair in delicate strands"
+        - "long straight hair with glossy center part"
+        - "voluminous waves tumbling freely"
+        - "disheveled hair in soft post-passion chaos"
+        - "sleek high ponytail with gentle sway"
+        - "soft curls in damp subtle glow"
+        - "long hair spread in silk-like fan"
+        - "slightly tangled hair gentle finger-ran texture"
+        - "glossy black hair dramatic single fall"
+        - "wind-blown strands in soft movement"
+        - "damp hair with water beading sheen"
+        - "elegant chignon with loose wisps"
+        - "wild mane in gentle post-intimacy tousle"
+        - "long layered hair soft light-catching highlights"
+        - "sweat-matted strands in delicate chaos"
+        - "silky hair fanned out in dramatic contrast"
+
+      Makeup: # 原Makeup（高度独立纯净妆容）
+        - "flawless natural makeup with subtle dewy glow"
+        - "smoky eyeliner in sharp seductive wing"
+        - "glossy red lips softly parted"
+        - "heavy eyeliner in subtle post-passion smudge"
+        - "dewy skin minimal makeup natural flush"
+        - "bold crimson lipstick in perfect application"
+        - "subtle contour with high cheekbones luminous highlight"
+        - "dramatic cat eye liner intense depth"
+        - "gentle blush in natural warmth"
+        - "lip gloss glistening moist sheen"
+        - "eyeshadow in deep plum sultry shadow"
+        - "perfect winged liner elegant precision"
+        - "soft nude lips with delicate sheen"
+        - "rosy cheeks in gentle diffused blush"
+        - "matte red lips in classic bold finish"
+
+      Emotion: # 原Emotion（表情子主题）
+        EroticArt: "sultry seductive gaze, yearning intense gaze, quiet sensual allure, delicate intimate gaze, soft yearning warmth, elegant seductive gaze, whispered temptation expression, graceful sensual gaze, refined intimate glow, tender yearning expression, hushed seductive charm, timeless boudoir gaze, gentle desire warmth, subtle erotic intensity, classical yearning gaze"
+
+        Corrupted: "ahegao mindless expression, eyes rolled back ecstasy, heart-shaped pupils ruin, tongue-lolling broken bliss, overwhelmed fractured gaze, mindless ruined expression, corrupted convulsing face, broken ahegao surrender, heart-pupil mindless void, tongue-extended eternal ruin, spasming corrupted expression, eyes white fractured joy, permanent ahegao broken, heart pupils eternal madness, overwhelmed ruined gaze"
+
+        ExtremeBDSM: "blank void expression, muffled fractured gaze, nullified empty expression, eternal distorted void, throbbing muffled nothingness, permanent featureless gaze, cold dehumanized expression, fractured sealed emptiness, breathless muffled void, eternal nullified gaze, distorted throbbing emptiness, sealed fractured expression, progressive choke void, permanent muffled nothingness, cold eternal empty gaze"
+
+        UltimateObjectification: "blank objectified expression, nullified passive gaze, cold empty fixture expression, dehumanized utility void, faint breath empty gaze, passive living object expression, eternal nullified emptiness, fixed mounted blank gaze, cold functional void expression, permanent passive emptiness, subtle warmth blank gaze, eternal exhibit void, dehumanized tool expression, cold ornament empty gaze, permanent living ornament blankness"
+
+        BDSMBondage: "fractured submissive gaze, cold restrained expression, nullified vulnerability gaze, delicate fractured submission, muffled throbbing devotion, eternal cold submissive gaze, graceful nullified poise, passive fractured restraint, subtle quiver restrained expression, cold eternal grace gaze, fractured elegance submission, muffled restrained devotion, eternal submissive emptiness, cold fractured poise, delicate nullified gaze"
+
+    body:
+      general: # 原body_state/general生理唤起（纯生理，无姿势干扰）
+        - "skin flushed with delicate warmth and subtle arousal glow"
+        - "soft dewy moisture tracing sensitive areas with gentle intimate sheen"
+        - "nipples delicately peaked in quiet sensual response"
+        - "faint moisture catching soft light on flushed skin"
+        - "skin glowing with gentle intimate warmth and subtle flush"
+        - "nipples hardened softly in delicate aroused tension"
+        - "body lightly trembling with quiet desire and subtle arousal flush"
+        - "inner areas kissed by faint sheen with deepened intimate warmth"
+        - "nipples hardened in delicate sensual response"
+        - "soft glow of moisture on sensitive contours with subtle desire swell"
+        - "skin dewy and flushed with faint intimate tremble"
+        - "gentle wetness tracing sensitive curves with soft breath warmth"
+        - "nipples straining subtly with quiet need"
+        - "delicate arousal sheen on skin with heavy unspoken warmth"
+        - "soft flush spreading with gentle peaks erect in intimate glow"
+
+      breast: # 原body_state/breast尺寸子类
+        tiny_flat:
+          - "tiny flat chest delicate innocent proportions"
+          - "completely flat chest delicate subtle proportions"
+          - "tiny delicate flat chest innocent natural proportions"
+          - "extremely small flat chest youthful innocent delicacy"
+          - "tiny completely flat chest subtle fragile proportions"
+
+        small_modest:
+          - "small modest breasts natural subtle fullness"
+          - "small delicate breasts gentle modest swell"
+          - "modest small breasts soft natural volume"
+          - "small soft breasts delicate subtle allure"
+          - "modest gentle breasts natural innocent fullness"
+
+        average_natural:
+          - "average natural breasts balanced gentle volume"
+          - "natural average breasts soft harmonious fullness"
+          - "average soft breasts gentle natural swell"
+          - "balanced natural breasts modest sensual volume"
+          - "average gentle breasts natural subtle warmth"
+
+        large_full:
+          - "large soft breasts subtle overfilled allure"
+          - "full gentle breasts natural overflowing warmth"
+          - "large gentle breasts swollen sensual volume"
+          - "full soft breasts heated yearning swell"
+          - "large full breasts natural bursting fullness"
+
+        hyper_overfilled:
+          - "hyper overfilled breasts squeezed explosive volume"
+          - "extreme swollen breasts overfilled distorted fullness"
+          - "hyper mangled breasts swollen explosive distortion"
+          - "permanent overfilled breasts constricted hyper volume"
+          - "extreme bursting breasts mangled swollen allure"
+
+      proportion: # 原body_state/proportion比例子类
+        petite:
+          - "petite slender proportions delicate compact allure"
+          - "extremely petite proportions tiny delicate frame"
+          - "petite delicate proportions short compact lines"
+          - "tiny petite proportions fragile slender harmony"
+          - "petite compact proportions delicate small stature"
+          - "extremely petite slender proportions tiny graceful lines"
+          - "petite fragile proportions delicate short harmony"
+
+        slender:
+          - "slender elegant proportions graceful long lines"
+          - "slender toned proportions refined subtle curves"
+          - "elegant slender proportions harmonious long frame"
+          - "slender graceful proportions delicate extended lines"
+          - "refined slender proportions subtle tall harmony"
+          - "slender delicate proportions elegant extended allure"
+          - "graceful slender proportions refined long stature"
+
+        average:
+          - "average balanced proportions natural harmonious lines"
+          - "natural average proportions gentle balanced frame"
+          - "balanced average proportions soft natural harmony"
+          - "average natural proportions subtle proportionate allure"
+          - "harmonious average proportions delicate balanced lines"
+          - "average gentle proportions natural subtle stature"
+
+        curvy:
+          - "curvy soft proportions gentle overflowing lines"
+          - "soft curvy proportions plump harmonious curves"
+          - "curvy gentle proportions swollen sensual frame"
+          - "gentle curvy proportions full rounded harmony"
+          - "curvy overflowing proportions soft generous lines"
+          - "plump curvy proportions delicate swollen allure"
+          - "curvy harmonious proportions gentle full stature"
+
+        toned:
+          - "toned athletic proportions firm defined lines"
+          - "athletic toned proportions strong subtle curves"
+          - "toned firm proportions compact defined frame"
+          - "defined toned proportions athletic harmonious lines"
+          - "toned strong proportions refined muscular harmony"
+          - "athletic firm proportions subtle toned allure"
+          - "toned compact proportions defined graceful stature"
+
+        voluptuous:
+          - "voluptuous generous proportions full overflowing lines"
+          - "generous voluptuous proportions swollen abundant curves"
+          - "voluptuous full proportions heavy sensual frame"
+          - "abundant voluptuous proportions plump rounded harmony"
+          - "voluptuous overflowing proportions soft heavy lines"
+          - "heavy voluptuous proportions generous swollen allure"
+          - "voluptuous abundant proportions full generous stature"
+    # character内部随机调用模板（自然语言叙述优化版）
+    random_set: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/*__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/*__} breasts, 
+      ({1-1$$__HHP-SET/character/body/general__}:1.2), 
+      {0-1$$(__HHP-SET/character/head/Hair__:1.1)}, 
+      {0-1$$(__HHP-SET/character/head/Makeup__:1.1)}, 
+      her expression one of {1-1$$__HHP-SET/character/head/Emotion/*__},
+
+    randomEroticArt: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/slender__|__HHP-SET/character/body/proportion/average__|__HHP-SET/character/body/proportion/curvy__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/average_natural__|__HHP-SET/character/body/breast/small_modest__|__HHP-SET/character/body/breast/large_full__} breasts, 
+      ({1-1$$__HHP-SET/character/body/general__}:1.2), 
+      (__HHP-SET/character/head/Hair__:1.1), 
+      (__HHP-SET/character/head/Makeup__:1.1), 
+      her expression one of __HHP-SET/character/head/Emotion/EroticArt__,
+    randomCorrupted: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/curvy__|__HHP-SET/character/body/proportion/voluptuous__|__HHP-SET/character/body/proportion/average__|__HHP-SET/character/body/proportion/toned__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/large_full__|__HHP-SET/character/body/breast/hyper_overfilled__|__HHP-SET/character/body/breast/average_natural__} breasts, 
+      (__HHP-SET/character/body/general__:1.3), 
+      (__HHP-SET/character/head/Hair__:1.2), 
+      (__HHP-SET/character/head/Makeup__:1.2), 
+      her expression one of __HHP-SET/character/head/Emotion/Corrupted__,
+    randomBDSMBondage: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/slender__|__HHP-SET/character/body/proportion/average__|__HHP-SET/character/body/proportion/petite__|__HHP-SET/character/body/proportion/toned__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/average_natural__|__HHP-SET/character/body/breast/small_modest__|__HHP-SET/character/body/breast/large_full__} breasts, 
+      (__HHP-SET/character/body/general__:1.25), 
+      (__HHP-SET/character/head/Hair__:1.15), 
+      (__HHP-SET/character/head/Makeup__:1.1), 
+      her expression one of __HHP-SET/character/head/Emotion/BDSMBondage__,
+    randomUltimateObjectification: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/average__|__HHP-SET/character/body/proportion/curvy__|__HHP-SET/character/body/proportion/toned__|__HHP-SET/character/body/proportion/slender__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/average_natural__|__HHP-SET/character/body/breast/large_full__|__HHP-SET/character/body/breast/small_modest__} breasts, 
+      ({1-1$$__HHP-SET/character/body/general__}:1.25),  
+      her expression one of __HHP-SET/character/head/Emotion/UltimateObjectification__,
+    randomExtremeBDSM: |
+      a {1-1$$__HHP-SET/character/overall__} 
+      with {1-1$$__HHP-SET/character/body/proportion/slender__|__HHP-SET/character/body/proportion/average__|__HHP-SET/character/body/proportion/toned__|__HHP-SET/character/body/proportion/petite__} proportions 
+      and {1-1$$__HHP-SET/character/body/breast/average_natural__|__HHP-SET/character/body/breast/small_modest__|__HHP-SET/character/body/breast/large_full__} breasts, 
+      ({1-1$$__HHP-SET/character/body/general__}:1.35), 
+      her expression one of __HHP-SET/character/head/Emotion/ExtremeBDSM__,

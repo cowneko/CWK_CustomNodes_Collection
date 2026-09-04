@@ -1,0 +1,512 @@
+HHP-SET:
+  BDSM_Apparatus:
+  # BDSM_Apparatus 节点：BDSM装备/装置统一库（结构优化版）
+  # 设计原则（中文注释）：
+  # - 子类划分：Outfit（装备/穿戴）分Light（轻度优雅，原light-BDSM）、Heavy（中重禁锢，原BDSM outfit）
+  # - Devices（装置/固定）下Torture（永恒折磨，原Torture Devices）
+  # - 独立性强：Outfit纯穿戴装备，Devices纯大型固定/机器装置，无交叉干扰
+  # - random_set统一在节点根下，跨Outfit/Devices随机（Light低概率、Heavy中概率、Torture高概率极端主题）
+  # - 调用方式：randomBDSMBondage用Outfit/Light + Outfit/Heavy，randomExtremeBDSM用Outfit/Heavy + Devices/Torture
+    Outfit:
+      Light: # 原light-BDSM内容（轻度优雅装备）
+        Head:
+          Gags:  # 头部 - 标准口塞
+            - "ballgag with leather strap and clasp"
+            - "silicone ballgag adjustable strap"
+            - "classic BDSM ballgag visible clasp"
+            - "open ring gag metal with strap"
+            - "bit gag with metal bar and strap"
+            - "standard ballgag silicone sphere strap"
+            - "firm ballgag with leather strap"
+            - "ring gag leather strap metal ring"
+            - "ballgag strap clasp detail standard"
+            - "leather ballgag with adjustable strap"
+            
+          Other:  # 头部 - 其他（眼罩/面部轻harness）
+            - "blindfold with strap covering eyes"
+            - "blindfold adjustable strap complete cover"
+            - "classic BDSM blindfold with metal clasp"
+            - "blindfold padded interior strap closure"
+            - "standard blindfold strap and clasp detail"
+            - "blindfold firm fit visible strap"
+            - "light head harness with strap accents"
+            - "delicate face harness light straps"
+            - "head strap harness with ring gentle fit"
+            - "soft face harness light clasp detail"
+            
+          Hoods:  # 头部 - 标准轻hood
+            - "light hood with strap partial cover"
+            - "sensory hood fabric gentle fit"
+            - "classic BDSM hood light strap"
+            - "hood with adjustable clasp"
+            - "standard hood fabric cover"
+            - "light hood padded interior"
+            - "hood with visible strap detail"
+            - "delicate hood light clasp"
+            - "hood strap closure standard"
+            - "soft hood gentle fabric fit"
+        
+        Neck:  # 颈部 - 标准项圈 + leash变体
+          - "metal collar with visible O-ring and attached leash"
+          - "metal posture collar high fit with clasp and trailing leash"
+          - "metal collar front D-ring adjustable fit with light leash"
+          - "metal choker collar central O-ring and subtle leash accent"
+          - "thick metal collar silver D-ring with attached leash"
+          - "metal collar front ring clasp detail with gentle leash"
+          - "standard BDSM metal collar large D-ring and trailing leash"
+          - "metal torque collar rigid band with light leash attachment"
+          - "neck corset light boning with subtle leash ring accent"
+          - "leather overlay metal collar with visible leash clasp"
+          - "metal band collar smooth fit with trailing light leash"
+          - "posture collar firm fit with attached gentle leash"
+        
+        Upper Body:  # 上身 - 标准corset/harness
+          - "latex corset with boning and back lacing"
+          - "latex corset front clasp light lift"
+          - "classic BDSM latex corset with boning"
+          - "latex underbust corset boning and strap"
+          - "standard latex corset waist with clasp closure"
+          - "latex cincher corset firm fit clasp detail"
+          - "light upper harness with strap accents"
+          - "upper body harness ring detail"
+          - "standard upper harness light clasp"
+          - "leather upper restraint strap fit"
+        
+        Arms and Wrists:  # 手臂/手腕 - 标准cuffs/armbinder
+          - "wrist cuffs with metal D-ring and strap"
+          - "classic BDSM wrist restraints clasp"
+          - "standard cuffs for wrists with strap"
+          - "wrist cuffs D-ring front"
+          - "light armbinder sleeve with strap"
+          - "armbinder leather light bind clasp"
+          - "standard armbinder adjustable strap"
+          - "arm restraints with visible ring"
+          - "wrist ties light strap detail"
+          - "arm cuff set metal clasp"
+        
+        Lower Body:  # 下身 - 标准thigh/leg restraints
+          - "thigh cuffs with ring light strap"
+          - "leg restraints with clasp"
+          - "light thigh bands adjustable fit"
+          - "BDSM leg cuffs with visible ring"
+          - "thigh straps leather clasp detail"
+          - "lower body restraint light strap"
+          - "thigh wrap strap gentle fit"
+          - "leg cuff set with ring"
+          - "standard thigh restraints clasp"
+          - "lower leg bands light pressure"
+        
+        foot:  # 足部 - 标准ballet boots/foot restraints
+          - "ballet boots high heel with strap"
+          - "pointe boots with lacing"
+          - "classic BDSM ballet heels ankle strap"
+          - "high arch boots with clasp closure"
+          - "standard fetish ballet boots fit"
+          - "ballet boots leather strap detail"
+          - "foot restraints light clasp"
+          - "ankle boots high with ring"
+          - "ballet heel boots adjustable strap"
+          - "foot cuff light fit"
+        
+        Pelvic Area:  # 骨盆 - 标准chastity/c light/crotch strap
+          - "chastity belt light plate with strap"
+          - "crotch strap with ring"
+          - "classic BDSM chastity shield with clasp"
+          - "light pelvic harness with strap"
+          - "standard chastity belt adjustable fit"
+          - "pelvic strap light clasp"
+          - "crotch restraint with visible ring"
+          - "pelvic belt light pressure"
+          - "chastity plate leather fit"
+          - "crotch harness light strap detail"
+        
+        Full Body:  # 全身 - 标准全身覆盖
+          - "catsuit glossy fit full body coverage"
+          - "harness body with strap accents full coverage"
+          - "shibari rope art intricate knots full body"
+          - "bodysuit seamless full coverage"
+          - "classic harness full body strap design"
+          - "rope harness shibari full body pattern"
+          - "full body harness with ring accents"
+          - "latex bodysuit full coverage glossy"
+          - "standard full body harness strap fit"
+          - "light rope binding full body gentle knots"
+        
+        Accessories:  # 小配件 - 标准装饰物
+          - "nipple clamps with light chain adjustable"
+          - "classic tweezer clamps light chain"
+          - "clover clamps metal connecting chain"
+          - "standard BDSM nipple clamps chain screw"
+          - "light chain accents with rings"
+          - "weighted clamps light pressure"
+          - "decorative rings light attachment"
+          - "gentle accessory ties clasp detail"
+          - "light accessory clamps padded tips"
+          - "subtle accessory rings visible"
+        
+        random_set: |
+          {1-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Neck__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Head/Gags__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Head/Other__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Head/Hoods__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Upper Body__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Arms and Wrists__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Lower Body__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/foot__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Pelvic Area__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Full Body__}, 
+          {0-1$$__HHP-SET/BDSM_Apparatus/Outfit/light/Accessories__}
+      Heavy: # 原BDSM outfit内容（中重禁锢装备）
+        Head:
+          Gags:  # 纯粹优化版口塞节点：专为第5-6级破碎淫堕/永恒物化设计。焦点永恒muffled leaking、fractured drool void、suppressed convulsing ecstasy。经典ballgag为核心，描述纯粹独立（核心效果/状态为主，无过多chain/lock重复），生成“彻底空壳的受虐口部禁锢”
+            - "classic oversized red rubber ballgag filling mouth eternally, heavy drool trails in muffled fractured bliss"
+            - "heavy black silicone ballgag deep throat pressure, suppressed convulsing drool in leaking muffled ruin"
+            - "transparent acrylic ballgag sphere stretched tongue visible, clear drool overflow in degraded eternal muffled madness"
+            - "inflatable pump ballgag progressive mouth fill choke, distorted fractured muffled ecstasy"
+            - "metal framed ballgag steel ring silicone core, rigid jaw strain in leaking muffled void"
+            - "leather strapped ballgag padlock center, firm hold in eternal drooling submissive fractured poise"
+            - "large ballgag minimal breathing holes, labored muffled breath in convulsing leaking ruin"
+            - "ballgag harness head strap combo, full restraint in suppressed drool fractured devotion"
+            - "weighted ballgag pressure pull, masochistic leaking muffled convulsions"
+            - "vintage ballgag leather worn drool stains, classic fill in degraded eternal muffled ecstasy"
+            - "ballgag tongue depressor plate attachment, swallow restriction in fractured muffled leaking madness"
+            - "double layered ballgag extreme fill, distorted void submission in muffled convulsing"
+            - "ballgag drool collection tray, overflow humiliated eternal drip"
+            - "ballgag nose hook combo upward pressure, distorted muffled fractured humiliation"
+            - "extreme large silicone ballgag jaw ache eternal, stretch marks in leaking muffled object ruin"
+            - "ring gag wide O with ballgag insert hybrid, open fill in drooling fractured bliss"
+            - "panel gag padded seal pressing plate, total silence profound vacant muffled void"
+            - "pump inflatable gag progressive inflation, breathless muffled void"
+            - "bit gag steel bar tongue pressure, restrained muffled eternal madness"
+            - "funnel gag tube forced feeding overflow, degraded muffled drip eternity"
+            # 加breath/needle整合
+            - "inflatable gag pump throat crush with breath valve minimal eternal, muffled choking in fractured void"
+            - "ring gag insert with needle tongue piercing fused eternal, drool eternal in nullified openness"
+            - "pump gag deep throat pressure needle insert cheeks eternal, breath restriction in throbbing muffled ruin"
+          Hoods:  # 优化纯粹版头罩节点：专为第5-6级破碎淫堕/永恒物化设计。焦点faceless blank doll、eternal isolation void、complete sensory erase、mind fracture muffled nothingness。描述纯粹独立（核心效果/状态为主，无过多visible lock/chain重复），强调冷酷dehumanization与虚空空壳，生成“彻底空壳的头部感官禁锢”
+            - "full blackout hood thick padded leather sealed, complete sensory erase in throbbing fractured darkness"
+            - "featureless doll mask smooth blank silicone coverage, nullified object existence in eternal void"
+            - "vacuum sealed hood tight latex pump full head, distorted faceless in breathless muffled isolation"
+            - "isolation hood multi-layer padding white noise sealed, mind fracture in absolute throbbing nothingness"
+            - "latex encasement hood seamless seal breathing tube only, second-skin suffocation in dehumanized fractured captivity"
+            - "discipline hood heavy leather buckles full seal, enforced silence in unyielding vacant muffled poise"
+            - "breath restriction hood valve control sealed, controlled panic in suppressed object void"
+            - "posture hood high rigid collar integrated seal, forced upright blank in cold nullified restraint"
+            - "mummification hood layered wrap seal breathing port, entombing senses in darkness tightness eternal ruin"
+            - "total deprivation hood integrated plugs tubes full blackout, throbbing isolation in dehumanized void shell"
+            - "mouth only exposure hood sealed eyes ears nose, wide access in muffled fractured object torment"
+            - "eyes sealed hood full blackout panels with mouth tube, total darkness throbbing in open muffled submission"
+            - "nose hook hood sealed mouth eyes with upward pressure, distortion in faceless humiliated isolation"
+            - "partial face harness hood straps sealing eyes ears with mouth access, breath in blank degraded exposure"
+            - "distorted void hood tight latex partial seal with mouth breathing, facial stretch in eternal muffled nothingness"
+            - "blank mask hood featureless silicone with mouth slit, no eye openings in nullified object muffled ecstasy"
+            - "muffled isolation hood padded seal eyes nose with mouth panel, suppressed sound in fractured void"
+            - "faceless cage hood minimal bars with mouth exposure, cold frame in dehumanized eternal captivity"
+            - "sealed sensory hood plugs ears eyes with mouth valve, controlled breath in throbbing fractured darkness"
+            - "extreme isolation hood vacuum pump full head with mouth tube, distorted featureless in eternal object void"
+            # 新增posture变体（强制姿势，eternal upright/chin up/head back）
+            - "posture hood high rigid collar extended neck lock, forced upright eternal in cold strained submission"
+            - "rigid posture enforcer hood with chin strap pull upward, head back fixed in fractured upright poise"
+            - "steel posture collar integrated hood seal, high extension pressure in unyielding vacant upright restraint"
+            - "leather posture hood with back strap tension, head forced back in eternal exposed throat vulnerability"
+            - "metal posture frame hood with neck brace rigid, upright alignment eternal in nullified fractured grace"
+            - "high collar posture hood padded internal press upward, chin lift forced in muffled void submission"
+            - "rigid extension posture hood with strap locks head back, eternal strain in dehumanized upright isolation"
+            - "posture correction hood leather sealed with chin bar fixed, forced perfect poise in throbbing fractured nothingness"
+            
+            # 新增breath restriction变体（呼吸控制，eternal choke/muffled breath）
+            - "breath restriction hood valve sealed minimal port, controlled panic breathing in suppressed muffled void eternity"
+            - "choke seal hood tight latex internal pressure progressive, breathless eternal in distorted fractured suffocation"
+            - "breath control hood tube only minimal flow sealed, labored muffled breath in eternal object nothingness"
+            - "restriction hood padded seal with valve choke gradual, suppressed air panic in throbbing muffled isolation"
+            - "eternal breath limiter hood sealed ports restricted, gasping muffled in fractured void submission"
+            - "choke collar integrated hood high pressure seal, throat crush breathing in cold nullified restraint"
+            - "breathless void hood vacuum partial with tube choke, progressive suffocation in muffled fractured ruin"
+            - "restriction valve hood full seal controlled flow, eternal labored breath in dehumanized muffled captivity"
+            # 强化breath/needle永恒变体
+            - "total deprivation hood sealed plugs tubes full blackout breath valve minimal eternal, sensory erase in throbbing muffled void"
+            - "vacuum sealed hood progressive pump breath choke valve gradual, eternal distorted featureless nothingness"
+            - "discipline hood multi-layer padded white noise sealed eyes ears needle piercing temples eternal, permanent nullified muffled isolation"
+            - "breath restriction hood valve minimal choke progressive inflatable gag throat crush, eternal controlled panic dehumanized exhibit"
+            - "full head encasement hood with mouth tube only needle insert tongue fused, eternal breathless fractured captivity void"
+            - "sensory erase hood integrated ear nose plugs needle wheel rolling temples eternal, gag panel sealed in throbbing isolation fixture"
+            - "extreme isolation hood vacuum pump full head breath valve choke eternal mouth valve minimal, permanent distorted objectified darkness"
+            - "posture hood rigid extension chin forced needle piercing neck eternal breath limiter valve, gag deep in permanent strained muffled void"
+            - "mummification hood layered wrap sealed breathing port needle insert sensitive points eternal only, eternal entombing senses in throbbing nothingness"
+            - "hood with nose hook upward distortion needle piercing nostrils eternal gag harness sealed, eyes ears in eternal humiliated fractured object"
+          Other:  # 纯粹优化版其他头部辅助节点：专为第5-6级破碎淫堕/永恒物化设计。强化感官抹除、mind fracture、faceless void（blindfolds/earplugs/nose hooks/mouth covers/head straps）。描述纯粹独立（核心效果/状态为主，无过多visible lock/chain重复），强调冷酷dehumanization与虚空空壳，生成“彻底空壳的头部感官禁锢”
+            - "thick padded blindfold leather sealed, total darkness in throbbing fractured isolation"
+            - "cold metal blindfold plate contoured rigid, unyielding press in eternal darkness submission"
+            - "leather ear muffs padded sealed heavy, complete silence in muffled fractured nothingness"
+            - "steel earplug inserts molded strap, permanent sound deprivation in nullified muffled existence"
+            - "nose hook steel upward pressure distortion, humiliated faceless exposure in degraded poise"
+            - "mouth cover panel leather sealed plate, suppressed breath rawness in quiet muffled devotion ruin"
+            - "head strap harness multi-strap blindfold earplugs combo, multi-sensory erase in restrained fractured madness"
+            - "chain head accent nose ring pull, fractured obedience in degraded poise"
+            - "full head strap web tight pressure, devoted restrained isolation in throbbing void"
+            - "metal posture head bar forced alignment, cold nullified grace in upright restraint"
+            - "leather over-eye pads sealed heavy, darkness pressure in throbbing void submission"
+            - "steel nose to mouth hook dual pull, distorted muffled fractured ecstasy"
+            - "padded ear cover cups leather sealed, sound nullification in eternal muffled ruin"
+            - "blindfold tug pressure darkness pull, helpless fractured bliss in devoted isolation"
+            - "head cage minimal bars metal framed, faceless dehumanized eternal captivity"
+        
+        Neck: # 扩展优化版脖子项圈节点：强度扩展posture/breath restriction变体（新增10条，总25条）。专为第5-6级破碎淫堕/永恒物化设计。焦点永恒喉部压力/姿势强制/呼吸限制（throat crush eternal、forced upright fractured、breathless muffled void），强调冷酷dehumanization与虚空空壳。描述纯粹独立（核心效果/状态为主），生成“彻底空壳的脖子永恒禁锢”
+          - "cold steel posture collar high rigid, throat pressure eternal in icy upright submission"
+          - "firm black leather collar tight clasp, unyielding grip in devoted fractured restraint"
+          - "sleek metal torque collar seamless closure, heavy weight in breathless nullified poise"
+          - "thick leather collar engraved lock, crushing breath in degraded eternal obedience"
+          - "unyielding steel band collar wide, cold enforcement in helpless fractured grace"
+          - "rigid metal collar with front ring, firm hold in restrained muffled void"
+          - "black leather overlay collar layered tight, pressure in submissive fractured isolation"
+          - "cold silver chain collar multi-strand, drape heavy in eternal muffled nothingness"
+          - "steel collar posture high with hinge closure, forced alignment in cold nullified item"
+          - "leather discipline collar padded internal press, enforced silence in unyielding vacant ruin"
+          - "metal collar torque thick seamless, weight eternal in distorted faceless submission"
+          - "firm leather collar with internal padding crush, breath restriction in throbbing fractured darkness"
+          - "cold chain collar linked tight, links pressure in absolute muffled isolation"
+          - "steel collar engraved fractured marks, rigid grip in dehumanized eternal captivity"
+          - "black leather collar wide band, suffocating hold in profound vacant muffled void"
+          # 新增posture变体（强制姿势，eternal upright/chin up/head back/strain）
+          - "high rigid posture collar extended neck pressure, forced chin up eternal in strained fractured submission"
+          - "steel posture enforcer collar with chin strap upward pull, head back fixed in fractured upright poise"
+          - "rigid extension collar metal with neck brace, forced alignment eternal in nullified strained grace"
+          - "leather posture collar high with back tension strap, head forced back in eternal exposed throat vulnerability"
+          - "cold metal posture frame collar integrated brace, upright enforcement in throbbing fractured nothingness"
+          - "thick steel posture collar with chin lift bar rigid, forced perfect poise in muffled void submission"
+          - "unyielding leather posture collar with extension lock, neck strain eternal in distorted upright isolation"
+          - "metal high collar posture with internal press upward, chin forced lift in breathless fractured restraint"
+        
+          # 新增breath restriction变体（呼吸限制，eternal choke/suppressed air）
+          - "crushing breath collar leather padded internal tight, throat choke eternal in suppressed muffled panic"
+          - "steel breath restriction collar valve minimal flow, labored air in eternal object nothingness"
+          - "leather choke collar progressive internal pressure, breathless eternal in distorted fractured suffocation"
+          - "cold metal breath limiter collar sealed ports restricted, gasping muffled in fractured void submission"
+          - "rigid throat crush collar steel wide band, suffocating breath in throbbing fractured darkness"
+          - "leather breath control collar with tube choke gradual, suppressed air panic in muffled isolation eternity"
+          - "metal choke seal collar tight clasp progressive, breathless muffled in eternal restrained ruin"
+          - "steel breath restriction band high pressure, controlled labored breath in nullified muffled existence"
+          # 加needle永恒
+          - "posture collar rigid crushing breath with needle piercing throat eternal, forced alignment in cold nullified grace"
+          - "high rigid posture collar extended neck pressure needle array fused eternal, strained fractured submission"
+        Upper Body: # 纯粹优化版上身束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点上身永恒禁锢、胸部/手臂/肩部无力固定、fractured exposure（corset crush、armbinder eternal、harness fractured、shoulder bind void）。描述纯粹独立（核心效果/状态为主），强调冷酷dehumanization与虚空空壳，生成“彻底破碎永恒的上身受虐禁锢”
+          - "steel boned corset laced crushing waist eternal, breath restriction in fractured submissive ruin"
+          - "leather chest harness crisscross tight pressure, visible marks in degraded fractured exposure"
+          - "armbinder single glove laced behind eternal, elbows forced in helpless fractured poise"
+          - "shoulder strap harness leather pulling arms back, rigid bind in restrained muffled void"
+          - "upper torso chain web linked tight, cold pressure in nullified object coverage"
+          - "corset top steel ribbed crushing lift, fractured breath in eternal submissive madness"
+          - "leather overbust binder laced tight visible marks, chest compression in degraded leaking ecstasy"
+          - "arm sleeve restraints leather fused behind, eternal bind in convulsing exposed ruin"
+          - "chest plate metal pressing rigid, breath choke in profound vacant muffled submission"
+          - "harness upper body leather with ring points pressure, fractured devotion in restrained isolation"
+          - "corset waist to chest steel boned eternal cinch, crushing in throbbing fractured nothingness"
+          - "shoulder to wrist chain restraint pulling back, forced arch in distorted muffled fractured bliss"
+          - "leather upper straitjacket arms crossed bound, helpless eternal in mad convulsing void"
+          - "metal rib cage harness rigid bars pressing, breath restriction in cold nullified grace"
+          - "corset harness combo laced with arm straps behind, double crush in degraded eternal exposure"
+          - "upper chain matrix linked shoulder to elbow, tight pull in submissive fractured poise"
+          - "leather breast binder compression tight visible marks, pressure in leaking muffled ruin"
+          - "arm to neck chain restraint visible pull, forced posture in eternal restrained madness"
+          - "steel upper frame harness with lock points rigid, body molded in fractured object fixation"
+          - "corset overbust with shoulder straps pulling back, eternal crush in nullified submissive eternity"
+        
+        Arms and Wrists: # 纯粹优化版手臂/手腕束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点永恒手臂禁锢、fractured restraint、nullified poise（armbinder eternal、elbow forced、wrist chained void）。描述纯粹独立（核心效果/状态为主），强调冷酷dehumanization与虚空空壳，生成“彻底破碎永恒的手臂受虐禁锢”
+          - "armbinder single glove leather laced behind eternal, elbows forced touch in helpless fractured poise"
+          - "monoglove sleeve rigid seamless fused arms, behind back permanent in restrained muffled void"
+          - "elbow cuff chain connector steel tight, upper arms bound in eternal vulnerability madness"
+          - "wrist cuff set heavy leather chained visible lock, hands pulled in suppressed convulsing ruin"
+          - "arm sleeve binder leather encased full length, fused restraint in distorted fractured submission"
+          - "shoulder to wrist chain restraint pulling back, forced arch in throbbing fractured nothingness"
+          - "leather arm harness crisscross with ring points, tight pressure in degraded eternal exposure"
+          - "steel wrist manacles linked chain short, restricted movement in nullified object coverage"
+          - "armbinder posture combo high collar to wrists, upright forced in cold fractured grace"
+          - "elbow to wrist chain hobble visible, arms compacted in submissive fractured isolation"
+          - "leather wrist to neck chain restraint, hands raised in eternal muffled devotion ruin"
+          - "rigid metal arm tube binders paired, encased limbs in unyielding vacant muffled poise"
+          - "chain arm web shoulder to elbow visible, tight links in fractured devotion restrained"
+          - "arm sleeve restraint latex second-skin fused, eternal cling in leaking muffled ecstasy"
+          - "wrist cuff to thigh chain connector, arms pulled down in humiliated fractured sway"
+          - "steel elbow binder rigid bar lock, forced touch in convulsing exposed madness"
+          - "leather arm straitjacket sleeves crossed bound, helpless eternal in mad leaking bliss"
+          - "chain wrist to ankle hobble visible pull, arms restricted in degraded immobility"
+          - "armbinder inflatable internal pressure progressive, choke distortion in fractured void submission"
+          - "metal arm frame harness with lock points rigid, body molded in nullified fractured fixation"
+        
+        Lower Body: # 纯粹优化版下身束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点下身永恒禁锢、thigh crush eternal、ankle hobble fractured、hip immobilization void。已移除所有纯足部/鞋类装备（移至新foot节点），专注大腿/踝/髋/整体腿部冷酷禁锢。精选独特变体，每条独立聚焦冷酷dehumanization与彻底空壳化，生成“彻底破碎永恒的下身受虐禁锢”
+          - "thigh corset steel boned crushing eternal, leg squeeze in convulsing fractured exposure"
+          - "ankle hobble chain short fused eternal, restricted crawl in humiliated leaking sway"
+          - "hip harness rigid pressure molded eternal, pelvis locked in submissive throbbing void"
+          - "thigh spreader bar wide lock eternal, inner exposure gaping in nullified object ruin"
+          - "leg binder sleeve seamless encased eternal, lower fusion in distorted fractured submission"
+          - "ankle to thigh compaction pull eternal, legs forced compact in helpless convulsing madness"
+          - "metal thigh manacles weighted drop eternal, balance crush in degraded leaking restraint"
+          - "steel ankle posture bar alignment eternal, lower strained upright in cold nullified grace"
+          - "hip to ankle restraint forced bend eternal, immobilized squat in muffled fractured agony"
+          - "thigh cuff inflatable progressive choke eternal, swelling distortion in fractured void ecstasy"
+          - "lower frame harness rigid points eternal, legs molded open in dehumanized throbbing fixation"
+          - "rigid leg tube steel encased calves eternal, fusion immobility in cold dehumanized captivity"
+        
+        foot: # 纯粹优化版足部束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点永恒足部极端畸形禁锢、permanent deformity crush eternal、fusion immobility void、distorted leaking agony。仅保留并强化最变态的核心类型（Ballet极端足尖强制骨骼畸形 + Pony/Hoof动物化融合），并包含非鞋子极端足部装备变体。ballet相关条目已强制强化BDSM fetish关键词，确保生成经典漆皮锁定变态版而非普通芭蕾舞鞋。每条独立聚焦冷酷dehumanization与彻底空壳化，生成“彻底破碎永恒的足部受虐禁锢”。强调永久不可逆畸形、融合、静止虚空的终极变态痛苦
+          - "Devious Ballet-1020 extreme BDSM fetish ballet boots en-pointe locked padlock straps eternal, black patent leather glossy thigh-high crush forcing permanent toe bone fusion deformity visible strain in fractured tip-toe immobility agony ruin"
+          - "Pleaser Domina style glossy red patent leather extreme fetish ballet boots no platform eternal, 9 inch pointe arch bone distortion crush reversal in throbbing muffled painful void agony"  
+          - "classic black patent leather bondage locked fetish ballet boots posture enforcer seamless eternal, extreme en pointe arch strain with visible toe crush deformity in cold nullified fractured captivity"
+          - "red patent leather Devious style extreme BDSM locked ballet boots inversion suspension pull eternal, reversed pointe fusion distortion in distorted glossy leaking object madness"  
+          - "progressive inflatable Pleaser Domina fetish ballet boots internal swelling choke eternal, permanent pointe deformity bone swelling in convulsing muffled dehumanized submission"
+          - "pony hooves metal fused encasement eternal, useless animalized prancing deformation in degraded leaking restraint"
+          - "hoof boot rigid fusion vibration eternal, deformed perpetual buzzing torment in throbbing dehumanized ecstasy"
+          - "metal hoof seamless skin integration eternal, permanent useless steps fusion in nullified fractured object void"
+          - "pony toe compaction cage crush eternal, hoof-like permanent fusion in helpless convulsing immobility torment"
+          - "foot stocks sole crushing vise rigid eternal, bottom pressure permanent marks in muffled leaking fractured poise"
+          - "toe spreader bar permanent stretch lock eternal, digits forced apart irreversible in distorted throbbing ruin"
+          - "sole piercing ring set fused eternal, permanent marks glossy drip in cold objectified leaking captivity"
+          - "inverted foot suspension chain pull eternal, upside-down distortion reversal in perpetual muffled agony void"
+          - "toe cage steel progressive compression eternal, individual digit crush permanent in fractured dehumanized fixation"
+          - "permanent foot mummification wrap fused eternal, encased sensory erase in glossy leaking motionless shell"
+        
+        
+        Pelvic Area: # 纯粹优化版骨盆/私密区域束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点永恒私密禁锢、功能化暴露、虚空空壳（eternal denial crush、leaking fractured pressure、nullified leaking void）。描述纯粹独立（核心效果/状态为主），强调冷酷dehumanization与永恒无力，生成“彻底破碎永恒的私密受虐禁锢”
+          - "cold steel chastity belt plate locked eternal denial, crushing pressure in leaking fractured restraint"
+          - "firm leather crotch harness strap tight eternal access, pull in degraded muffled exposure"
+          - "metal chastity shield fused waist lock visible, permanent coverage in nullified leaking ruin"
+          - "leather chastity thong remnant laced tight, denial pressure in convulsing fractured bliss"
+          - "steel pelvic frame with ring points rigid, body molded eternal in restrained void submission"
+          - "crotch rope harness knotted eternal friction, pressure leaking in mad muffled ecstasy"
+          - "metal chastity cage device locked visible, denial grip in throbbing fractured nothingness"
+          - "leather pelvic binder compression crush, eternal squeeze in submissive fractured isolation"
+          - "steel waist to thigh chastity chain links tight, restricted movement in devoted leaking madness"
+          - "crotch plug lock base with harness attachment, internal fill eternal in distorted muffled void"
+          - "metal pelvic shield plate with side locks, cold press in helpless fractured poise"
+          - "leather crotch strap harness with weighted pull, pressure in eternal tormented joy"
+          - "steel chastity belt full coverage fused skin hint, unyielding denial in degraded eternal captivity"
+          - "crotch chain web linked tight pressure, cold links in leaking muffled ruin"
+          - "pelvic corset steel boned crushing eternal, lower squeeze in nullified submissive eternity"
+          - "metal ring chastity points chained visible, pull in restrained convulsing exposure"
+          - "leather pelvic restraint belt with internal press, breath lower restriction in fractured muffled"
+          - "steel crotch bar spreader fixed lock, forced open in humiliated eternal sway"
+          - "crotch harness leather remnant torn gaping, pressure in leaking fractured devotion"
+          - "metal pelvic encasement partial fused lock, body integrated in cold nullified fixation"
+        
+        Full Body: # 纯粹优化版全身束缚节点：专为第5-6级破碎淫堕/永恒物化设计。焦点全身永恒禁锢、total fractured immobility、nullified leaking void、dehumanized object ruin。精选独特变体，每条独立聚焦冷酷dehumanization与彻底空壳化，生成“彻底破碎永恒的全身受虐禁锢”。强调永久融合、感官抹除、残片紧裹、链网压迫的冰冷终极状态
+          - "ruined latex catsuit remnants seamless clinging eternal, second-skin fractured in glossy leaking exposure"
+          - "broken straitjacket canvas arms crossed fused eternal, helpless convulsing in muffled object madness"
+          - "degraded full body harness leather tight pressure eternal, marks restrained in throbbing nullified void"
+          - "fractured mummification wrap layered remnants eternal, entombing darkness in distorted leaking captivity"
+          - "ruined fishnet bodysuit mesh patterns stretched gaping eternal, textured highlight in raw convulsing ruin"
+          - "broken vinyl gloss catsuit remnants shine clinging eternal, fractured eternal drip in restrained ecstasy"
+          - "degraded chain body web linked cold pressure eternal, full links choking in nullified leaking torment"
+          - "fractured canvas full binder arms legs fused eternal, helpless immobility in dehumanized throbbing fixation"
+          - "ruined posture full harness integrated rigid eternal, forced upright in cold fractured object grace"
+          - "broken latex sheath full second-skin remnants eternal, suffocation distortion in muffled leaking void"
+          - "degraded sensory deprivation suit padded sealed eternal, multi-erase in perpetual convulsing nothingness"
+          - "fractured metal frame full harness rigid points eternal, body molded in unyielding nullified fixation"
+          - "ruined arm leg binder combo laced remnants eternal, fused limbs in helpless leaking madness"
+          - "broken corset harness steel boned full crushing eternal, breath pressure in submissive fractured isolation"
+          - "degraded hobble full suit short chain connections eternal, restricted sway in humiliated throbbing ruin"
+          - "fractured latex mummification remnants breathing tube eternal, entombing glossy drip in cold objectified void"
+          - "ruined vinyl restraint full suit ring points shine eternal, submissive fractured in perpetual muffled ecstasy"
+          - "broken mesh full encasement transparent remnants eternal, see-through clinging in distorted dehumanized captivity"
+        
+        Accessories: # 纯粹优化版配件节点：专为第5-6级破碎淫堕/永恒物化设计。焦点永恒身体压迫、perpetual torment pull、piercing mark void、weighted drip agony。已去除所有头部相关内容（blindfold/ear/nose hook/breath mask等已属Head节点），仅保留独特身体配件变体，每条独立聚焦冷酷dehumanization与彻底空壳化，生成“彻底破碎永恒的身体辅助受虐禁锢”。强调永久夹拉、刺环、加重、链扯的冰冷终极状态
+          - "weighted chain leash center pull heavy eternal, tugging torment in helpless leaking restraint"
+          - "steel nipple clamp chain bite pressure eternal, masochistic drip in convulsing fractured ruin"
+          - "cold metal labia clamp weighted drop eternal, lower pull agony in nullified throbbing submission"
+          - "steel piercing ring set permanent marks eternal, body adorned in cold objectified fixation"
+          - "weighted clamp pair torso drops eternal, pressure ecstasy in degraded perpetual void"
+          - "metal posture hook back pull rigid eternal, forced arch in cold dehumanized grace"
+          - "inflatable clamp hybrid progressive choke eternal, swelling distortion in fractured muffled torment"
+          - "chain body accent rings weighted pull eternal, multi-point drip in restrained leaking madness"
+          - "steel genital clamp fused grip eternal, denial bite in throbbing nullified captivity"
+          - "weighted ankle-to-hip chain tension eternal, lower body strain in distorted convulsing void"
+          - "permanent piercing bar set torso eternal, cold metal marks in muffled fractured exposure"
+          - "clamp chain web linked pressure eternal, full body choking in leaking dehumanized ecstasy"
+          # 强化needle永恒
+          - "needle piercing ring set fused skin eternal multi-points, permanent marks in cold objectified leaking captivity"
+          - "needle array sensitive areas progressive insert eternal, throbbing pain in fractured dehumanized fixation"
+          - "permanent needle bar set torso fused eternal, cold metal marks in muffled fractured exposure"
+          - "needle wheel rolling device attached eternal, raking marks in helpless nullified agony void"
+        random_set: |
+          {__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Gags__, __HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Other__|__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Hoods__}, __HHP-SET/BDSM_Apparatus/Outfit/Heavy/Neck__,__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Upper Body__,__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Arms and Wrists__,
+          {1$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Lower Body__},{1$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/foot__},{1$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Pelvic Area__},__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Full Body__,{2-6$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Accessories__},
+        Broken_set: |
+          {|__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Gags__},{|__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Hoods__},{|__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Head/Other__},__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Neck__,__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Upper Body__,{__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Arms and Wrists__|},
+          {1$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Lower Body__},{1$$__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Pelvic Area__|},__HHP-SET/BDSM_Apparatus/Outfit/Heavy/Full Body__,
+    Devices: 
+      Torture: #原Torture Devices内容
+        # 纯粹独立优化版折磨装置节点：多样性提升版（总60条，高端诗意恢复）
+        # 优化说明（中文注释）：
+        # - 多样性/永恒维持原版，新加经典装置全保留
+        # - 装置可见度优雅提升：少量点缀“sharply detailed”“clearly defined”“distinctly visible”等诗意词，只在关键条目，避免重复低端
+        # - 语言统一冷酷诗意“[装置机制] eternal, [毁灭效果] in [冰冷虚空状态]”
+        # - 生成时装置会更清晰突出，但不牺牲艺术感
+        Immobilization Stations: # 永恒绝对固定装置站台（20条）
+          - "sharply detailed steel X-cross frame bolted floor eternal, body spread molded visible in fractured immobility void"
+          - "heavy wooden pillory stockade mounted eternal, neck wrist trapped visible flesh press in throbbing inescapable display"
+          - "upright bondage pole rigid welded eternal, body pressed aligned visible in restrained fractured poise"
+          - "reinforced bondage chair frame fixed eternal, seated form locked visible in perpetual access torment"
+          - "inversion table steel platform eternal, body upside-down secured visible blood rush in distorted leaking captivity"
+          - "vacuum bed latex frame sealed eternal, body flattened suction visible breathing port in muffled objectified darkness"
+          - "stretching rack ratchet platform eternal, limbs extended visible joint strain in irreversible ruin"
+          - "heavy iron cage compact bolted eternal, body curled internal visible in storage nullified madness"
+          - "overhead suspension rig hooks eternal, body lifted weightless visible spread in perpetual convulsing void"
+          - "floor mounted stockade yoke eternal, kneeling form locked visible in degraded throbbing submission"
+          - "shoulder yoke bar heavy platform eternal, arms restricted visible burden in fractured muffled restraint"
+          - "bondage bed frame spreader eternal, body starfished surface molded visible in helpless fractured ecstasy"
+          - "wall mount restraint panel eternal, body pressed flattened visible in cold dehumanized fixation"
+          - "partial encasement box sealed eternal, torso trapped visible in distorted throbbing isolation"
+          - "kneeling prayer bench platform eternal, shins locked visible in downcast fractured devotion"
+          - "vertical suspension cage narrow eternal, body squeezed visible in upright leaking captivity"
+          - "impalement chair base post eternal, seated penetration visible in motionless objectified ruin"
+          - "bondage throne frame regal eternal, seated form integrated visible in merged eternal torment"
+          - "scavenger's daughter iron compression device body folded crushed eternal bands tight in distorted nullified poise"
+          - "knee splitter device legs forced apart eternal screws tightening visible joint strain in fractured immobility ruin"
+        
+        Perpetual Stimulation Machines: # 永恒强制刺激机器（18条）
+          - "sybian saddle vibration platform eternal, body grinding visible probe depth in convulsing glossy ecstasy"
+          - "fucking machine piston rammer bolted eternal, thrusting battering visible depth in dripping muffled ruin"
+          - "dual penetration rig synchronized eternal, simultaneous thrust visible tearing in perpetual bliss loop"
+          - "wand vibrator station fixed mount eternal, pressure overload visible clit in hypersensitive squirting cycle"
+          - "breast milking vacuum pump tubes eternal, extraction pull visible collection in exhausted convulsing drip"
+          - "rotating dildo pole mounted eternal, internal spin grinding visible in endless leaking torment"
+          - "thrusting saddle platform arm eternal, penetration battering visible depth in immobilized dripping madness"
+          - "multi wand vibration tower fixed eternal, simultaneous buzz visible points in suppressed ecstasy overload"
+          - "edging sensor vibrator rig denial eternal, brink desperation visible in perpetual muffled frustration"
+          - "clitoral suction pump tower eternal, bud pulling visible hypersensitive in forced release eternity"
+          - "electro stimulation pads wired platform eternal, shock pulses visible in convulsing throbbing void"
+          - "vibrating internal probe station eternal, deep buzz visible in helpless leaking convulsions"
+          - "anal thrust rig mechanical eternal, internal pressure visible in distorted perpetual ecstasy"
+          - "nipple suction vibration cups eternal, sensitive pull buzz visible in masochistic dripping overload"
+          - "full body vibration plate array eternal, surface buzz visible in hypersensitive eternal contraction ruin"
+          - "pear of anguish internal expansion device progressive eternal opening intimate areas visible in distorted throbbing ruin"
+          - "rotating torment wheel fixed body strapped eternal spikes brushing visible in perpetual scraping leaking madness"
+          - "endless belt conveyor machine body fixed moving through stimulation points eternal in muffled convulsing void"
+        
+        Sensory Pain Torment Devices: # 永恒感官痛觉装置（22条）
+          - "overhead wax candle rig drip eternal, hot trails hardening visible patterns in throbbing ecstasy"
+          - "ice immersion bucket platform eternal, cold water shivering visible contraction in numbing muffled torment"
+          - "weighted clamp station drops eternal, bite pull visible marks in masochistic convulsing joy"
+          - "whipping post upright mounted eternal, exposed blooming visible welts in impact leaking submission"
+          - "clamp array sensitive points eternal, bite visible in eternal tormented drip reaction"
+          - "automated hot wax arm drip eternal, burning patterns trailing visible in convulsing fractured ruin"
+          - "ice melting tray pressed eternal, cold trails visible hypersensitive in suppressed shivering void"
+          - "weighted lower drop station eternal, pull agony visible in degraded throbbing torment"
+          - "flogging frame tool holders eternal, exposed bruises blooming visible in perpetual ecstasy"
+          - "temperature wand alternate platform eternal, extremes trails visible skin in convulsing muffled madness"
+          - "pinwheel roller spiked eternal, raking marks visible trails in helpless nullified agony"
+          - "needle wheel rig rolling eternal, piercing trails visible in leaking dehumanized fixation"
+          - "internal burning insert station eternal, fire clench visible lower in throbbing tormented bliss"
+          - "breath valve restriction mask fixed eternal, panic visible in suppressed convulsing restraint"
+          - "abrasive scrub pad station eternal, raw raking visible skin in distorted leaking captivity"
+          - "distinctly visible wooden horse sharp edge ride eternal, weight crushing intimate areas in throbbing fractured torment"
+          - "clearly defined Judas cradle sharp pyramid seat eternal, weight impaling in distorted throbbing ruin"
+          - "branding iron heated press eternal, marks searing visible in permanent fractured agony"
+          - "rat torture box strapped belly eternal, gnawing visible in panicked leaking madness"
+          - "heretic's fork neck to chest prongs eternal, movement piercing visible in strained muffled void"
+          - "breast ripper heated claws pull eternal, tearing visible in convulsing dehumanized torment"
+          - "spanish donkey wedge ride eternal, weight splitting visible in throbbing fractured ruin"
+        
+        random_set: |
+          fused to eternal {1-3$$__HHP-SET/BDSM_Apparatus/Devices/Torture/Immobilization Stations__},
+          ravaged by perpetual {1-3$$__HHP-SET/BDSM_Apparatus/Devices/Torture/Perpetual Stimulation Machines__},
+          scarred by endless {1-3$$__HHP-SET/BDSM_Apparatus/Devices/Torture/Sensory Pain Torment Devices__},
+          in device-integrated fractured shell with glossy perpetual leaking void

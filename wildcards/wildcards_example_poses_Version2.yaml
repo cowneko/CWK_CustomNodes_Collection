@@ -1,0 +1,33 @@
+# Example wildcard file for CWK Prompt Composer
+# Place your .yaml/.yml wildcard files in this folder
+
+standing:
+  - standing
+  - standing with arms crossed
+  - standing with hands on hips
+  - standing with one hand raised
+  - standing leaning against wall
+
+sitting:
+  - sitting
+  - sitting on chair
+  - sitting on floor
+  - sitting cross-legged
+  - sitting with legs dangling
+
+lying:
+  - lying down
+  - lying on back
+  - lying on side
+  - lying on stomach
+  - reclining
+
+action:
+  - walking
+  - running
+  - jumping
+  - dancing
+  - fighting
+  - flying
+  - swimming
+  - climbing

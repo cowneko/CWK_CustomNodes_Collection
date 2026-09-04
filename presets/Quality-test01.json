@@ -1,0 +1,30 @@
+{
+  "name": "Quality-test01",
+  "category": "quality",
+  "pills": [
+    {
+      "text": "masterpiece",
+      "weight": 1
+    },
+    {
+      "text": "ultra_highres",
+      "weight": 1
+    },
+    {
+      "text": "intricate_details",
+      "weight": 1
+    },
+    {
+      "text": "hyper-detailed",
+      "weight": 1
+    },
+    {
+      "text": "best_quality",
+      "weight": 1
+    },
+    {
+      "text": "8k_uhd",
+      "weight": 1
+    }
+  ]
+}

@@ -24,17 +24,70 @@ const NODE_TYPE = "CWKLivePreview";
 const NODE_COLOR = "#141824";
 const NODE_BGCOLOR = "#1e2335";
 
+// ── Settings sync helpers (mirrors the VHS.LatentPreview pattern used in
+// cwk_wan22_prompt_composer.js, adapted for our own backend toggle route) ──
+const CWK_LIVE_PREVIEW_SETTING_KEY = "cwk.LivePreview.enabled";
+
+async function _readLivePreviewSetting() {
+  try {
+    const sv = app.ui?.settings?.settingsValues;
+    if (sv && CWK_LIVE_PREVIEW_SETTING_KEY in sv) return Boolean(sv[CWK_LIVE_PREVIEW_SETTING_KEY]);
+  } catch { /**/ }
+  try {
+    const resp = await api.fetchApi(`/api/settings/${encodeURIComponent(CWK_LIVE_PREVIEW_SETTING_KEY)}`);
+    if (resp.ok) { const val = await resp.json(); return val === true; }
+  } catch { /**/ }
+  return false;
+}
+
+async function _syncLivePreviewSetting() {
+  const enabled = await _readLivePreviewSetting();
+  try {
+    await api.fetchApi("/cwk_live_preview/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) {
+    console.warn("[CWK Live Preview] Failed to sync setting to backend:", e);
+  }
+}
+
 app.registerExtension({
   name: "cwk.live_preview",
 
+  settings: [{
+    id: CWK_LIVE_PREVIEW_SETTING_KEY,
+    name: "CWK Live Preview: Enable forced preview",
+    type: "boolean",
+    defaultValue: false,
+    category: ["CWK", "Live Preview", "Enable forced preview"],
+    onChange: async (value) => {
+      try {
+        await api.fetchApi("/cwk_live_preview/toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: value }),
+        });
+      } catch (e) {
+        console.warn("[CWK Live Preview] Failed to sync setting to backend:", e);
+      }
+    },
+  }],
+
   async setup() {
+    // Read back the current setting value so the backend stays in sync
+    // after a page reload (the JS-side toggle can be re-enabled without
+    // the user having to touch the checkbox again).
+    _syncLivePreviewSetting();
+
     // Listen for live preview image updates from backend
     api.addEventListener("cwk_live_preview", (event) => {
       const { image } = event.detail || {};
       if (!image) return;
 
       for (const node of app.graph._nodes) {
-        if (node.comfyClass === CWKLivePreview) {
+        if (node.comfyClass === NODE_TYPE) {
           node._cwkHasPreview = true;
           if (node._cwkImgEl) node._cwkImgEl.src = image;
           // Keep a plain Image object too, for canvas fallback drawing

@@ -55,6 +55,8 @@ let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"]
 let CLIPS      = ["embedded"];
 let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
+let RNGS              = ["default", "cpu", "gpu", "nv"];
+let MODEL_SAMPLING_TYPES = ["default", "eps", "v_prediction", "lcm", "x0", "img_to_img"];
 
 // Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
 const PIPE_ROWS = [
@@ -66,6 +68,8 @@ const PIPE_ROWS = [
   { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
   { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
   { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
+  { key: "rng",            label: "RNG",            widget: "rng",            type: "list", options: RNGS },
+  { key: "model_sampling", label: "Model Sampling", widget: "model_sampling", type: "list", options: MODEL_SAMPLING_TYPES },
 ];
 
 // Link options arrays (updated after async load)
@@ -75,6 +79,8 @@ function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
   PIPE_ROWS.find(r => r.key === "clip_type").options    = CLIP_TYPES;
   PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
+  PIPE_ROWS.find(r => r.key === "rng").options            = RNGS;
+  PIPE_ROWS.find(r => r.key === "model_sampling").options = MODEL_SAMPLING_TYPES;
 }
 _syncRowOptions();
 
@@ -89,9 +95,13 @@ async function _loadPipeOptions() {
     const samplers   = (inputs?.required?.sampler_name?.[0] ?? []);
     const schedulers = (inputs?.required?.scheduler?.[0]    ?? []);
     const clipTypes  = (inputs?.optional?.clip_type?.[0]    ?? []);
+    const rngs           = (inputs?.optional?.rng?.[0]            ?? []);
+    const modelSamplings = (inputs?.optional?.model_sampling?.[0] ?? []);
     if (samplers.length)   { SAMPLERS   = samplers;   }
     if (schedulers.length) { SCHEDULERS = schedulers; }
     if (clipTypes.length)  { CLIP_TYPES.length = 0; CLIP_TYPES.push(...clipTypes); }
+    if (rngs.length)           { RNGS = rngs; }
+    if (modelSamplings.length) { MODEL_SAMPLING_TYPES = modelSamplings; }
     _syncRowOptions();
   } catch (e) {
     console.warn("[CWK Pipe] Could not load sampler/scheduler/clip_type options:", e);
@@ -384,6 +394,8 @@ async function _fetchAndApplyPreset(node, modelName) {
     clip_name:    preset.clip_name,
     clip_type:    preset.clip_type,
     vae_name:     preset.vae_name,
+    rng:            preset.rng ?? "default",
+    model_sampling: preset.model_sampling ?? "default",
   };
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const val = map[PIPE_ROWS[i].key];
@@ -483,6 +495,8 @@ async function handleUpdatePresets(node) {
     clip_name:    vals.clip_name,
     clip_type:    vals.clip_type,
     vae_name:     vals.vae_name,
+    rng:            vals.rng,
+    model_sampling: vals.model_sampling,
   };
 
   try {
@@ -643,6 +657,8 @@ app.registerExtension({
         clip_name:    "embedded",
         clip_type:    "stable_diffusion",
         vae_name:     "embedded",
+        rng:            "default",
+        model_sampling: "default",
       };
       node.color   = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
@@ -663,6 +679,8 @@ app.registerExtension({
         const cn = getW("clip_name");    if (cn) cn.value = "embedded";
         const vn = getW("vae_name");     if (vn) vn.value = "embedded";
         const ct = getW("clip_type");    if (ct) ct.value = "stable_diffusion";
+        const rg = getW("rng");            if (rg) rg.value = "default";
+        const ms = getW("model_sampling"); if (ms) ms.value = "default";
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
         node.size[1] = calcNodeHeight();

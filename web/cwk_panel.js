@@ -11,8 +11,8 @@ import { showModelInfo }                   from "./cwk_model_info.js";
 const DEFAULTS = {
   sampler_name: "euler", scheduler: "normal",
   cfg: 7.0, steps: 20, clip_skip: -2,
-  width: 1024, height: 1024, rng: "cpu",
-  model_sampling: "eps",
+  width: 1024, height: 1024, rng: "default",
+  model_sampling: "default",
   clip_name: "embedded", clip_type: "stable_diffusion", vae_name: "embedded",
 };
 
@@ -198,6 +198,7 @@ export class ModelBrowserPanel {
             <div class="cwk-sidebar-col">
               <div class="cwk-sidebar-title">RNG:</div>
               <select class="cwk-sidebar-input" id="sb-rng" disabled>
+                <option value="default">default</option>
                 <option value="cpu">cpu</option>
                 <option value="gpu">gpu</option>
                 <option value="nv">nv</option>
@@ -207,6 +208,7 @@ export class ModelBrowserPanel {
           <div class="cwk-sidebar-section">
             <div class="cwk-sidebar-title">Model Sampling:</div>
             <select class="cwk-sidebar-input" id="sb-model-sampling" disabled>
+              <option value="default">default</option>
               <option value="eps">eps</option>
               <option value="v_prediction">v_prediction</option>
               <option value="lcm">lcm</option>
@@ -389,12 +391,13 @@ export class ModelBrowserPanel {
 
   async _populateDropdowns() {
     try {
-      const { samplers, schedulers, clip_types, model_sampling_types } =
+      const { samplers, schedulers, clip_types, model_sampling_types, rng_types } =
         await apiFetch("/cwk/sampler_scheduler_list");
       this._fillSelect("sb-sampler",   samplers   ?? []);
       this._fillSelect("sb-scheduler", schedulers ?? []);
       if (clip_types?.length)           this._fillSelect("sb-clip-type",     clip_types);
       if (model_sampling_types?.length) this._fillSelect("sb-model-sampling", model_sampling_types);
+      if (rng_types?.length)            this._fillSelect("sb-rng",           rng_types);
     } catch {
       this._fillSelect("sb-sampler",   ["euler","euler_ancestral","dpmpp_2m","dpmpp_sde","ddim"]);
       this._fillSelect("sb-scheduler", ["normal","karras","exponential","sgm_uniform","simple"]);
@@ -961,8 +964,8 @@ export class ModelBrowserPanel {
     document.getElementById("sb-height").value           = p.height;
     this._setSelectValue("sb-sampler",         p.sampler_name);
     this._setSelectValue("sb-scheduler",       p.scheduler);
-    this._setSelectValue("sb-rng",             p.rng ?? "cpu");
-    this._setSelectValue("sb-model-sampling",  p.model_sampling ?? "eps");
+    this._setSelectValue("sb-rng",             p.rng ?? "default");
+    this._setSelectValue("sb-model-sampling",  p.model_sampling ?? "default");
     this._setSelectValue("sb-clip-name",       p.clip_name ?? "embedded");
     this._setSelectValue("sb-clip-type",       p.clip_type ?? "stable_diffusion");
     this._setSelectValue("sb-vae-name",        p.vae_name  ?? "embedded");

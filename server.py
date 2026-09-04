@@ -18,7 +18,7 @@ from .nodes import (
     get_clip_list, get_vae_list,
     resolve_sampler, resolve_scheduler,
     get_last_used_model, save_last_used_model,
-    RESOLUTION_PRESETS, MODEL_SAMPLING_TYPES, _get_clip_types,
+    RESOLUTION_PRESETS, MODEL_SAMPLING_TYPES_WITH_DEFAULT, RNG_TYPES_WITH_DEFAULT, _get_clip_types,
 )
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -1041,7 +1041,8 @@ async def handle_sampler_scheduler_list(req: web.Request) -> web.Response:
         "samplers":             list(comfy.samplers.KSampler.SAMPLERS),
         "schedulers":           list(comfy.samplers.KSampler.SCHEDULERS),
         "clip_types":           _get_clip_types(),
-        "model_sampling_types": MODEL_SAMPLING_TYPES,
+        "model_sampling_types": MODEL_SAMPLING_TYPES_WITH_DEFAULT,
+        "rng_types":            RNG_TYPES_WITH_DEFAULT,
     })
 
 

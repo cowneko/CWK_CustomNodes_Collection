@@ -18,7 +18,7 @@ from .nodes import (
     get_clip_list, get_vae_list,
     resolve_sampler, resolve_scheduler,
     get_last_used_model, save_last_used_model,
-    RESOLUTION_PRESETS,
+    RESOLUTION_PRESETS, MODEL_SAMPLING_TYPES, _get_clip_types,
 )
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -1033,6 +1033,18 @@ async def handle_list_vaes(req: web.Request) -> web.Response:
     return web.json_response({"vaes": get_vae_list()})
 
 
+async def handle_sampler_scheduler_list(req: web.Request) -> web.Response:
+    """Return the real ComfyUI sampler/scheduler lists, plus clip type and
+    model sampling options, for populating the preset editor dropdowns."""
+    import comfy.samplers
+    return web.json_response({
+        "samplers":             list(comfy.samplers.KSampler.SAMPLERS),
+        "schedulers":           list(comfy.samplers.KSampler.SCHEDULERS),
+        "clip_types":           _get_clip_types(),
+        "model_sampling_types": MODEL_SAMPLING_TYPES,
+    })
+
+
 # ─── Download handler (SSE progress stream) ───────────────────────────────────
 
 async def handle_download_version(req: web.Request) -> web.StreamResponse:
@@ -1273,6 +1285,7 @@ def register_routes(app: web.Application) -> None:
     r.add_get   ("/cwk/civitai/meta",                 handle_get_meta)
     r.add_get   ("/cwk/clips",                        handle_list_clips)
     r.add_get   ("/cwk/vaes",                         handle_list_vaes)
+    r.add_get   ("/cwk/sampler_scheduler_list",       handle_sampler_scheduler_list)
     r.add_get   ("/cwk/last_model",                   handle_last_model)
     r.add_post  ("/cwk/last_model",                   handle_save_last_model)
     r.add_get   ("/cwk/resolution_presets",           handle_resolution_presets)

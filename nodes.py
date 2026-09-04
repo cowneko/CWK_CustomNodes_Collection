@@ -54,6 +54,10 @@ def save_last_used_model(model_name: str) -> None:
 
 MODEL_SAMPLING_TYPES = ["eps", "v_prediction", "lcm", "x0", "img_to_img"]
 
+# ─── RNG types ──────────────────────────────────────────────────────────────────
+
+RNG_TYPES = ["cpu", "gpu", "nv"]
+
 
 # ─── Resolution presets ────────────────────────────────────────────────────────
 
@@ -722,7 +726,7 @@ class CWK_ModelLoaderPipe:
                 "clip_name": (get_clip_list(),),
                 "clip_type": (_get_clip_types(), {"default": _default_clip_type(_get_clip_types())}),
                 "vae_name":  (get_vae_list(),),
-                "rng":            (["default", "cpu", "gpu", "nv"],),
+                "rng":            (["default"] + RNG_TYPES,),
                 "model_sampling": (["default"] + MODEL_SAMPLING_TYPES,),
             },
         }

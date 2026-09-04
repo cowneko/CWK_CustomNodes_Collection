@@ -391,12 +391,13 @@ export class ModelBrowserPanel {
 
   async _populateDropdowns() {
     try {
-      const { samplers, schedulers, clip_types, model_sampling_types } =
+      const { samplers, schedulers, clip_types, model_sampling_types, rng_types } =
         await apiFetch("/cwk/sampler_scheduler_list");
       this._fillSelect("sb-sampler",   samplers   ?? []);
       this._fillSelect("sb-scheduler", schedulers ?? []);
       if (clip_types?.length)           this._fillSelect("sb-clip-type",     clip_types);
       if (model_sampling_types?.length) this._fillSelect("sb-model-sampling", model_sampling_types);
+      if (rng_types?.length)            this._fillSelect("sb-rng",           rng_types);
     } catch {
       this._fillSelect("sb-sampler",   ["euler","euler_ancestral","dpmpp_2m","dpmpp_sde","ddim"]);
       this._fillSelect("sb-scheduler", ["normal","karras","exponential","sgm_uniform","simple"]);

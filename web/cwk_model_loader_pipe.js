@@ -55,8 +55,8 @@ let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"]
 let CLIPS      = ["embedded"];
 let CLIP_TYPES = ["stable_diffusion"];
 let VAES       = ["embedded"];
-const RNGS              = ["default", "cpu", "gpu", "nv"];
-const MODEL_SAMPLING_TYPES = ["default", "eps", "v_prediction", "lcm", "x0", "img_to_img"];
+let RNGS              = ["default", "cpu", "gpu", "nv"];
+let MODEL_SAMPLING_TYPES = ["default", "eps", "v_prediction", "lcm", "x0", "img_to_img"];
 
 // Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
 const PIPE_ROWS = [
@@ -79,6 +79,8 @@ function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
   PIPE_ROWS.find(r => r.key === "clip_type").options    = CLIP_TYPES;
   PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
+  PIPE_ROWS.find(r => r.key === "rng").options            = RNGS;
+  PIPE_ROWS.find(r => r.key === "model_sampling").options = MODEL_SAMPLING_TYPES;
 }
 _syncRowOptions();
 
@@ -93,9 +95,13 @@ async function _loadPipeOptions() {
     const samplers   = (inputs?.required?.sampler_name?.[0] ?? []);
     const schedulers = (inputs?.required?.scheduler?.[0]    ?? []);
     const clipTypes  = (inputs?.optional?.clip_type?.[0]    ?? []);
+    const rngs           = (inputs?.optional?.rng?.[0]            ?? []);
+    const modelSamplings = (inputs?.optional?.model_sampling?.[0] ?? []);
     if (samplers.length)   { SAMPLERS   = samplers;   }
     if (schedulers.length) { SCHEDULERS = schedulers; }
     if (clipTypes.length)  { CLIP_TYPES.length = 0; CLIP_TYPES.push(...clipTypes); }
+    if (rngs.length)           { RNGS = rngs; }
+    if (modelSamplings.length) { MODEL_SAMPLING_TYPES = modelSamplings; }
     _syncRowOptions();
   } catch (e) {
     console.warn("[CWK Pipe] Could not load sampler/scheduler/clip_type options:", e);

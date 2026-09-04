@@ -770,6 +770,12 @@ class CWK_ModelLoaderPipe:
         vae   = pipe.get("vae")
 
         # ── Apply RNG & model sampling (centralized here for both pipe/override paths) ──
+        # NOTE: this patches whatever model is resolved above, whether it came from
+        # `pipe` or `model_override`. Feeding in a model that has already been
+        # patched (e.g. re-using a previous CWK_ModelLoaderPipe output as
+        # model_override) will apply the patch on top of the existing one; pass an
+        # unpatched model (raw CheckpointLoaderSimple output) via model_override
+        # for the documented "identical to plain checkpoint" behavior.
         if rng and rng != "default":
             model = _apply_rng(model, rng)
         if model_sampling and model_sampling != "default":
@@ -826,7 +832,8 @@ class CWK_ModelLoaderPipe:
         print(
             f"[CWK Pipe] model={pipe.get('model_name','?')} | "
             f"sampler={sampler_name} sched={scheduler} cfg={cfg} "
-            f"steps={steps} clip_skip={clip_skip}"
+            f"steps={steps} clip_skip={clip_skip} "
+            f"rng={rng} model_sampling={model_sampling}"
         )
         return (pipe, model, clip, vae, latent, sampler_name, scheduler, cfg, steps, clip_skip, infos)
 

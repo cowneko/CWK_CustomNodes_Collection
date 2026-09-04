@@ -61,8 +61,10 @@ CLIP_SKIP_OPTIONS  = [CLIP_SKIP_DISABLED] + [str(-i) for i in range(1, 25)]
 
 
 def _normalize_clip_skip(value) -> Optional[int]:
-    """Convert a clip_skip value (int, numeric string, or 'Disabled') to an int,
-    or return None when clip skip is disabled / cannot be parsed."""
+    """Convert a clip_skip value (int, numeric string, or 'Disabled') to an int
+    in the valid -24..-1 range, or return None when clip skip is disabled,
+    unparsable, or out of range (e.g. a legacy 0 — in that case the CLIP is
+    left untouched, which is the closest meaningful behavior)."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -74,9 +76,12 @@ def _normalize_clip_skip(value) -> Optional[int]:
         except (ValueError, TypeError):
             return None
     try:
-        return int(value)
+        ivalue = int(value)
     except (ValueError, TypeError):
         return None
+    if not -24 <= ivalue <= -1:
+        return None
+    return ivalue
 
 
 # ─── Resolution presets ────────────────────────────────────────────────────────
@@ -790,7 +795,7 @@ class CWK_ModelLoaderPipe:
         scheduler:     str,
         cfg:           float,
         steps:         int,
-        clip_skip      = "-2",
+        clip_skip:     Any = "-2",
         model_override = None,
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",

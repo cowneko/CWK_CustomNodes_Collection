@@ -983,12 +983,16 @@ export class ModelBrowserPanel {
   }
 
   // Normalize a stored clip_skip value (int, numeric string, or "Disabled")
-  // to the string used by the sb-clip-skip dropdown.
+  // to the string used by the sb-clip-skip dropdown. Mirrors the backend's
+  // _normalize_clip_skip: legacy/out-of-range numerics (e.g. 0) -> "Disabled"
+  // (CLIP untouched); unrecognised non-numeric values -> "-2" default.
   _fmtClipSkip(v) {
     if (v === undefined || v === null) return "-2";
     const s = String(v).trim();
     if (s.toLowerCase() === CLIP_SKIP_DISABLED.toLowerCase()) return CLIP_SKIP_DISABLED;
-    return CLIP_SKIP_OPTIONS.includes(s) ? s : "-2";
+    if (CLIP_SKIP_OPTIONS.includes(s)) return s;
+    if (!isNaN(Number(s)) && s !== "") return CLIP_SKIP_DISABLED;
+    return "-2";
   }
 
   _getSidebarPreset() {

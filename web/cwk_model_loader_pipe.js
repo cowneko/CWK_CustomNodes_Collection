@@ -374,12 +374,16 @@ function _findModelName(node, visited = new Set()) {
 // ─── Preset fetch / apply / status helpers ────────────────────────────────────
 
 // Normalize a stored clip_skip value (int, numeric string, or "Disabled")
-// to the string used by the clip_skip dropdown row.
+// to the string used by the clip_skip dropdown row. Mirrors the backend's
+// _normalize_clip_skip: legacy/out-of-range numerics (e.g. 0) -> "Disabled"
+// (CLIP untouched); unrecognised non-numeric values -> "-2" default.
 function _fmtClipSkip(v) {
   if (v === undefined || v === null) return "-2";
   const s = String(v).trim();
   if (s.toLowerCase() === CLIP_SKIP_DISABLED.toLowerCase()) return CLIP_SKIP_DISABLED;
-  return CLIP_SKIPS.includes(s) ? s : "-2";
+  if (CLIP_SKIPS.includes(s)) return s;
+  if (!isNaN(Number(s)) && s !== "") return CLIP_SKIP_DISABLED;
+  return "-2";
 }
 
 async function _fetchAndApplyPreset(node, modelName) {

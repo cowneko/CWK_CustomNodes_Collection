@@ -1,16 +1,18 @@
 /**
  * CWK Model Loader Pipe — ComfyUI canvas node extension.
- * Pipeline companion for CWK_ModelLoader: sampler/scheduler/CFG/steps/clip-skip
- * with a "Load Preset" button that pulls values from the connected loader.
+ * Pipeline companion for CWK_ModelLoader: sampler/scheduler/CFG/steps/clip-skip/
+ * CLIP/VAE, auto-synced from the connected loader's stored preset, with
+ * Reload/Edit/Update Presets buttons.
  */
 
 import { app }          from "../../scripts/app.js";
+import { api }          from "../../scripts/api.js";
 import { injectStyles } from "./cwk_styles.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const NODE_TYPE  = "CWK_ModelLoaderPipe";
-const NODE_MIN_W = 300;
+const NODE_MIN_W = 320;
 
 const PAD       = 10;
 const ROW_H     = 26;
@@ -18,11 +20,13 @@ const LABEL_W   = 100;
 const ARROW_W   = 20;
 const BTN_H     = 26;
 const BTN_PAD_V = 8;
+const BTN_GAP   = 6;
+const STATUS_H  = 20;
 const BTNS_AREA_H = BTN_PAD_V + BTN_H + BTN_PAD_V;
 
 const TITLE_H    = () => LiteGraph.NODE_TITLE_HEIGHT ?? 30;
 const SLOT_H     = () => LiteGraph.NODE_SLOT_HEIGHT  ?? 20;
-const N_INPUTS   = 4;   // pipe + latent + model_override + clip_override
+const N_INPUTS   = 3;   // pipe + latent + model_override
 const N_OUTPUTS  = 10;  // pipe, model, clip, vae, latent, sampler, scheduler, cfg, steps, clip_skip, infos
 
 // ─── Colour palette (identical) ──────────────────────────────────────────────
@@ -48,19 +52,26 @@ const BTN_COLOR = { border: "#313552", hoverBorder: "#a6e3a1", hoverText: "#a6e3
 
 let SAMPLERS   = ["euler","euler_ancestral","dpmpp_2m","dpmpp_2m_sde","dpmpp_sde","ddim","uni_pc","lcm"];
 let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"];
+let CLIPS      = ["embedded"];
+let VAES       = ["embedded"];
 
+// Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
 const PIPE_ROWS = [
   { key: "sampler_name", label: "Sampler",   widget: "sampler_name", type: "list",  options: null },
   { key: "scheduler",    label: "Scheduler", widget: "scheduler",    type: "list",  options: null },
   { key: "cfg",          label: "CFG",       widget: "cfg",          type: "float", min: 0, max: 30  },
   { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
   { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "int",   min: -24, max: 0  },
+  { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
+  { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
 ];
 
 // Link options arrays (updated after async load)
 function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "sampler_name").options = SAMPLERS;
   PIPE_ROWS.find(r => r.key === "scheduler").options    = SCHEDULERS;
+  PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
+  PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
 }
 _syncRowOptions();
 
@@ -79,6 +90,22 @@ async function _loadPipeOptions() {
     _syncRowOptions();
   } catch (e) {
     console.warn("[CWK Pipe] Could not load sampler/scheduler options:", e);
+  }
+  try {
+    const [clipRes, vaeRes] = await Promise.all([
+      fetch("/cwk/clips"),
+      fetch("/cwk/vaes"),
+    ]);
+    if (clipRes.ok) {
+      const { clips } = await clipRes.json();
+      if (clips?.length) { CLIPS.length = 0; CLIPS.push(...clips); _syncRowOptions(); }
+    }
+    if (vaeRes.ok) {
+      const { vaes } = await vaeRes.json();
+      if (vaes?.length) { VAES.length = 0; VAES.push(...vaes); _syncRowOptions(); }
+    }
+  } catch (e) {
+    console.warn("[CWK Pipe] Could not load CLIP/VAE lists:", e);
   }
 }
 _loadPipeOptions();
@@ -102,9 +129,19 @@ function getRowY(i) {
   return y;
 }
 
-function getButtonRect(node) {
-  const baseY = node.size[1] - BTNS_AREA_H + BTN_PAD_V;
-  return { x: PAD, y: baseY, w: node.size[0] - PAD * 2, h: BTN_H };
+function getStatusY(node) {
+  return node.size[1] - BTNS_AREA_H - STATUS_H / 2;
+}
+
+function getButtonRects(node) {
+  const baseY  = node.size[1] - BTNS_AREA_H + BTN_PAD_V;
+  const totalW = node.size[0] - PAD * 2;
+  const btnW   = (totalW - BTN_GAP * 2) / 3;
+  return [
+    { key: "reload", x: PAD,                        y: baseY, w: btnW, h: BTN_H },
+    { key: "edit",   x: PAD + (btnW + BTN_GAP),      y: baseY, w: btnW, h: BTN_H },
+    { key: "update", x: PAD + (btnW + BTN_GAP) * 2,  y: baseY, w: btnW, h: BTN_H },
+  ];
 }
 
 function getValueRect(node, i) {
@@ -116,17 +153,20 @@ function getValueRect(node, i) {
 function calcNodeHeight() {
   let h = getRowsStartY();
   for (let i = 0; i < PIPE_ROWS.length; i++) h += ROW_H + 3;
-  return h + PAD + BTNS_AREA_H;
+  return h + PAD + STATUS_H + BTNS_AREA_H;
 }
 
 // ─── Hit testing ──────────────────────────────────────────────────────────────
 
 function hitTestButton(node, lx, ly) {
-  const r = getButtonRect(node);
-  return (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) ? "load_preset" : null;
+  for (const r of getButtonRects(node)) {
+    if (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) return r.key;
+  }
+  return null;
 }
 
 function hitTestRow(node, lx, ly) {
+  if (!node._cwkEditMode) return null;
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const ry  = getRowY(i);
     if (ly < ry || ly > ry + ROW_H) continue;
@@ -320,47 +360,143 @@ function _findModelName(node, visited = new Set()) {
   return _findModelName(srcNode, visited);
 }
 
-// ─── "Load Preset" — pull values from the upstream CWK_ModelLoader ───────────
+// ─── Preset fetch / apply / status helpers ────────────────────────────────────
 
-async function handleLoadPreset(node) {
-  const modelName = _findModelName(node);
+async function _fetchAndApplyPreset(node, modelName) {
+  const res = await fetch(`/cwk/preset?model=${encodeURIComponent(modelName)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const { preset } = await res.json();
+  if (!preset) throw new Error("No preset found");
 
-  if (!modelName) {
-    _flashButton(node, "⚠ No model found"); return;
+  node._cwkPreset = preset;
+
+  const map = {
+    sampler_name: preset.sampler_name,
+    scheduler:    preset.scheduler,
+    cfg:          preset.cfg,
+    steps:        preset.steps,
+    clip_skip:    preset.clip_skip,
+    clip_name:    preset.clip_name,
+    vae_name:     preset.vae_name,
+  };
+  for (let i = 0; i < PIPE_ROWS.length; i++) {
+    const val = map[PIPE_ROWS[i].key];
+    if (val !== undefined) applyRowValue(node, i, val);
   }
+  // clip_type has no dedicated row, but still needs to reach the hidden widget
+  const ctW = node.widgets?.find(w => w.name === "clip_type");
+  if (ctW && preset.clip_type !== undefined) { ctW.value = preset.clip_type; ctW.callback?.(preset.clip_type); }
+
+  return preset;
+}
+
+function _setStatus(node, text, color) {
+  node._cwkStatus = text ? { text, color: color ?? C.flashGreen } : null;
+  app.canvas.setDirty(true, false);
+}
+
+function _flashButton(node, label, color) {
+  node._cwkFlash      = true;
+  node._cwkFlashLabel = label;
+  node._cwkFlashColor = color ?? C.flashGreen;
+  app.canvas.setDirty(true, false);
+  setTimeout(() => {
+    node._cwkFlash = false; node._cwkFlashLabel = null; node._cwkFlashColor = null;
+    app.canvas.setDirty(true, false);
+  }, 1800);
+}
+
+// ─── "Reload Presets" — pull values from the upstream CWK_ModelLoader ─────────
+
+async function handleReloadPresets(node) {
+  const modelName = _findModelName(node) ?? node._cwkLastModelName;
+  if (!modelName) { _flashButton(node, "⚠ No model found", C.red ?? "#e78284"); return; }
+  node._cwkLastModelName = modelName;
 
   try {
-    const res = await fetch(`/cwk/preset?model=${encodeURIComponent(modelName)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { preset } = await res.json();
-    if (!preset) { _flashButton(node, "⚠ No preset found"); return; }
-
-    const map = {
-      sampler_name: preset.sampler_name,
-      scheduler:    preset.scheduler,
-      cfg:          preset.cfg,
-      steps:        preset.steps,
-      clip_skip:    preset.clip_skip,
-    };
-    for (let i = 0; i < PIPE_ROWS.length; i++) {
-      const val = map[PIPE_ROWS[i].key];
-      if (val !== undefined) applyRowValue(node, i, val);
-    }
+    await _fetchAndApplyPreset(node, modelName);
+    _setStatus(node, "✓ Model preset loaded");
     _flashButton(node, "✓ Preset loaded!");
   } catch (e) {
-    console.warn("[CWK Pipe] Load preset failed:", e);
-    _flashButton(node, "✗ Fetch failed");
+    console.warn("[CWK Pipe] Reload preset failed:", e);
+    _flashButton(node, "✗ Fetch failed", "#e78284");
   }
 }
 
-function _flashButton(node, label) {
-  node._cwkFlash      = true;
-  node._cwkFlashLabel = label;
+// ─── Automatic sync when the upstream model changes ───────────────────────────
+
+async function _checkAutoSync(node) {
+  const modelName = _findModelName(node);
+  if (!modelName || modelName === node._cwkLastModelName) return;
+  node._cwkLastModelName = modelName;
+  if (node._cwkEditMode) return; // don't clobber unsaved edits
+
+  try {
+    await _fetchAndApplyPreset(node, modelName);
+    _setStatus(node, "✓ Model preset loaded");
+  } catch (e) {
+    console.warn("[CWK Pipe] Auto-sync preset failed:", e);
+  }
+}
+
+// ─── "Edit Presets" — toggle read-only rows on/off ────────────────────────────
+
+async function handleEditPresetsToggle(node) {
+  if (!node._cwkEditMode) {
+    node._cwkEditMode = true;
+    _setStatus(node, null);
+  } else {
+    node._cwkEditMode = false;
+    // Cancelling edit mode discards unsaved changes: reload the stored preset.
+    const modelName = _findModelName(node) ?? node._cwkLastModelName;
+    if (modelName) {
+      try {
+        await _fetchAndApplyPreset(node, modelName);
+        _setStatus(node, "✓ Model preset loaded");
+      } catch (e) {
+        console.warn("[CWK Pipe] Reload on cancel failed:", e);
+      }
+    }
+  }
   app.canvas.setDirty(true, false);
-  setTimeout(() => {
-    node._cwkFlash = false; node._cwkFlashLabel = null;
-    app.canvas.setDirty(true, false);
-  }, 1800);
+}
+
+// ─── "Update Presets" — persist current row values to checkpoint_presets.json ─
+
+async function handleUpdatePresets(node) {
+  if (!node._cwkEditMode) { _flashButton(node, "⚠ Enter edit mode first", "#e5c07b"); return; }
+
+  const modelName = _findModelName(node) ?? node._cwkLastModelName;
+  if (!modelName) { _flashButton(node, "⚠ No model found", "#e78284"); return; }
+
+  const vals   = node._cwkValues ?? {};
+  const merged = {
+    ...(node._cwkPreset ?? {}),
+    sampler_name: vals.sampler_name,
+    scheduler:    vals.scheduler,
+    cfg:          vals.cfg,
+    steps:        vals.steps,
+    clip_skip:    vals.clip_skip,
+    clip_name:    vals.clip_name,
+    vae_name:     vals.vae_name,
+  };
+
+  try {
+    const res = await fetch("/cwk/preset", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ model: modelName, preset: merged }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    node._cwkPreset  = data.preset ?? merged;
+    node._cwkEditMode = false;
+    _flashButton(node, "✓ Preset updated!");
+    _setStatus(node, "✓ Model preset loaded");
+  } catch (e) {
+    console.warn("[CWK Pipe] Update preset failed:", e);
+    _flashButton(node, "✗ Update failed", "#e78284");
+  }
 }
 
 // ─── Draw ─────────────────────────────────────────────────────────────────────
@@ -370,11 +506,12 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function drawNode(node, ctx) {
-  const w       = node.size[0];
-  const h       = node.size[1];
-  const hover   = node._cwkHover;
-  const vals    = node._cwkValues ?? {};
-  const cornerR = LiteGraph.NODE_BORDER_RADIUS ?? 8;
+  const w         = node.size[0];
+  const h         = node.size[1];
+  const hover     = node._cwkHover;
+  const vals      = node._cwkValues ?? {};
+  const editMode  = !!node._cwkEditMode;
+  const cornerR   = LiteGraph.NODE_BORDER_RADIUS ?? 8;
 
   ctx.save();
   ctx.beginPath(); ctx.roundRect(0, 0, w, h, cornerR); ctx.clip();
@@ -390,13 +527,13 @@ function drawNode(node, ctx) {
   const divY = getRowsStartY() - PAD / 2;
   ctx.moveTo(PAD, divY); ctx.lineTo(w - PAD, divY); ctx.stroke();
 
-  // ── Rows ──
+  // ── Rows (read-only unless in edit mode) ──
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const row     = PIPE_ROWS[i];
     const ry      = getRowY(i);
     const vr      = getValueRect(node, i);
     const val     = vals[row.key] ?? (row.options ? row.options[0] : (row.type === "float" ? 7.0 : 1));
-    const isHov   = hover?.rowIdx === i;
+    const isHov   = editMode && hover?.rowIdx === i;
     const hovPart = isHov ? hover.part : null;
 
     if (isHov) {
@@ -409,42 +546,66 @@ function drawNode(node, ctx) {
     ctx.fillText(row.label, PAD + 4, ry + ROW_H/2);
     // Value box
     roundRect(ctx, vr.x, vr.y, vr.w, vr.h, 4);
-    ctx.fillStyle   = C.surface;
+    ctx.fillStyle   = editMode ? C.surface : C.bg;
     ctx.strokeStyle = isHov ? C.border : "transparent";
     ctx.lineWidth = 1; ctx.fill(); if (isHov) ctx.stroke();
     // Value content
     if (row.type === "list") {
-      ctx.fillStyle = isHov ? C.arrowHov : C.textDim;
-      ctx.font = "9px sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      ctx.fillText("▾", vr.x + vr.w - 5, ry + ROW_H/2);
-      ctx.fillStyle = C.text; ctx.font = "11px Inter,system-ui,sans-serif";
-      ctx.textAlign = "left";
+      if (editMode) {
+        ctx.fillStyle = isHov ? C.arrowHov : C.textDim;
+        ctx.font = "9px sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+        ctx.fillText("▾", vr.x + vr.w - 5, ry + ROW_H/2);
+      }
+      ctx.fillStyle = editMode ? C.text : C.textDim;
+      ctx.font = "11px Inter,system-ui,sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
       ctx.fillText(String(val), vr.x + 6, ry + ROW_H/2, vr.w - 18);
     } else {
       ctx.font = "10px sans-serif"; ctx.textBaseline = "middle";
-      ctx.fillStyle = (hovPart === "left")  ? C.arrowHov : C.textDim;
-      ctx.textAlign = "left";  ctx.fillText("◀", vr.x + 4, ry + ROW_H/2);
-      ctx.fillStyle = (hovPart === "right") ? C.arrowHov : C.textDim;
-      ctx.textAlign = "right"; ctx.fillText("▶", vr.x + vr.w - 4, ry + ROW_H/2);
-      ctx.fillStyle = (hovPart === "center") ? C.arrowHov : C.text;
+      if (editMode) {
+        ctx.fillStyle = (hovPart === "left")  ? C.arrowHov : C.textDim;
+        ctx.textAlign = "left";  ctx.fillText("◀", vr.x + 4, ry + ROW_H/2);
+        ctx.fillStyle = (hovPart === "right") ? C.arrowHov : C.textDim;
+        ctx.textAlign = "right"; ctx.fillText("▶", vr.x + vr.w - 4, ry + ROW_H/2);
+      }
+      ctx.fillStyle = editMode ? ((hovPart === "center") ? C.arrowHov : C.text) : C.textDim;
       ctx.font = "11px Inter,system-ui,sans-serif"; ctx.textAlign = "center";
       ctx.fillText(String(val), vr.x + vr.w/2, ry + ROW_H/2, vr.w - ARROW_W*2 - 4);
     }
   }
 
-  // ── Button ──
-  const br      = getButtonRect(node);
-  const isHov   = hover?.key === "load_preset";
-  const isFlash = !!node._cwkFlash;
-  const btnLabel = isFlash ? node._cwkFlashLabel : "💾 Load Preset";
-  roundRect(ctx, br.x, br.y, br.w, br.h, 5);
-  ctx.fillStyle   = isHov ? C.hoverBg : C.surface;
-  ctx.strokeStyle = isHov ? BTN_COLOR.hoverBorder : BTN_COLOR.border;
-  ctx.lineWidth = 1; ctx.fill(); ctx.stroke();
-  ctx.fillStyle = isFlash ? C.flashGreen : (isHov ? BTN_COLOR.hoverText : C.text);
-  ctx.font = "bold 11px Inter,system-ui,sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(btnLabel, br.x + br.w/2, br.y + br.h/2, br.w - 8);
+  // ── Status line (persistent "Model preset loaded" / transient flash) ──
+  const flashActive = !!node._cwkFlash;
+  const statusText  = flashActive ? node._cwkFlashLabel : (node._cwkStatus?.text ?? null);
+  const statusColor = flashActive ? (node._cwkFlashColor ?? C.flashGreen) : (node._cwkStatus?.color ?? C.flashGreen);
+  if (statusText) {
+    ctx.fillStyle = statusColor;
+    ctx.font = "bold 11px Inter,system-ui,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(statusText, w / 2, getStatusY(node), w - PAD * 2);
+  }
+
+  // ── Buttons ──
+  const labels = {
+    reload: "🔄 Reload Presets",
+    edit:   editMode ? "✖ Cancel Edit" : "✏️ Edit Presets",
+    update: "💾 Update Presets",
+  };
+  for (const br of getButtonRects(node)) {
+    const isHov      = hover?.key === br.key;
+    const isActive   = br.key === "edit" && editMode;
+    const isDisabled = br.key === "update" && !editMode;
+    roundRect(ctx, br.x, br.y, br.w, br.h, 5);
+    ctx.fillStyle   = isActive ? C.hoverBg : (isHov && !isDisabled ? C.hoverBg : C.surface);
+    ctx.strokeStyle = isActive ? C.arrowHov : ((isHov && !isDisabled) ? BTN_COLOR.hoverBorder : BTN_COLOR.border);
+    ctx.lineWidth = 1; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isDisabled ? C.textDim
+                  : isActive   ? C.arrowHov
+                  : (isHov ? BTN_COLOR.hoverText : C.text);
+    ctx.font = "bold 11px Inter,system-ui,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(labels[br.key], br.x + br.w/2, br.y + br.h/2, br.w - 8);
+  }
 
   ctx.restore();
 }
@@ -461,15 +622,22 @@ app.registerExtension({
       injectStyles();
       const node = this;
 
-      node._cwkHover      = null;
-      node._cwkFlash      = false;
-      node._cwkFlashLabel = null;
-      node._cwkValues     = {
+      node._cwkHover        = null;
+      node._cwkFlash        = false;
+      node._cwkFlashLabel   = null;
+      node._cwkFlashColor   = null;
+      node._cwkEditMode     = false;
+      node._cwkLastModelName = null;
+      node._cwkStatus       = null;
+      node._cwkPreset       = null;
+      node._cwkValues       = {
         sampler_name: "euler",
         scheduler:    "normal",
         cfg:          7.0,
         steps:        20,
         clip_skip:    -2,
+        clip_name:    "embedded",
+        vae_name:     "embedded",
       };
       node.color   = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
@@ -487,11 +655,27 @@ app.registerExtension({
         const cv = getW("cfg");          if (cv) cv.value = 7.0;
         const st = getW("steps");        if (st) st.value = 20;
         const cs = getW("clip_skip");    if (cs) cs.value = -2;
+        const cn = getW("clip_name");    if (cn) cn.value = "embedded";
+        const vn = getW("vae_name");     if (vn) vn.value = "embedded";
+        const ct = getW("clip_type");    if (ct) ct.value = "stable_diffusion";
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
         node.size[1] = calcNodeHeight();
         app.canvas.setDirty(true, true);
       }, 0);
+
+      // Poll for upstream model changes and auto-sync the preset (unless editing).
+      // Also react immediately whenever any node finishes executing (e.g. the
+      // upstream CWK_ModelLoader loading a new model).
+      node._cwkAutoSyncInterval = setInterval(() => _checkAutoSync(node), 500);
+      const onExecuted = () => _checkAutoSync(node);
+      api.addEventListener("executed", onExecuted);
+      const prevOnRemoved = node.onRemoved;
+      node.onRemoved = function () {
+        if (node._cwkAutoSyncInterval) { clearInterval(node._cwkAutoSyncInterval); node._cwkAutoSyncInterval = null; }
+        api.removeEventListener("executed", onExecuted);
+        prevOnRemoved?.apply(this, arguments);
+      };
 
       node.onDrawForeground = function (ctx) {
 		if (this.flags?.collapsed) return;
@@ -505,7 +689,11 @@ app.registerExtension({
 
       node.onMouseDown = function (e, pos) {
         const btnKey = hitTestButton(this, pos[0], pos[1]);
-        if (btnKey === "load_preset") { handleLoadPreset(node); return true; }
+        if (btnKey === "reload") { handleReloadPresets(node); return true; }
+        if (btnKey === "edit")   { handleEditPresetsToggle(node); return true; }
+        if (btnKey === "update") { handleUpdatePresets(node); return true; }
+
+        if (!node._cwkEditMode) return false; // rows are read-only outside edit mode
 
         const hit = hitTestRow(this, pos[0], pos[1]);
         if (!hit || hit.part === null) return false;
@@ -539,7 +727,7 @@ app.registerExtension({
           }
           return;
         }
-        const hit    = hitTestRow(this, pos[0], pos[1]);
+        const hit    = node._cwkEditMode ? hitTestRow(this, pos[0], pos[1]) : null;
         const newHov = hit ? { rowIdx: hit.rowIdx, part: hit.part } : null;
         if (JSON.stringify(node._cwkHover) !== JSON.stringify(newHov)) {
           node._cwkHover = newHov; app.canvas.setDirty(true, false);

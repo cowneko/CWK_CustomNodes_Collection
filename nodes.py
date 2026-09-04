@@ -722,7 +722,9 @@ class CWK_ModelLoaderPipe:
             },
             "optional": {
                 "model_override": ("MODEL", {}),
-                "clip_override":  ("CLIP",  {}),
+                "clip_name": (get_clip_list(),),
+                "clip_type": (_get_clip_types(),),
+                "vae_name":  (get_vae_list(),),
             },
         }
 
@@ -757,12 +759,32 @@ class CWK_ModelLoaderPipe:
         steps:         int,
         clip_skip:     int,
         model_override = None,
-        clip_override  = None,
+        clip_name:      str = "embedded",
+        clip_type:      str = "stable_diffusion",
+        vae_name:       str = "embedded",
     ) -> tuple:
-        # ── Override model / clip from optional inputs ─────────────────────────
+        # ── Override model from optional input ─────────────────────────────────
         model = model_override if model_override is not None else pipe.get("model")
-        clip  = clip_override  if clip_override  is not None else pipe.get("clip")
+        clip  = pipe.get("clip")
         vae   = pipe.get("vae")
+
+        # ── External CLIP ──────────────────────────────────────────────────────
+        clip_overridden = bool(clip_name and clip_name != "embedded")
+        if clip_overridden:
+            try:
+                clip = _load_external_clip(clip_name, clip_type)
+                print(f"[CWK Pipe] External CLIP: {clip_name} (type={clip_type})")
+            except Exception as e:
+                print(f"[CWK Pipe] Warning: could not load CLIP '{clip_name}': {e}")
+
+        # ── External VAE ────────────────────────────────────────────────────────
+        vae_overridden = bool(vae_name and vae_name != "embedded")
+        if vae_overridden:
+            try:
+                vae = _load_external_vae(vae_name)
+                print(f"[CWK Pipe] External VAE: {vae_name}")
+            except Exception as e:
+                print(f"[CWK Pipe] Warning: could not load VAE '{vae_name}': {e}")
 
         # ── Apply clip_skip ────────────────────────────────────────────────────
         if clip is not None:
@@ -776,12 +798,15 @@ class CWK_ModelLoaderPipe:
         # ── Resolve sampler / scheduler ────────────────────────────────────────
         sampler_name, scheduler = resolve_sampler_scheduler(sampler_name, scheduler)
 
-        # ── Build infos JSON string ────────────────────────────────────────────
+        # ── Build infos JSON string (reflect what was actually applied) ────────
+        applied_vae_name  = vae_name  if vae_overridden  else pipe.get("vae_name",  "embedded")
+        applied_clip_name = clip_name if clip_overridden else pipe.get("clip_name", "embedded")
+        applied_clip_type = clip_type if clip_overridden else pipe.get("clip_type", "stable_diffusion")
         infos = json.dumps({
             "model_name":     pipe.get("model_name",    ""),
-            "vae_name":       pipe.get("vae_name",      "embedded"),
-            "clip_name":      pipe.get("clip_name",     "embedded"),
-            "clip_type":      pipe.get("clip_type",     "stable_diffusion"),
+            "vae_name":       applied_vae_name,
+            "clip_name":      applied_clip_name,
+            "clip_type":      applied_clip_type,
             "sampler_name":   sampler_name,
             "scheduler":      scheduler,
             "cfg":            cfg,

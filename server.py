@@ -83,6 +83,9 @@ def _save_json(path: str, data: dict) -> None:
 
 # ─── Per-model metadata ───────────────────────────────────────────────────────
 
+_UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
 def _normalize_model_key(model_name: str) -> str:
     """Normalize path separators to `/` so the same model is always keyed
     identically regardless of OS path-separator style (Windows returns
@@ -95,7 +98,7 @@ def _legacy_safe_filename(model_name: str) -> str:
     """Pre-migration metadata filename scheme. Kept only so `_load_meta()`
     can transparently pick up metadata saved before the collision-resistant
     scheme below was introduced — do not use for new writes."""
-    safe = re.sub(r'[<>:"/\\|?*]', '_', model_name or "")
+    safe = _UNSAFE_FILENAME_CHARS.sub('_', model_name or "")
     return safe + ".json"
 
 
@@ -110,7 +113,7 @@ def _safe_filename(model_name: str) -> str:
     original name guarantees uniqueness while staying human-readable.
     """
     normalized = _normalize_model_key(model_name)
-    safe   = re.sub(r'[<>:"/\\|?*]', '_', normalized)
+    safe   = _UNSAFE_FILENAME_CHARS.sub('_', normalized)
     suffix = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
     return f"{safe}.{suffix}.json"
 

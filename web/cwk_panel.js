@@ -386,6 +386,8 @@ export class ModelBrowserPanel {
 
     const middle = (this._baseModelMatchers || STATIC_BASE_MODEL_FILTERS)
       .filter(f => Array.isArray(f.match));
+    // Pre-lowercase each matcher's keywords once, outside the per-model loop.
+    const middleLc = middle.map(f => f.match.map(s => s.toLowerCase()));
 
     // Single pass over the model list: compute each model's base-model
     // string once, then tally it against exactly one matcher (or "Others").
@@ -394,7 +396,7 @@ export class ModelBrowserPanel {
     for (const m of this._models) {
       const raw = (m.civitai?.base_model ?? m.civitai?.baseModel ?? "").toLowerCase();
       const idx = raw
-        ? middle.findIndex(f => f.match.some(s => raw.includes(s.toLowerCase())))
+        ? middleLc.findIndex(keywords => keywords.some(s => raw.includes(s)))
         : -1;
       if (idx === -1) othersCount++;
       else counts[idx]++;

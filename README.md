@@ -1,517 +1,231 @@
 # CWK Custom Nodes Collection
 
-A comprehensive collection of ComfyUI custom nodes for model loading, preset management, and latent image generation. This collection provides powerful tools to streamline your ComfyUI workflows with specialized nodes for advanced model operations, configuration management, and creative image generation.
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Node Categories](#node-categories)
-  - [Model Loader Nodes](#model-loader-nodes)
-  - [Pipe Nodes](#pipe-nodes)
-  - [WAN2.2 Nodes](#wan22-nodes)
-  - [Utility Nodes](#utility-nodes)
-- [Quick Start](#quick-start)
-- [Usage Examples](#usage-examples)
-- [Configuration](#configuration)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Support](#support)
-
-## Features
-
-✨ **Rich Node Library** - Comprehensive collection of custom nodes covering model operations, pipeline management, and image generation
-
-🎯 **Model Loading** - Advanced model loading capabilities with support for various model formats and optimization options
-
-⚙️ **Preset Management** - Save, load, and manage workflow presets for consistent and reproducible results
-
-🔄 **Pipe System** - Modular pipe nodes for creating complex, reusable workflows
-
-🎨 **Latent Generation** - Sophisticated latent space manipulation and image generation tools
-
-🚀 **Performance Optimized** - Designed for efficiency and speed
-
-📦 **Well Documented** - Comprehensive documentation and examples
+A collection of ComfyUI custom nodes for model loading, preset management, prompt composition, and latent image generation — including a dedicated toolset for Wan2.2 video workflows.
 
 ## Installation
 
-### Prerequisites
-
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) installed and configured
-- Python 3.8 or higher
-- Git
-
-### Setup Instructions
-
-1. Navigate to your ComfyUI installation directory:
-```bash
-cd ComfyUI/custom_nodes
-```
-
+1. Navigate to your ComfyUI custom nodes folder:
+   ```bash
+   cd ComfyUI/custom_nodes
+   ```
 2. Clone this repository:
-```bash
-git clone https://github.com/cowneko/CWK_CustomNodes_Collection.git
-cd CWK_CustomNodes_Collection
-```
+   ```bash
+   git clone https://github.com/cowneko/CWK_CustomNodes_Collection.git
+   ```
+3. Restart ComfyUI. The nodes will appear under the `CWK` category in the node menu.
 
-3. Install any required dependencies (if applicable):
-```bash
-pip install -r requirements.txt
-```
+> Some Loader nodes support `.gguf` models and require [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) (city96) to be installed for GGUF checkpoint/CLIP loading.
 
-4. Restart ComfyUI to load the new custom nodes
-
-5. The nodes should now appear in ComfyUI's node menu under their respective categories
-
-### Updating
-
-To update to the latest version:
+To update:
 ```bash
 cd ComfyUI/custom_nodes/CWK_CustomNodes_Collection
-git pull origin main
+git pull
 ```
 
-## Node Categories
-
-### Model Loader Nodes
-
-Model loader nodes provide advanced capabilities for loading and managing various model types used in your workflows.
-
-#### Available Model Loader Nodes:
-
-- **CWK Model Loader** - Standard model loader with format detection and automatic optimization
-  - Supports multiple model formats (Safetensors, CKPT, etc.)
-  - Automatic device optimization (GPU/CPU)
-  - Model validation and error checking
-  - Memory management options
-
-- **CWK Checkpoint Loader** - Specialized checkpoint loading with fine-tuning options
-  - Load specific checkpoints
-  - Layer-specific loading
-  - Checkpoint validation
-  - Preview loaded model information
-
-- **CWK Model Manager** - Central model management interface
-  - Load multiple models simultaneously
-  - Model caching and optimization
-  - Version tracking
-  - Model metadata handling
-
-- **CWK LoRA Loader** - LoRA weight loading and blending
-  - Load single or multiple LoRA models
-  - Strength parameter adjustment
-  - LoRA blending capabilities
-  - Compatibility checking
-
-- **CWK Embedding Loader** - Text embedding and token handling
-  - Load custom embeddings
-  - Embedding validation
-  - Token management
-
-**Common Parameters:**
-- Model path selection
-- Device selection (auto/CPU/GPU)
-- Memory optimization flags
-- Precision settings (fp32/fp16)
-
-### Pipe Nodes
-
-Pipe nodes form the backbone of the workflow system, allowing you to create modular, reusable pipelines.
-
-#### Available Pipe Nodes:
-
-- **CWK Main Pipe** - Core pipeline orchestration node
-  - Manages workflow state
-  - Coordinates between different node types
-  - Error handling and validation
-  - Flow control
-
-- **CWK Model Pipe** - Model-specific pipeline operations
-  - Model routing
-  - Sequential model loading
-  - Model switching
-  - State preservation
-
-- **CWK Generation Pipe** - Image generation pipeline management
-  - Generation settings management
-  - Quality parameters
-  - Output handling
-  - Batch processing coordination
-
-- **CWK Processing Pipe** - Data processing pipeline
-  - Latent space processing
-  - Image processing operations
-  - Batch operations
-  - Data transformation
-
-- **CWK Preset Pipe** - Preset configuration management
-  - Save current settings as presets
-  - Load preset configurations
-  - Preset switching
-  - Configuration versioning
-
-- **CWK Condition Pipe** - Conditional workflow branching
-  - Conditional logic evaluation
-  - Branch selection
-  - Flow control based on parameters
-  - Loop management
-
-**Features:**
-- Type checking and validation
-- Automatic error recovery
-- Performance monitoring
-- Logging and debugging options
-
-### WAN2.2 Nodes
-
-Specialized nodes for WAN 2.2 compatibility and enhanced functionality.
-
-#### Available WAN2.2 Nodes:
-
-- **CWK WAN2.2 Sampler** - Advanced sampling with WAN2.2 features
-  - Enhanced sampling algorithms
-  - Custom noise scheduling
-  - Advanced guidance options
-  - Quality enhancements
-
-- **CWK WAN2.2 Encoder** - WAN2.2 encoding operations
-  - Image to latent encoding
-  - Custom encoding parameters
-  - Optimization options
-  - Quality preservation
-
-- **CWK WAN2.2 Decoder** - WAN2.2 decoding operations
-  - Latent to image decoding
-  - Quality upsampling
-  - Post-processing options
-  - Output formatting
-
-- **CWK WAN2.2 Conditioning** - Advanced conditioning system
-  - CLIP text conditioning
-  - Weighted conditioning
-  - Negative conditioning
-  - Conditioning blending
-
-- **CWK WAN2.2 Model Adapter** - Model compatibility layer
-  - Automatic format conversion
-  - Version compatibility handling
-  - Performance optimization
-  - Fallback options
-
-**Advanced Features:**
-- Enhanced quality algorithms
-- Performance optimizations
-- Extended parameter sets
-- Advanced debugging options
-
-### Utility Nodes
-
-Essential utility nodes for workflow enhancement, debugging, and optimization.
-
-#### Available Utility Nodes:
-
-- **CWK Value Display** - Real-time value inspection
-  - Display numeric values
-  - Show text information
-  - Format options
-  - Logging capabilities
-
-- **CWK Preset Manager** - Comprehensive preset handling
-  - Save custom presets
-  - Load preset configurations
-  - Delete presets
-  - Export/import presets
-
-- **CWK Configuration Node** - Global configuration management
-  - Set global parameters
-  - Override defaults
-  - Performance tuning
-  - Debug options
-
-- **CWK Logger** - Workflow logging and debugging
-  - Log custom messages
-  - Performance metrics
-  - Error tracking
-  - File output options
-
-- **CWK Parameter Combiner** - Combine multiple parameters
-  - Merge parameter sets
-  - Override handling
-  - Type checking
-  - Validation
-
-- **CWK Batch Processor** - Batch operation handling
-  - Process multiple items
-  - Parallel processing options
-  - Result collection
-  - Error aggregation
-
-- **CWK Cache Manager** - Cache optimization
-  - Clear cache
-  - Cache statistics
-  - Memory management
-  - Performance monitoring
-
-**Utilities Include:**
-- Type conversion helpers
-- Error handling utilities
-- Performance profiling tools
-- Configuration validators
-
-## Quick Start
-
-### Basic Workflow Setup
-
-1. **Start ComfyUI** and open the web interface
-
-2. **Add a Model Loader Node**:
-   - Right-click in the canvas
-   - Select `CWK Custom Nodes` → `Model Loader` → `CWK Model Loader`
-   - Configure your model path and settings
-
-3. **Add a Pipe Node**:
-   - Add `CWK Main Pipe` to organize your workflow
-   - Connect model loader output to pipe input
-
-4. **Add Processing Nodes**:
-   - Add generation or processing nodes as needed
-   - Connect through the pipe system
-
-5. **Run Your Workflow**:
-   - Queue the workflow
-   - Monitor progress in ComfyUI interface
-
-### Example Workflow Patterns
-
-#### Pattern 1: Simple Generation with Presets
-```
-Model Loader → Preset Pipe → Generation Pipe → Output
-```
-
-#### Pattern 2: Advanced Multi-Model Pipeline
-```
-Multiple Model Loaders → Model Pipe → Generation Pipe → Processing → Output
-```
-
-#### Pattern 3: Conditional Workflows
-```
-Model Loader → Condition Pipe → [Branch A or B] → Processing → Output
-```
-
-## Usage Examples
-
-### Example 1: Loading and Using a Model
-
-1. Add `CWK Model Loader` node
-2. Select your model from the file browser
-3. Set precision to `fp16` for memory optimization
-4. Select your GPU device
-5. Connect to downstream nodes
-
-### Example 2: Using Presets
-
-1. Configure your workflow with desired settings
-2. Add `CWK Preset Manager` node
-3. Set preset name (e.g., "My Workflow v1")
-4. Click "Save Preset"
-5. Later, load with one click for consistency
-
-### Example 3: Batch Processing
-
-1. Add `CWK Batch Processor` node
-2. Configure batch size and processing options
-3. Load multiple inputs
-4. Enable parallel processing if desired
-5. Run and collect results
-
-### Example 4: Advanced Generation with WAN2.2
-
-1. Load model with `CWK Model Loader`
-2. Add `CWK WAN2.2 Sampler`
-3. Configure sampling parameters
-4. Add `CWK WAN2.2 Conditioning`
-5. Set up text prompts and weights
-6. Execute and monitor progress
-
-## Configuration
-
-### Global Settings
-
-Configuration can be managed through:
-
-1. **CWK Configuration Node** - Per-workflow configuration
-2. **Config Files** - System-wide settings
-3. **Environment Variables** - System-level overrides
-
-### Performance Tuning
-
-- **Memory Optimization**: Enable fp16 precision in model loaders
-- **Batch Size**: Adjust batch processor settings for your GPU
-- **Caching**: Use cache manager to optimize memory usage
-- **Device Selection**: Manually set GPU/CPU allocation
-
-### Debugging
-
-Enable debug mode through:
-- Add `CWK Logger` node to your workflow
-- Set log level in configuration
-- Use `CWK Value Display` nodes for inspection
-- Check console output for detailed logs
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue: Nodes not appearing in ComfyUI menu**
-- Solution: Restart ComfyUI completely
-- Check that files are in `custom_nodes/CWK_CustomNodes_Collection/`
-- Verify Python version is 3.8+
-
-**Issue: Model loading errors**
-- Solution: Verify model path is correct
-- Check model file integrity
-- Try different precision settings (fp16 vs fp32)
-- Ensure sufficient GPU memory
-
-**Issue: Out of memory errors**
-- Solution: Enable fp16 precision
-- Reduce batch size in processors
-- Clear cache using `CWK Cache Manager`
-- Close other applications
-
-**Issue: Performance is slow**
-- Solution: Use fp16 precision for faster inference
-- Enable GPU acceleration
-- Reduce image resolution
-- Check system resource usage with logger
-
-**Issue: Preset loading fails**
-- Solution: Verify preset file exists and is readable
-- Check preset compatibility with current version
-- Try recreating the preset
-- Check file permissions
-
-### Getting Help
-
-If you encounter issues:
-
-1. Check this README and documentation
-2. Review ComfyUI logs for error messages
-3. Enable debug logging with `CWK Logger`
-4. Search existing GitHub issues
-5. Open a new issue with detailed error information
-
-## Contributing
-
-We welcome contributions to improve this collection!
-
-### How to Contribute
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes
-4. Add tests if applicable
-5. Commit your changes (`git commit -am 'Add new feature'`)
-6. Push to the branch (`git push origin feature/your-feature`)
-7. Open a Pull Request
-
-### Guidelines
-
-- Follow existing code style and patterns
-- Add documentation for new nodes
-- Test thoroughly in ComfyUI
-- Include usage examples
-- Update README if adding new functionality
+## Table of Contents
+
+- [Loaders](#loaders)
+  - [CWK Model Browser](#cwk-model-browser)
+  - [CWK Model Loader](#cwk-model-loader)
+  - [CWK Model Loader Pipe](#cwk-model-loader-pipe)
+- [Utilities](#utilities)
+  - [CWK Latent Image](#cwk-latent-image)
+  - [CWK Batch Selector](#cwk-batch-selector)
+  - [CWK Live Preview](#cwk-live-preview)
+- [Prompting](#prompting)
+  - [CWK Prompt Composer](#cwk-prompt-composer)
+- [Wan2.2 Nodes](#wan22-nodes)
+  - [CWK Wan2.2 Prompt Composer](#cwk-wan22-prompt-composer)
+  - [CWK Wan2.2 Pipeline Splitter](#cwk-wan22-pipeline-splitter)
+  - [CWK Wan2.2 LoRA Applier](#cwk-wan22-lora-applier)
+  - [CWK Wan2.2 Loop Open](#cwk-wan22-loop-open)
+  - [CWK Wan2.2 Loop Close](#cwk-wan22-loop-close)
+  - [CWK Wan2.2 Image Prep](#cwk-wan22-image-prep)
+
+---
+
+## Loaders
+*(Category: `CWK/Loaders`)*
+
+### CWK Model Browser
+*(Not a graph node — a frontend panel backed by REST/SSE routes in `server.py`)*
+
+A visual model browser/manager integrated into the ComfyUI UI (via the `web/` frontend) for organizing and enriching your checkpoint/diffusion/GGUF model library, with built-in CivitAI integration.
+
+- **Model listing** — `GET /cwk/models` lists all checkpoints, diffusion models, and `.gguf` files, along with file size, path, saved preset, and cached CivitAI metadata.
+- **CivitAI metadata & thumbnails** — hashes each model file (SHA-256, cached in `hash_cache.json`) and looks it up against CivitAI's `model-versions/by-hash` API to fetch its name, base model, tags, NSFW level, and preview images.
+  - `POST /cwk/civitai/fetch/stream` / `POST /cwk/civitai/refresh/all` — bulk fetch via Server-Sent Events, with progress streaming.
+  - `POST /cwk/civitai/refresh` — refresh a single model's metadata.
+  - `GET /cwk/civitai/images`, `GET /cwk/civitai/meta`, `GET /cwk/civitai/model-description` — fetch cached images, raw metadata, and the full CivitAI model description.
+  - `POST /cwk/civitai/meta/edit` — manually override fields (`civitai_name`, `version_name`, `base_model`) that survive future CivitAI refreshes.
+- **Thumbnails** — `POST /cwk/civitai/thumbnail/set` (from a CivitAI image URL) or `POST /cwk/civitai/thumbnail/local` (manual upload), served from `local_thumbnails/`.
+- **Auto-populated presets** — when CivitAI example images include generation metadata (sampler, scheduler, CFG, steps, clip skip, resolution), it's automatically extracted and saved as that model's preset (via the same sampler/scheduler fuzzy-resolution system used by CWK Model Loader Pipe).
+- **Version management** — `GET /cwk/civitai/versions` lists all CivitAI versions of a model and flags which are already installed; `POST /cwk/civitai/download` downloads a chosen version with SSE progress, then auto-fetches its metadata and preset once complete.
+- **Update checking** — `POST /cwk/civitai/check-updates` compares installed versions against CivitAI to flag models with newer versions available.
+- **Favorites & cleanup** — `POST /cwk/model/favorite` to star models; `DELETE /cwk/model` to delete a model file plus its cached metadata and preset; `DELETE /cwk/civitai/cache` to clear all cached metadata.
+- **Last-used model** — `GET/POST /cwk/last_model` persists and restores the last model used in `CWK Model Loader` across sessions.
+- **Supporting lookups** — `GET /cwk/clips`, `GET /cwk/vaes`, `GET /cwk/sampler_scheduler_list`, `GET /cwk/resolution_presets` feed the browser's and loader nodes' dropdown options.
+
+> Requires a CivitAI API key (entered in the browser panel) for hash lookups, version listing, downloads, and update checks.
+
+### CWK Model Loader
+**Class:** `CWK_ModelLoader`
+
+Simplified model loader that auto-detects checkpoint, diffusion-model (UNet), and GGUF formats from a single dropdown.
+
+- **Inputs:**
+  - `model_name` (required) — combined list of checkpoints, diffusion models, and `.gguf` models.
+  - `clip_name` (optional) — external CLIP override (`embedded` by default). Supports `.gguf` CLIP via ComfyUI-GGUF.
+  - `clip_type` (optional) — CLIP type (`stable_diffusion`, `flux`, `wan`, etc., dynamically read from `comfy.sd.CLIPType`).
+  - `vae_name` (optional) — external VAE override (`embedded` by default).
+- **Outputs:** `pipe` (`PIPE_LOADER`) — bundles model/clip/vae plus stored per-model preset data.
+- **Notes:**
+  - Persists the last-used model to `last_used_model.json`.
+  - Loads a matching preset from `checkpoint_presets.json` if one exists for the selected model.
+  - Automatically registers `.gguf` as a valid checkpoint/diffusion-model extension.
+
+### CWK Model Loader Pipe
+**Class:** `CWK_ModelLoaderPipe`
+
+Companion pipeline node that expands a `PIPE_LOADER` into individual outputs, applying sampling/CLIP settings in one place.
+
+- **Inputs:**
+  - `pipe` (`PIPE_LOADER`, required) — from CWK Model Loader.
+  - `latent` (`LATENT`, required) — passthrough.
+  - `sampler_name`, `scheduler`, `cfg`, `steps`, `clip_skip` (required).
+  - `model_override` (`MODEL`, optional) — bypasses the model from `pipe`.
+  - `clip_name`, `clip_type`, `vae_name` (optional) — external overrides.
+  - `rng` (optional) — `default | cpu | gpu | nv`, patches ComfyUI's noise generator (`cwk_rng`).
+  - `model_sampling` (optional) — `default | eps | v_prediction | lcm | x0 | img_to_img` model-sampling patch.
+- **Outputs:** `pipe`, `model`, `clip`, `vae`, `latent`, `sampler_name`, `scheduler`, `cfg`, `steps`, `clip_skip`, `infos` (JSON string summarizing all applied settings).
+- **Notes:**
+  - Includes a sampler/scheduler **fuzzy-matching fallback system** (handles aliases like `"DPM++ 2M Karras"`, `"Euler A"`, etc.) so stored presets or older workflow strings still resolve to valid ComfyUI sampler/scheduler names.
+  - `clip_skip` supports a `"Disabled"` sentinel to pass CLIP through untouched.
+
+---
+
+## Utilities
+*(Category: `CWK/Utilities`)*
+
+### CWK Latent Image
+**Class:** `CWK_LatentImage`
+
+Resolution + batch-size node that outputs an empty `LATENT`, with built-in presets for SDXL, SD1.5, Flux, and Wan resolutions.
+
+- **Inputs:** `resolution_preset` (dropdown of named presets, or `(preset)` for manual), `width`, `height`, `batch_size`.
+- **Outputs:** `latent`, `width`, `height`.
+- **Notes:** Selecting a named preset overrides the manual width/height fields.
+
+### CWK Batch Selector
+**Class:** `CWKBatchSelector`
+
+Pauses workflow execution to let you manually pick which image(s) from a batch to keep, with live preview thumbnails in the UI.
+
+- **Inputs:** `images` (required); `latents`, `graph_id` (optional); hidden `prompt`/`extra_pnginfo`/`uid`.
+- **Outputs:** `images` (selected only), `latents` (matching selection), `indexes` (comma-separated string of chosen indices).
+- **Behavior:**
+  - If the batch size is 1, passes through automatically without pausing.
+  - Sends preview URLs to the frontend and blocks until the user clicks **Send**, **Cancel**, or **Re-Generate**.
+  - **Re-Generate** interrupts and re-queues the prompt; **Cancel** or an empty selection interrupts processing entirely.
+
+### CWK Live Preview
+**Class:** `CWKLivePreview`
+
+Passive display node that shows real-time image previews during sampling, independent of ComfyUI's global "Preview Method" setting.
+
+- **Inputs/Outputs:** none — it's a display-only node.
+- **Notes:** Works via a WebSocket event (`cwk_live_preview`) patched into `latent_preview.prepare_callback` at import time; enabled/disabled globally through a toggle route (`/cwk_live_preview/toggle`) exposed to the ComfyUI Settings panel.
+
+---
+
+## Prompting
+*(Category: `CWK/Prompting`)*
+
+### CWK Prompt Composer
+**Class:** `CWKPromptComposerNode`
+
+Visual, pill-based prompt editor with an A1111-compatible attention-weight parser, tag/wildcard/preset browsing, and optional CLIP encoding — all handled through a custom JS frontend backed by REST endpoints.
+
+- **Inputs:**
+  - `positive_prompt`, `negative_prompt` (multiline strings, required).
+  - `clip` (optional) — if connected, prompts are encoded to conditioning.
+  - `parser` (optional) — `comfy` (default) or `A1111` attention-weight syntax (`(tag:1.3)`, `[tag]`, `BREAK`, escaped brackets, etc.).
+  - `flux_guidance` (optional, default `3.5`) — sets the `guidance` value on positive conditioning (Flux models).
+  - `zero_out_negative` (optional, default `False`) — zeroes negative conditioning (equivalent to ComfyUI's `ConditioningZeroOut`).
+- **Outputs:** `positive_prompt`, `negative_prompt` (strings), `positive_cond`, `negative_cond` (`CONDITIONING`, empty lists if no CLIP is connected).
+- **Backing REST endpoints** (used by the JS UI, not called directly by users):
+  - `GET /cwk/tags/{key}` — serves tag lists (`quality`, `style`, `aesthetic`, `main`, `negative`); auto-downloads a Danbooru tag list for `main` on first use.
+  - `POST /cwk/add_tag` — appends a new tag to a tag file, alphabetically.
+  - `GET /cwk/embeddings` — lists available embedding files for autocomplete.
+  - `GET /cwk/wildcards`, `GET /cwk/wildcards/{filename}` — lists/serves YAML wildcard files from `wildcards/`.
+  - `GET|POST /cwk/presets`, `DELETE /cwk/presets/{name}` — list, save, and delete prompt presets stored in `presets/`.
+  - `POST /cwk/export` — bundles selected tag files and/or presets into a single JSON export.
+
+---
+
+## Wan2.2 Nodes
+*(Category: `CWK/Wan2.2`)*
+
+A set of nodes for building multi-clip, looping Wan 2.2 image-to-video pipelines with per-clip prompts, seeds, and LoRA stacks.
+
+### CWK Wan2.2 Prompt Composer
+**Class:** `CWK_Wan22PromptComposer`
+
+Converts a JSON block list (built by the JS frontend) into a `WAN22_PIPELINE` — one entry per clip, with prompt, duration→frame-count conversion, seed, and separate high/low-noise LoRA lists.
+
+- **Inputs:** `frame_rate` (FLOAT, forced input), `pipeline_data` (STRING, JSON).
+- **Outputs:** `pipeline` (`WAN22_PIPELINE`).
+- **Notes:** Disabled blocks (`"disabled": true`) are filtered out before frame-count calculation.
+
+### CWK Wan2.2 Pipeline Splitter
+**Class:** `CWK_Wan22PipelineSplitter`
+
+Extracts a single clip's data from a `WAN22_PIPELINE` by index — useful for static (non-looping) multi-KSampler graphs.
+
+- **Inputs:** `pipeline` (`WAN22_PIPELINE`), `clip_index` (INT, 1-based).
+- **Outputs:** `prompt`, `frame_count`, `lora_stack_high`, `lora_stack_low`, `seed`.
+
+### CWK Wan2.2 LoRA Applier
+**Class:** `CWK_Wan22LoraApplier`
+
+Applies a `LORA_STACK` to a model/clip pair via ComfyUI's standard `LoraLoader`, one LoRA at a time — safe to use inside looping graphs.
+
+- **Inputs:** `model` (MODEL), `clip` (CLIP), `lora_stack` (LORA_STACK).
+- **Outputs:** `model`, `clip`.
+- **Usage:** Connect once for the high-noise stack (keep the CLIP output), and once for the low-noise stack (CLIP output can be left unconnected).
+
+### CWK Wan2.2 Loop Open
+**Class:** `CWK_Wan22LoopOpen`
+
+Loop entry point that tracks per-clip iteration state across re-queues, feeding one clip's prompt/seed/LoRAs at a time.
+
+- **Inputs:** `pipeline` (`WAN22_PIPELINE`), `start_image` (IMAGE), `overlap` (INT, default 5), `overlap_mode` (`blend_linear | blend_sqrt | replace`), `overlap_side` (`start | end`), `force_reset` (BOOLEAN, one-shot session reset).
+- **Outputs:** `current_image`, `prev_latent`, `prompt`, `frame_count`, `lora_stack_high`, `lora_stack_low`, `clip_seed`, `loop_state` (`WAN22_LOOP_STATE`).
+- **Notes:** Automatically resets its internal session if the pipeline fingerprint changes or the clip index overflows; broadcasts a `cwk_wan22_clip_active` WebSocket event per clip for UI highlighting.
+
+### CWK Wan2.2 Loop Close
+**Class:** `CWK_Wan22LoopClose`
+
+Loop exit / frame accumulator. Blends the new clip's frames into the running accumulation and either re-queues the graph for the next clip or returns the final video frames.
+
+- **Inputs:** `loop_state` (`WAN22_LOOP_STATE`), `new_images` (IMAGE), `new_latent` (LATENT), `final_only` (BOOLEAN, default `True`).
+- **Outputs:** `images`, `final_latent`.
+- **Notes:**
+  - `final_only=True`: outputs a black placeholder frame on intermediate iterations so downstream video-combine nodes stay idle until the full sequence is ready.
+  - `final_only=False`: outputs the partial accumulation after every clip, for per-clip previewing.
+  - Sends `cwk_wan22_loop_continue` to trigger re-queue, and `cwk_wan22_clip_active` (`-1`) on completion.
+
+### CWK Wan2.2 Image Prep
+**Class:** `CWKWanImagePrep`
+
+Prepares a source image for WAN 2.2 I2V generation: interactive crop, aspect-correct resize to a target resolution, and passthrough of common generation parameters.
+
+- **Inputs:** `resolution_preset` (`16:9 832x480 | 16:9 1280x720 | 9:16 480x832 | 9:16 720x1280 | 1:1 1024x1024`), `crop_x/y/width/height`, `upscale_method`, `frame_rate`, `total_steps`, `split_steps`, `cfg_scale`, `scheduler`, `sampler`, `image_filename` (JS-managed upload); optional `image` (IMAGE) input.
+- **Outputs:** `image`, `width`, `height`, `frame_rate`, `scheduler`, `sampler_name`, `total_steps`, `split_steps`, `cfg_scale`.
+- **Notes:** Priority order for the source image is JS-uploaded file → connected `IMAGE` input → black placeholder. Cropping is sanitized to stay within image bounds, then scaled/center-cropped to the exact target resolution.
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-### MIT License Summary
-
-You are free to:
-- ✅ Use commercially
-- ✅ Modify the code
-- ✅ Distribute
-- ✅ Use privately
-
-Under the conditions that:
-- ⚠️ Include the license and copyright notice
-- ⚠️ State changes made to the code
-
-## Support
-
-### Getting Support
-
-- **Issues**: Open an issue on [GitHub Issues](https://github.com/cowneko/CWK_CustomNodes_Collection/issues)
-- **Discussions**: Use GitHub Discussions for questions and ideas
-- **Documentation**: Check the detailed node documentation in this repository
-- **ComfyUI Community**: Ask in ComfyUI community forums for general help
-
-### Resources
-
-- [ComfyUI GitHub Repository](https://github.com/comfyanonymous/ComfyUI)
-- [ComfyUI Documentation](https://github.com/comfyanonymous/ComfyUI/wiki)
-- [Community Discord](https://discord.gg/comfyui) - ComfyUI community support
-- This Repository's Issues Section - Bug reports and feature requests
-
-## Changelog
-
-### Version 1.0.0 (Initial Release)
-- Initial release of CWK Custom Nodes Collection
-- Model Loader nodes suite
-- Pipe system implementation
-- WAN2.2 node support
-- Utility nodes collection
-- Complete documentation
-
-## Credits
-
-Created by **cowneko** for the ComfyUI community.
-
-Special thanks to:
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) project
-- All contributors and testers
-- The amazing ComfyUI community
-
-## Repository Information
-
-- **Repository**: [cowneko/CWK_CustomNodes_Collection](https://github.com/cowneko/CWK_CustomNodes_Collection)
-- **Main Branch**: main
-- **License**: MIT
-- **Status**: Active Development
-
----
-
-## Additional Notes
-
-### Performance Considerations
-
-- Model loading time depends on model size and storage type
-- GPU memory usage varies by model and settings
-- Batch processing can significantly improve throughput
-- Caching improves repeated operations
-
-### Compatibility
-
-- **ComfyUI**: Tested with recent versions
-- **Python**: 3.8, 3.9, 3.10, 3.11+
-- **OS**: Windows, Linux, macOS
-- **GPU**: NVIDIA (CUDA), AMD (ROCm), CPU fallback
-
-### Future Enhancements
-
-Planned features for upcoming releases:
-- Additional model format support
-- Performance optimizations
-- Extended WAN2.2 capabilities
-- UI improvements
-- More utility nodes
-
----
-
-**Last Updated**: 2024
-
-For the latest information, visit the [GitHub repository](https://github.com/cowneko/CWK_CustomNodes_Collection).
+MIT — see [LICENSE](LICENSE).

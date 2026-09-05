@@ -79,13 +79,44 @@ function roundRect(ctx, x, y, w, h, r) {
 
 function sendResponse(node, msg = {}) {
   const gw = getW(node, "graph_id");
-  msg.graph_id = gw?.value || `${app.graph.id}` || `${node.id}`;
+  // graph_id is really a per-node correlation id: it must be identical at
+  // queue-time (baked into the workflow JSON, read by Python as the
+  // `graph_id` input) and at click-time (read here). `node.id` is always
+  // defined and stable for the lifetime of the node, unlike
+  // `app.graph.id` (which is undefined on ComfyUI's LGraph, so the old
+  // `${app.graph.id} || node.id` fallback never actually triggered and
+  // every node ended up sharing the literal string "undefined").
+  msg.graph_id = gw?.value || `${node.id}`;
   if (!msg.special) {
     msg.selection = Array.from(node._cwkbs.picked);
   }
   const body = new FormData();
   body.append("response", JSON.stringify(msg));
-  api.fetchApi("/cwk-batch-selector-message", { method: "POST", body });
+
+  // Fire-and-forget was silently swallowing delivery failures (network
+  // errors, non-OK responses, or the backend rejecting a graph_id/waiting
+  // mismatch). Await it and surface any failure via console.warn so a
+  // broken round-trip is visible instead of just "Send does nothing".
+  api.fetchApi("/cwk-batch-selector-message", { method: "POST", body })
+    .then(async (res) => {
+      if (!res.ok) {
+        console.warn(
+          `[CWK Batch Selector] Message POST failed: HTTP ${res.status}`, msg
+        );
+        return;
+      }
+      let ack = null;
+      try { ack = await res.json(); } catch (_e) { /* ignore parse errors */ }
+      if (ack && ack.ok === false) {
+        console.warn(
+          `[CWK Batch Selector] Message rejected by server (reason=${ack.reason}):`, msg
+        );
+      }
+    })
+    .catch((err) => {
+      console.warn("[CWK Batch Selector] Message POST threw an error:", err, msg);
+    });
+
   node._cwkbs.waiting = false;
   app.canvas.setDirty(true, true);
 }
@@ -653,7 +684,7 @@ app.registerExtension({
           w.computeSize = () => [0, -4];
         }
         const gw = getW(node, "graph_id");
-        if (gw) gw.value = `${app.graph.id}` || `${node.id}`;
+        if (gw) gw.value = `${node.id}`;
         if (node.size[0] < NODE_MIN_W) node.size[0] = NODE_MIN_W;
         if (node.size[1] < NODE_MIN_H) node.size[1] = Math.max(NODE_MIN_H, calcNaturalHeight(node));
         app.canvas.setDirty(true, true);
@@ -675,7 +706,7 @@ app.registerExtension({
           w.computeSize = () => [0, -4];
         }
         const gw = getW(node, "graph_id");
-        if (gw) gw.value = `${app.graph.id}` || `${node.id}`;
+        if (gw) gw.value = `${node.id}`;
 
         // Enforce minimums but KEEP the user's saved size
         node.size[0] = Math.max(NODE_MIN_W, node.size[0]);

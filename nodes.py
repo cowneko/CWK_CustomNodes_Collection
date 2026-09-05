@@ -19,6 +19,16 @@ import torch
 import folder_paths
 import comfy.samplers
 import comfy.sd
+from comfy.model_management import InterruptProcessingException
+
+# NOTE: cwk_batch_messaging.py registers the "/cwk-batch-selector-message"
+# aiohttp route via a `@PromptServer.instance.routes.post(...)` decorator.
+# ComfyUI freezes/applies all such routes once at startup (right after custom
+# nodes finish loading, before any node ever executes). This import MUST
+# happen here at module load time — importing it lazily inside execute()
+# would run long after routes are frozen, so the endpoint would silently
+# never be reachable (every Send/Cancel/Re-Generate POST would 404).
+from .cwk_batch_messaging import send_images_and_wait, RegenerateResponse
 
 # ─── Preset file path ─────────────────────────────────────────────────────────
 
@@ -951,9 +961,6 @@ class CWKBatchSelector:
 
     def execute(self, images, uid, graph_id="", latents=None,
                 prompt=None, extra_pnginfo=None, **_ignored):
-        from .cwk_batch_messaging import send_images_and_wait, RegenerateResponse
-        from comfy.model_management import InterruptProcessingException
-
         B = images.shape[0]
 
         # Pass-through for single image

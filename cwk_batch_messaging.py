@@ -4,6 +4,7 @@ Pauses the worker thread until the JS frontend POSTs a response.
 """
 
 import json
+import threading
 import time
 from typing import Optional
 
@@ -31,9 +32,15 @@ class RegenerateResponse(Response): pass
 
 
 # ── Shared state machine ────────────────────────────────────────────────────
+# Keyed per graph_id (in practice the originating node's UNIQUE_ID) so that
+# multiple CWKBatchSelector nodes / concurrent prompt executions don't clobber
+# each other's wait state. A single process-wide `_latest` slot previously
+# meant a second node calling start_waiting() would silently orphan the first
+# node's wait loop; this can no longer happen since each node gets its own
+# slot in `_waiters`.
 class MessageState:
-    _latest: "Optional[MessageState]" = None
-    graph_id_expected: Optional[str] = None
+    _waiters: "dict[str, MessageState]" = {}
+    _lock = threading.Lock()
 
     def __init__(self, data=None):
         if data is None:
@@ -48,37 +55,66 @@ class MessageState:
         self.special:  Optional[str] = data.pop("special",  None)
         self.response: Response       = Response(**data)
 
-    @classmethod
-    def latest(cls) -> "MessageState":
-        if cls._latest is None:
-            cls._latest = cls()
-        return cls._latest
+    def __repr__(self):
+        return (
+            f"MessageState(graph_id={self.graph_id!r}, special={self.special!r}, "
+            f"selection={self.response.selection!r})"
+        )
 
     @classmethod
-    def set_latest(cls, latest: "MessageState"):
-        cls._latest = latest
+    def start_waiting(cls, graph_id: str) -> None:
+        with cls._lock:
+            existing = cls._waiters.get(graph_id)
+            if existing is not None and existing.special == WAITING_FOR_RESPONSE:
+                print(
+                    f"[CWK Batch Selector] WARNING: start_waiting() called for "
+                    f"graph_id={graph_id!r} while a previous wait for the same id was "
+                    f"still active. The previous wait will be replaced; if that node is "
+                    f"still running it may now spin forever."
+                )
+            cls._waiters[graph_id] = cls({"special": WAITING_FOR_RESPONSE, "graph_id": graph_id})
 
     @classmethod
-    def start_waiting(cls, graph_id: str):
-        cls._latest = cls({"special": WAITING_FOR_RESPONSE})
-        cls.graph_id_expected = graph_id
+    def stop_waiting(cls, graph_id: str) -> None:
+        with cls._lock:
+            cls._waiters.pop(graph_id, None)
 
     @classmethod
-    def stop_waiting(cls):
-        cls._latest = cls()
-        cls.graph_id_expected = None
+    def waiting(cls, graph_id: str) -> bool:
+        with cls._lock:
+            state = cls._waiters.get(graph_id)
+            return state is not None and state.special == WAITING_FOR_RESPONSE
 
     @classmethod
-    def waiting(cls) -> bool:
-        return cls.latest().special == WAITING_FOR_RESPONSE
+    def get_response(cls, graph_id: str) -> Response:
+        with cls._lock:
+            state = cls._waiters.get(graph_id)
+        if state is None or state.special == WAITING_FOR_RESPONSE:
+            return TimeoutResponse()
+        if state.special == CANCEL:
+            return CancelledResponse()
+        if state.special == REGENERATE:
+            return RegenerateResponse()
+        return state.response
 
     @classmethod
-    def get_response(cls) -> Response:
-        l = cls.latest()
-        if l.special == WAITING_FOR_RESPONSE: return TimeoutResponse()
-        if l.special == CANCEL:               return CancelledResponse()
-        if l.special == REGENERATE:           return RegenerateResponse()
-        return l.response
+    def deliver(cls, msg: "MessageState"):
+        """Attempt to hand an incoming POSTed message to the waiter that
+        matches its graph_id. Returns (success, reason) for logging/ack."""
+        gid = msg.graph_id
+        with cls._lock:
+            state = cls._waiters.get(gid)
+            if state is None:
+                return False, "no_matching_waiter"
+            if state.special != WAITING_FOR_RESPONSE:
+                return False, "not_waiting"
+            cls._waiters[gid] = msg
+            return True, "ok"
+
+    @classmethod
+    def pending_graph_ids(cls) -> list:
+        with cls._lock:
+            return list(cls._waiters.keys())
 
 
 # ── HTTP endpoint — JS frontend posts here ──────────────────────────────────
@@ -86,33 +122,41 @@ class MessageState:
 async def _cwk_batch_selector_message(request):
     post = await request.post()
     raw  = post.get("response")
-    msg  = MessageState(raw)
 
-    if str(MessageState.graph_id_expected) == str(msg.graph_id):
-        if MessageState.waiting():
-            MessageState.set_latest(msg)
-        else:
-            print(f"[CWK Batch Selector] Ignoring response (not waiting): {raw}")
-    else:
-        print(f"[CWK Batch Selector] Ignoring mismatched graph_id: {raw}")
+    if raw is None:
+        print(
+            f"[CWK Batch Selector] Received POST with no 'response' field "
+            f"(form keys={list(post.keys())}); message dropped."
+        )
+        return web.json_response({"ok": False, "reason": "missing_response"}, status=400)
 
-    return web.json_response({})
+    msg = MessageState(raw)
+    print(f"[CWK Batch Selector] Received message: {msg}")
+
+    ok, reason = MessageState.deliver(msg)
+    if not ok:
+        print(
+            f"[CWK Batch Selector] Ignoring message (reason={reason}) for "
+            f"graph_id={msg.graph_id!r}; pending waiters={MessageState.pending_graph_ids()}"
+        )
+
+    return web.json_response({"ok": ok, "reason": reason})
 
 
 # ── Blocking wait loop (worker thread) ──────────────────────────────────────
 def _wait_for_response(uid: str, graph_id: str) -> Response:
     MessageState.start_waiting(graph_id)
     try:
-        while MessageState.waiting():
+        while MessageState.waiting(graph_id):
             throw_exception_if_processing_interrupted()
             PromptServer.instance.send_sync(
                 "cwk-batch-selector-tick",
                 {"tick": 0, "uid": uid, "graph_id": graph_id},
             )
             time.sleep(0.5)
-        return MessageState.get_response()
+        return MessageState.get_response(graph_id)
     finally:
-        MessageState.stop_waiting()
+        MessageState.stop_waiting(graph_id)
 
 
 def send_images_and_wait(payload: dict, uid: str, graph_id: str) -> Response:

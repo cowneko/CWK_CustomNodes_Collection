@@ -24,6 +24,12 @@ const NODE_TYPE = "CWKLivePreview";
 const NODE_COLOR = "#141824";
 const NODE_BGCOLOR = "#1e2335";
 
+// Preview area layout: margin around the image, vertical room left for the
+// node's title area, and the minimum node height.
+const PREVIEW_MARGIN = 4;
+const PREVIEW_TITLE_GAP = 20;
+const MIN_NODE_HEIGHT = 260;
+
 // ── Settings sync helpers (mirrors the VHS.LatentPreview pattern used in
 // cwk_wan22_prompt_composer.js, adapted for our own backend toggle route) ──
 const CWK_LIVE_PREVIEW_SETTING_KEY = "cwk.LivePreview.enabled";
@@ -96,8 +102,8 @@ app.registerExtension({
             // Fit the node's height to the image's aspect ratio so the
             // preview area itself matches the incoming image shape.
             const img = node._cwkImgObj;
-            const margin = 4;
-            const titleGap = 20;
+            const margin = PREVIEW_MARGIN;
+            const titleGap = PREVIEW_TITLE_GAP;
             const imgAspect = img.naturalWidth / img.naturalHeight;
             if (imgAspect > 0 && node.size && node.size[0] > margin * 2) {
               const boxW = node.size[0] - margin * 2;
@@ -106,7 +112,7 @@ app.registerExtension({
               // aspect ratio, to avoid jittery resizing on every preview
               // tick during a multi-step generation.
               if (boxH <= 0 || Math.abs(boxW / boxH - imgAspect) / imgAspect > 0.05) {
-                node.size[1] = Math.max(260, boxW / imgAspect + margin * 2 + titleGap);
+                node.size[1] = Math.max(MIN_NODE_HEIGHT, boxW / imgAspect + margin * 2 + titleGap);
               }
             }
             app.canvas.setDirty(true, true);
@@ -139,7 +145,7 @@ app.registerExtension({
         element: img,
       });
 
-      this.size = this.size && this.size[1] >= 260 ? this.size : [320, 320];
+      this.size = this.size && this.size[1] >= MIN_NODE_HEIGHT ? this.size : [320, 320];
       this._cwkImgEl = img;
       this._cwkHasPreview = false;
 
@@ -150,8 +156,8 @@ app.registerExtension({
         onDrawBackground?.apply(this, arguments);
         if (this.flags?.collapsed) return;
 
-        const margin = 4;
-        const titleGap = 20; // leave room for title area
+        const margin = PREVIEW_MARGIN;
+        const titleGap = PREVIEW_TITLE_GAP;
         const w = this.size[0] - margin * 2;
         const h = this.size[1] - margin * 2 - titleGap;
         if (w <= 0 || h <= 0) return;
@@ -214,7 +220,7 @@ app.registerExtension({
       
       node.color = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
-      node.size = node.size && node.size[1] >= 260 ? node.size : [320, 320];
+      node.size = node.size && node.size[1] >= MIN_NODE_HEIGHT ? node.size : [320, 320];
       
       if (!node._cwkImgEl) {
         const img = document.createElement("img");

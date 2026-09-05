@@ -7,6 +7,7 @@ import { app }               from "../../scripts/app.js";
 import { injectStyles }      from "./cwk_styles.js";
 import { ModelBrowserPanel } from "./cwk_panel.js";
 import { getBaseModelBadges, getBaseBadge as _getBaseBadgeFrom } from "./cwk_base_models.js";
+import { isVideoUrl }        from "./cwk_context_menu.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -195,19 +196,12 @@ function loadImage(url) {
   return img;
 }
 
-function _isVideoUrl(url, type) {
-  if (String(type ?? "").toLowerCase() === "video") return true;
-  if (!url) return false;
-  try { const p = new URL(url).pathname.toLowerCase(); return p.endsWith(".mp4") || p.endsWith(".webm"); }
-  catch { const l = url.toLowerCase(); return l.includes(".mp4") || l.includes(".webm"); }
-}
-
 function _resolveThumb(meta) {
   const thumb = meta?.thumbnail;
-  if (thumb && !_isVideoUrl(thumb)) return { url: thumb, blur: false };
+  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false };
   const images = meta?.images;
   if (!Array.isArray(images) || !images.length) return { url: null, blur: false };
-  const stills = images.filter(img => img?.url && !_isVideoUrl(img.url, img.type));
+  const stills = images.filter(img => img?.url && !isVideoUrl(img.url, img.type));
   if (!stills.length) return { url: null, blur: false };
   const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
   if (sfw) return { url: sfw.url, blur: false };

@@ -86,6 +86,17 @@ class MessageState:
                 )
                 print(f"[CWK Batch Selector] ERROR: {message}")
                 raise ConcurrentWaitError(message)
+            if existing is not None:
+                # A resolved (non-waiting) entry lingering here means either
+                # stop_waiting() hasn't run yet for the previous execution, or
+                # it was orphaned by a hard crash (see stop_waiting's
+                # docstring). Overwriting it is safe — it's already been
+                # resolved and its response already consumed — but log it so
+                # an unexpectedly high rate of these isn't invisible.
+                print(
+                    f"[CWK Batch Selector] Replacing a stale resolved entry for "
+                    f"graph_id={graph_id!r} (previous special={existing.special!r})."
+                )
             cls._waiters[graph_id] = cls({"special": WAITING_FOR_RESPONSE, "graph_id": graph_id})
 
 
@@ -185,6 +196,12 @@ async def _cwk_batch_selector_message(request):
             f"[CWK Batch Selector] Ignoring message (reason={reason}) for "
             f"graph_id={msg.graph_id!r}; pending waiters={MessageState.pending_graph_ids()}"
         )
+        # 409 Conflict: the message was well-formed but couldn't be applied
+        # (no matching/active waiter for its graph_id). Returning a non-2xx
+        # status — in addition to the {ok, reason} body — lets generic
+        # HTTP-level tooling (proxies, browser devtools network tab) flag
+        # this as a failure too, not just code that inspects the JSON body.
+        return web.json_response({"ok": ok, "reason": reason}, status=409)
 
     return web.json_response({"ok": ok, "reason": reason})
 

@@ -92,7 +92,25 @@ app.registerExtension({
           if (node._cwkImgEl) node._cwkImgEl.src = image;
           // Keep a plain Image object too, for canvas fallback drawing
           if (!node._cwkImgObj) node._cwkImgObj = new Image();
-          node._cwkImgObj.onload = () => { app.canvas.setDirty(true, false); };
+          node._cwkImgObj.onload = () => {
+            // Fit the node's height to the image's aspect ratio so the
+            // preview area itself matches the incoming image shape.
+            const img = node._cwkImgObj;
+            const margin = 4;
+            const titleGap = 20;
+            const imgAspect = img.naturalWidth / img.naturalHeight;
+            if (imgAspect > 0 && node.size && node.size[0] > margin * 2) {
+              const boxW = node.size[0] - margin * 2;
+              const boxH = node.size[1] - margin * 2 - titleGap;
+              // Skip when the current box is already close to the image's
+              // aspect ratio, to avoid jittery resizing on every preview
+              // tick during a multi-step generation.
+              if (boxH <= 0 || Math.abs(boxW / boxH - imgAspect) / imgAspect > 0.05) {
+                node.size[1] = Math.max(260, boxW / imgAspect + margin * 2 + titleGap);
+              }
+            }
+            app.canvas.setDirty(true, true);
+          };
           node._cwkImgObj.src = image;
         }
       }
@@ -142,7 +160,23 @@ app.registerExtension({
           this._cwkImgObj && this._cwkImgObj.complete && this._cwkImgObj.naturalWidth > 0;
 
         if (hasImage) {
-          ctx.drawImage(this._cwkImgObj, margin, margin + titleGap, w, h);
+          // Draw with object-fit: contain semantics — fit the image inside
+          // the available box while preserving its natural aspect ratio,
+          // centered (letterboxed/pillarboxed) instead of stretched.
+          const img = this._cwkImgObj;
+          const imgAspect = img.naturalWidth / img.naturalHeight;
+          const boxAspect = w / h;
+
+          let drawW, drawH, offsetX, offsetY;
+          if (imgAspect > boxAspect) {
+            drawW = w; drawH = w / imgAspect;
+            offsetX = 0; offsetY = (h - drawH) / 2;
+          } else {
+            drawH = h; drawW = h * imgAspect;
+            offsetX = (w - drawW) / 2; offsetY = 0;
+          }
+
+          ctx.drawImage(img, margin + offsetX, margin + titleGap + offsetY, drawW, drawH);
           return;
         }
 

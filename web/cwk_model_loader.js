@@ -6,6 +6,7 @@
 import { app }               from "../../scripts/app.js";
 import { injectStyles }      from "./cwk_styles.js";
 import { ModelBrowserPanel } from "./cwk_panel.js";
+import { getBaseModelBadges, getBaseBadge as _getBaseBadgeFrom } from "./cwk_base_models.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -75,28 +76,16 @@ function getActiveRows(node) {
 
 // ─── Base-model badge helpers (same as preset_manager.js) ────────────────────
 
-const _BASE_BADGES = [
-  { match: ["sd 1.5", "sd 1.4", "sd1"],  label: "SD15",   color: "#f9e2af" },
-  { match: ["sdxl turbo"],                label: "SDXL-T", color: "#89dceb" },
-  { match: ["sdxl lightning"],            label: "SDXL-L", color: "#89dceb" },
-  { match: ["sdxl"],                      label: "SDXL",   color: "#89b4fa" },
-  { match: ["illustrious"],              label: "Illust",  color: "#cba6f7" },
-  { match: ["pony"],                      label: "Pony",   color: "#f5c2e7" },
-  { match: ["noobai"],                    label: "Noob",   color: "#f38ba8" },
-  { match: ["flux"],                      label: "Flux",   color: "#a6e3a1" },
-  { match: ["chroma"],                    label: "Chroma", color: "#94e2d5" },
-  { match: ["qwen"],                      label: "Qwen",   color: "#fab387" },
-  { match: ["wan"],                       label: "Wan",    color: "#74c7ec" },
-  { match: ["zimage"],                    label: "ZImg",   color: "#b4befe" },
-];
+// ─── Base-model badge helpers (dynamic, from CivitAI's base-model list) ──────
+
+// Resolved once (module load) from the shared `cwk_base_models.js` helper;
+// `_getBaseBadge()` falls back to grouping everything under "Other" until
+// this resolves, then a later model-list refresh picks up proper grouping.
+let _baseBadges = [];
+getBaseModelBadges().then(list => { _baseBadges = list; }).catch(() => {});
 
 function _getBaseBadge(baseModel) {
-  if (!baseModel) return { label: "???", color: "#6c7086" };
-  const low = baseModel.toLowerCase();
-  for (const b of _BASE_BADGES) {
-    for (const m of b.match) { if (low.includes(m)) return b; }
-  }
-  return { label: "Other", color: "#6c7086" };
+  return _getBaseBadgeFrom(baseModel, _baseBadges);
 }
 
 function _cleanDisplayName(name) {

@@ -13,7 +13,8 @@
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-export function isVideoUrl(url) {
+export function isVideoUrl(url, type) {
+  if (String(type ?? "").toLowerCase() === "video") return true;
   if (!url) return false;
   try {
     const p = new URL(url).pathname.toLowerCase();
@@ -157,7 +158,7 @@ export function showImagePicker(modelName, images, onPick) {
       border:2px solid transparent; aspect-ratio:2/3; background:#1e2335;
       transition:border-color .15s;
     `;
-    card.innerHTML = isVideoUrl(url)
+    card.innerHTML = isVideoUrl(url, img?.type)
       ? `<video src="${_esc(url)}" muted autoplay loop playsinline
            style="width:100%;height:100%;object-fit:cover;${blur}"></video>`
       : `<img src="${_esc(url)}" loading="lazy"

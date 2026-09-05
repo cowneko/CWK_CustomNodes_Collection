@@ -102,6 +102,12 @@ export class ModelBrowserPanel {
     this._revealed       = JSON.parse(localStorage.getItem("cwk_revealed") || "{}");
     this._filterMatch    = null;
     this._filterFavorite = false;
+    // Full CivitAI-derived matcher list (bookends + every known base model,
+    // regardless of whether any model is installed for it).
+    this._baseModelMatchers = STATIC_BASE_MODEL_FILTERS;
+    // Actually-displayed dropdown entries (subset of the above that has at
+    // least one installed match), each carrying a live `count`. Rebuilt by
+    // `_rebuildFilterDropdown()` whenever the model list changes.
     this._baseModelFilters = STATIC_BASE_MODEL_FILTERS;
     this._buildDOM();
     this._bindEvents();
@@ -356,14 +362,71 @@ export class ModelBrowserPanel {
 
     document.addEventListener("click", () => menu.classList.remove("open"));
 
-    // Populate the middle entries asynchronously once CivitAI's base-model
-    // list resolves; "All Types"/"Others" bookends are already shown.
+    // Fetch the full CivitAI base-model list once, then rebuild the actual
+    // dropdown (filtered to installed base models, with counts) — both now
+    // and every time the model list itself is refreshed.
     getBaseModelMatchers().then(list => {
-      this._baseModelFilters = list;
-      menu.innerHTML = list.map((f, i) =>
-        `<div class="cwk-select-option" data-idx="${i}">${f.label}</div>`
-      ).join("");
+      this._baseModelMatchers = list;
+      this._rebuildFilterDropdown();
     }).catch(() => { /* keep static bookends on failure */ });
+  }
+
+  /**
+   * Rebuilds the "Base Model" filter dropdown from the currently-loaded
+   * model list (`this._models`), showing only base models with at least one
+   * installed match, each annotated with a live count. "All Types" and
+   * "Others" bookends always stay present and show their own live counts.
+   * Must be called any time `this._models` changes (initial load, reload,
+   * delete, download, etc.).
+   */
+  _rebuildFilterDropdown() {
+    const menu = document.getElementById("cwk-filter-type-menu");
+    const lbl  = document.getElementById("cwk-filter-type-label");
+    if (!menu) return;
+
+    const rawBaseModel = m => (m.civitai?.base_model ?? m.civitai?.baseModel ?? "").toLowerCase();
+
+    const middle = (this._baseModelMatchers || STATIC_BASE_MODEL_FILTERS)
+      .filter(f => Array.isArray(f.match));
+
+    const counted = middle
+      .map(f => ({
+        ...f,
+        count: this._models.filter(m => {
+          const raw = rawBaseModel(m);
+          return raw && f.match.some(s => raw.includes(s.toLowerCase()));
+        }).length,
+      }))
+      .filter(f => f.count > 0);
+
+    const allKnownMatches = middle.flatMap(f => f.match);
+    const othersCount = this._models.filter(m => {
+      const raw = rawBaseModel(m);
+      return !raw || !allKnownMatches.some(s => raw.includes(s.toLowerCase()));
+    }).length;
+
+    this._baseModelFilters = [
+      { label: `All Types (${this._models.length})`, match: null },
+      ...counted.map(f => ({ ...f, label: `${f.label} (${f.count})` })),
+      { label: `Others (${othersCount})`, match: OTHERS_MATCH },
+    ];
+
+    menu.innerHTML = this._baseModelFilters.map((f, i) =>
+      `<div class="cwk-select-option" data-idx="${i}">${f.label}</div>`
+    ).join("");
+
+    // If the currently active filter no longer matches anything (e.g. the
+    // last installed model of that base type was deleted), fall back to
+    // "All Types" rather than leaving a stale/empty selection.
+    const activeIdx = this._baseModelFilters.findIndex(f => f.match === this._filterMatch);
+    if (this._filterMatch !== null && activeIdx === -1) {
+      this._filterMatch = null;
+    }
+    const selectedIdx = this._baseModelFilters.findIndex(f => f.match === this._filterMatch);
+    if (lbl) lbl.textContent = this._baseModelFilters[selectedIdx]?.label ?? "All Types";
+    menu.querySelectorAll(".cwk-select-option").forEach((o, i) => {
+      o.classList.toggle("active", i === selectedIdx);
+    });
   }
 
   // ── Key helpers ───────────────────────────────────────────────────────────────
@@ -527,6 +590,7 @@ export class ModelBrowserPanel {
     this._overlay.classList.add("visible");
     try {
       this._models = await apiFetch("/cwk/models");
+      this._rebuildFilterDropdown();
       this._applyFilter("");
       document.getElementById("cwk-total-count").textContent =
         `${this._models.length} model${this._models.length !== 1 ? "s" : ""}`;
@@ -558,6 +622,7 @@ export class ModelBrowserPanel {
   async _reloadModels() {
     try {
       this._models = await apiFetch("/cwk/models");
+      this._rebuildFilterDropdown();
       this._applyFilter(document.getElementById("cwk-search")?.value ?? "");
       document.getElementById("cwk-total-count").textContent =
         `${this._models.length} model${this._models.length !== 1 ? "s" : ""}`;
@@ -683,9 +748,9 @@ export class ModelBrowserPanel {
       if (q && !m.name.toLowerCase().includes(q)) return false;
       if (this._filterFavorite && !m.civitai?.favorite) return false;
       if (fm !== null) {
-        const raw = (m.civitai?.base_model ?? "").toLowerCase();
+        const raw = (m.civitai?.base_model ?? m.civitai?.baseModel ?? "").toLowerCase();
         if (fm === OTHERS_MATCH) {
-          const allKnown = this._baseModelFilters
+          const allKnown = (this._baseModelMatchers || [])
             .filter(f => Array.isArray(f.match))
             .flatMap(f => f.match);
           if (allKnown.some(s => raw.includes(s.toLowerCase()))) return false;
@@ -938,6 +1003,7 @@ export class ModelBrowserPanel {
             });
             if (res.ok) {
               this._models = this._models.filter(m => m.name !== model.name);
+              this._rebuildFilterDropdown();
               this._applyFilter(document.getElementById("cwk-search")?.value ?? "");
               document.getElementById("cwk-total-count").textContent =
                 `${this._models.length} model${this._models.length !== 1 ? "s" : ""}`;
@@ -1049,6 +1115,7 @@ export class ModelBrowserPanel {
         }
       }
       this._models = freshModels;
+      this._rebuildFilterDropdown();
       this._applyFilter(document.getElementById("cwk-search")?.value || "");
       document.getElementById("cwk-total-count").textContent =
         `${this._models.length} model${this._models.length !== 1 ? "s" : ""}`;

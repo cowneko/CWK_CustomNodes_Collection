@@ -83,19 +83,58 @@ def _save_json(path: str, data: dict) -> None:
 
 # ─── Per-model metadata ───────────────────────────────────────────────────────
 
-def _safe_filename(model_name: str) -> str:
-    safe = re.sub(r'[<>:"/\\|?*]', '_', model_name)
+def _normalize_model_key(model_name: str) -> str:
+    """Normalize path separators to `/` so the same model is always keyed
+    identically regardless of OS path-separator style (Windows returns
+    `folder_paths.get_filename_list()` entries with `\\` subfolder
+    separators; other callers may already use `/`)."""
+    return (model_name or "").replace("\\", "/")
+
+
+def _legacy_safe_filename(model_name: str) -> str:
+    """Pre-migration metadata filename scheme. Kept only so `_load_meta()`
+    can transparently pick up metadata saved before the collision-resistant
+    scheme below was introduced — do not use for new writes."""
+    safe = re.sub(r'[<>:"/\\|?*]', '_', model_name or "")
     return safe + ".json"
+
+
+def _safe_filename(model_name: str) -> str:
+    """Collision-resistant, separator-normalized metadata filename.
+
+    Naively replacing `<>:"/\\|?*` with `_` can make two different models
+    collide once path separators are flattened, e.g. "Foo/Bar_Baz.safetensors"
+    and "Foo_Bar/Baz.safetensors" both sanitize to "Foo_Bar_Baz.safetensors" —
+    whichever was fetched last would silently overwrite the other's cached
+    CivitAI metadata. Appending a short hash of the (separator-normalized)
+    original name guarantees uniqueness while staying human-readable.
+    """
+    normalized = _normalize_model_key(model_name)
+    safe   = re.sub(r'[<>:"/\\|?*]', '_', normalized)
+    suffix = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
+    return f"{safe}.{suffix}.json"
 
 
 def _meta_path(model_name: str) -> str:
     return os.path.join(MODEL_META_DIR, _safe_filename(model_name))
 
 
+def _legacy_meta_path(model_name: str) -> str:
+    return os.path.join(MODEL_META_DIR, _legacy_safe_filename(model_name))
+
+
 def _load_meta(model_name: str) -> dict:
     path = _meta_path(model_name)
     if os.path.exists(path):
         return _load_json(path)
+    # Migrate metadata saved under the old (collision-prone) filename scheme
+    # so already-fetched CivitAI data for unaffected models isn't silently
+    # discarded by the switch to the new scheme above.
+    legacy_path = _legacy_meta_path(model_name)
+    if os.path.exists(legacy_path):
+        data = _load_json(legacy_path)
+        _save_meta(model_name, data)
+        return data
     legacy = _load_json(THUMBNAILS_CACHE)
     if model_name in legacy:
         data = legacy[model_name]
@@ -110,12 +149,12 @@ def _save_meta(model_name: str, data: dict) -> None:
 
 
 def _delete_meta(model_name: str) -> None:
-    path = _meta_path(model_name)
-    if os.path.exists(path):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+    for path in (_meta_path(model_name), _legacy_meta_path(model_name)):
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 # ─── Hash cache ───────────────────────────────────────────────────────────────
@@ -363,6 +402,17 @@ async def _fetch_base_models(force: bool = False) -> dict:
     return _save_base_models_cache(list(_DEFAULT_BASE_MODELS), "fallback")
 
 
+def _is_video_entry(img: dict) -> bool:
+    """CivitAI flags video entries via `type: "video"`; the URL usually (but
+    not always — some CDN/transcode URLs carry no recognisable extension)
+    also ends in `.mp4`/`.webm`. Check both so a video isn't accidentally
+    picked as a still thumbnail just because its URL doesn't match."""
+    if str(img.get("type", "")).lower() == "video":
+        return True
+    url = (img.get("url") or "").lower()
+    return url.endswith(".mp4") or url.endswith(".webm")
+
+
 def _parse_version(data: dict, filename: str) -> dict:
     if not data:
         return {
@@ -380,8 +430,7 @@ def _parse_version(data: dict, filename: str) -> dict:
         lvl = _normalize_nsfw_level(img.get("nsfwLevel", 0))
         norm_images.append({**img, "nsfwLevel": lvl})
 
-    non_video  = [img for img in norm_images
-                  if not img.get("url", "").lower().endswith(".mp4")]
+    non_video  = [img for img in norm_images if not _is_video_entry(img)]
     candidates = non_video if non_video else norm_images
     thumb_img  = min(candidates, key=lambda i: i["nsfwLevel"]) if candidates else None
     nsfw_level = thumb_img["nsfwLevel"] if thumb_img else 0

@@ -7,6 +7,8 @@ import json
 import os
 import hashlib
 import re
+import time
+from datetime import datetime
 from typing import Optional
 
 import aiohttp
@@ -29,11 +31,19 @@ THUMBNAILS_CACHE  = os.path.join(NODE_DIR, "thumbnails_cache.json")
 HASH_CACHE_FILE   = os.path.join(NODE_DIR, "hash_cache.json")
 LOCAL_THUMBS_DIR  = os.path.join(NODE_DIR, "local_thumbnails")
 MODEL_META_DIR    = os.path.join(NODE_DIR, "model_metadata")
+BASE_MODELS_CACHE_FILE = os.path.join(NODE_DIR, "base_models_cache.json")
 
 _CONCURRENCY = 5
 _USER_AGENT  = "CWK-PresetManager/2.0 (ComfyUI custom node)"
 _REQ_TIMEOUT = aiohttp.ClientTimeout(total=20)
 _DL_TIMEOUT  = aiohttp.ClientTimeout(total=3600)
+_BASE_MODELS_TTL_SECONDS = 24 * 60 * 60  # 24h
+
+# Small built-in fallback used only if CivitAI is unreachable AND no cache exists yet.
+_DEFAULT_BASE_MODELS = [
+    "SD 1.5", "SDXL", "Pony", "Illustrious", "NoobAI", "Flux", "Chroma",
+    "Qwen", "Wan Video", "Hunyuan Video", "ZImage", "Other",
+]
 
 
 # ─── NSFW normalisation ───────────────────────────────────────────────────────

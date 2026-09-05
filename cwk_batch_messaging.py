@@ -38,6 +38,19 @@ class RegenerateResponse(Response): pass
 # meant a second node calling start_waiting() would silently orphan the first
 # node's wait loop; this can no longer happen since each node gets its own
 # slot in `_waiters`.
+class ConcurrentWaitError(RuntimeError):
+    """Raised when start_waiting() is called for a graph_id that already has
+    an active, unresolved wait. This can only happen if the same node/run
+    correlation id is used to start a second wait before the first one has
+    been resolved (Send/Cancel/Re-Generate) or interrupted — e.g. a bug
+    causing the same node to be entered twice concurrently. Rather than
+    silently replacing the first waiter's slot (which would orphan its wait
+    loop forever, spinning until the user manually clicks Stop), this is
+    raised so the failure is immediately visible as a node execution error
+    instead of a silent hang.
+    """
+
+
 class MessageState:
     _waiters: "dict[str, MessageState]" = {}
     _lock = threading.Lock()
@@ -66,13 +79,15 @@ class MessageState:
         with cls._lock:
             existing = cls._waiters.get(graph_id)
             if existing is not None and existing.special == WAITING_FOR_RESPONSE:
-                print(
-                    f"[CWK Batch Selector] WARNING: start_waiting() called for "
-                    f"graph_id={graph_id!r} while a previous wait for the same id was "
-                    f"still active. The previous wait will be replaced; if that node is "
-                    f"still running it may now spin forever."
+                message = (
+                    f"[CWK Batch Selector] Refusing to start a second concurrent wait "
+                    f"for graph_id={graph_id!r}; a previous wait for the same id is "
+                    f"still active."
                 )
+                print(f"[CWK Batch Selector] ERROR: {message}")
+                raise ConcurrentWaitError(message)
             cls._waiters[graph_id] = cls({"special": WAITING_FOR_RESPONSE, "graph_id": graph_id})
+
 
     @classmethod
     def stop_waiting(cls, graph_id: str) -> None:

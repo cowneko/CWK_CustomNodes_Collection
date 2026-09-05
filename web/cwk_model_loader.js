@@ -7,6 +7,7 @@ import { app }               from "../../scripts/app.js";
 import { injectStyles }      from "./cwk_styles.js";
 import { ModelBrowserPanel } from "./cwk_panel.js";
 import { getBaseModelBadges, getBaseBadge as _getBaseBadgeFrom } from "./cwk_base_models.js";
+import { isVideoUrl }        from "./cwk_context_menu.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -82,7 +83,14 @@ function getActiveRows(node) {
 // `_getBaseBadge()` falls back to grouping everything under "Other" until
 // this resolves, then a later model-list refresh picks up proper grouping.
 let _baseBadges = [];
-getBaseModelBadges().then(list => { _baseBadges = list; }).catch(() => {});
+getBaseModelBadges().then(list => {
+  _baseBadges = list;
+  // The quick-load model list is very likely already built (or in flight)
+  // using the "Other"/"???" fallback badges by the time this resolves —
+  // re-run it now so the dropdowns pick up correct grouping/badges without
+  // requiring a manual reload.
+  _loadQuickLoadModels();
+}).catch(() => {});
 
 function _getBaseBadge(baseModel) {
   return _getBaseBadgeFrom(baseModel, _baseBadges);
@@ -188,18 +196,12 @@ function loadImage(url) {
   return img;
 }
 
-function _isVideoUrl(url) {
-  if (!url) return false;
-  try { const p = new URL(url).pathname.toLowerCase(); return p.endsWith(".mp4") || p.endsWith(".webm"); }
-  catch { const l = url.toLowerCase(); return l.includes(".mp4") || l.includes(".webm"); }
-}
-
 function _resolveThumb(meta) {
   const thumb = meta?.thumbnail;
-  if (thumb && !_isVideoUrl(thumb)) return { url: thumb, blur: false };
+  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false };
   const images = meta?.images;
   if (!Array.isArray(images) || !images.length) return { url: null, blur: false };
-  const stills = images.filter(img => img?.url && !_isVideoUrl(img.url));
+  const stills = images.filter(img => img?.url && !isVideoUrl(img.url, img.type));
   if (!stills.length) return { url: null, blur: false };
   const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
   if (sfw) return { url: sfw.url, blur: false };

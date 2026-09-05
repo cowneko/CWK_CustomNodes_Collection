@@ -83,29 +83,82 @@ def _save_json(path: str, data: dict) -> None:
 
 # ─── Per-model metadata ───────────────────────────────────────────────────────
 
-def _safe_filename(model_name: str) -> str:
-    safe = re.sub(r'[<>:"/\\|?*]', '_', model_name)
+_UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
+def _normalize_model_key(model_name: str) -> str:
+    """Normalize path separators to `/` so the same model is always keyed
+    identically regardless of OS path-separator style (Windows returns
+    `folder_paths.get_filename_list()` entries with `\\` subfolder
+    separators; other callers may already use `/`)."""
+    return (model_name or "").replace("\\", "/")
+
+
+def _legacy_safe_filename(model_name: str) -> str:
+    """Pre-migration metadata filename scheme. Kept only so `_load_meta()`
+    can transparently pick up metadata saved before the collision-resistant
+    scheme below was introduced — do not use for new writes."""
+    safe = _UNSAFE_FILENAME_CHARS.sub('_', model_name or "")
     return safe + ".json"
+
+
+def _safe_filename(model_name: str) -> str:
+    """Collision-resistant, separator-normalized metadata filename.
+
+    Naively replacing `<>:"/\\|?*` with `_` can make two different models
+    collide once path separators are flattened, e.g. "Foo/Bar_Baz.safetensors"
+    and "Foo_Bar/Baz.safetensors" both sanitize to "Foo_Bar_Baz.safetensors" —
+    whichever was fetched last would silently overwrite the other's cached
+    CivitAI metadata. Appending a short hash of the (separator-normalized)
+    original name guarantees uniqueness while staying human-readable.
+    """
+    normalized = _normalize_model_key(model_name)
+    safe   = _UNSAFE_FILENAME_CHARS.sub('_', normalized)
+    suffix = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:10]
+    return f"{safe}.{suffix}.json"
 
 
 def _meta_path(model_name: str) -> str:
     return os.path.join(MODEL_META_DIR, _safe_filename(model_name))
 
 
+def _legacy_meta_path(model_name: str) -> str:
+    return os.path.join(MODEL_META_DIR, _legacy_safe_filename(model_name))
+
+
 def _load_meta(model_name: str) -> dict:
     path = _meta_path(model_name)
     if os.path.exists(path):
         return _load_json(path)
+    # Migrate metadata saved under the old (collision-prone) filename scheme
+    # so already-fetched CivitAI data for unaffected models isn't silently
+    # discarded by the switch to the new scheme above. Guard against stealing
+    # another model's data two ways: skip entirely if the legacy filename is
+    # currently ambiguous (≥2 installed models would sanitize to it — we
+    # can't tell whose data it actually is), and once a legacy file has been
+    # claimed by a model (tagged with `_meta_key` on save), only that model
+    # may migrate/delete it.
+    legacy_fn = _legacy_safe_filename(model_name)
+    if legacy_fn not in _ambiguous_legacy_filenames():
+        key = _normalize_model_key(model_name)
+        legacy_path = _legacy_meta_path(model_name)
+        if os.path.exists(legacy_path):
+            data = _load_json(legacy_path)
+            owner = data.get("_meta_key")
+            if owner is None or owner == key:
+                _save_meta(model_name, data)
+                return _load_json(path)
     legacy = _load_json(THUMBNAILS_CACHE)
     if model_name in legacy:
         data = legacy[model_name]
         _save_meta(model_name, data)
-        return data
+        return _load_json(path)
     return {}
 
 
 def _save_meta(model_name: str, data: dict) -> None:
     os.makedirs(MODEL_META_DIR, exist_ok=True)
+    data = {**data, "_meta_key": _normalize_model_key(model_name)}
     _save_json(_meta_path(model_name), data)
 
 
@@ -116,6 +169,21 @@ def _delete_meta(model_name: str) -> None:
             os.remove(path)
         except OSError:
             pass
+    # Only remove the legacy file if its filename isn't currently ambiguous
+    # and it isn't (verifiably) owned by a different model that collided
+    # with this one under the old scheme.
+    legacy_fn = _legacy_safe_filename(model_name)
+    if legacy_fn in _ambiguous_legacy_filenames():
+        return
+    legacy_path = _legacy_meta_path(model_name)
+    if os.path.exists(legacy_path):
+        data  = _load_json(legacy_path)
+        owner = data.get("_meta_key")
+        if owner is None or owner == _normalize_model_key(model_name):
+            try:
+                os.remove(legacy_path)
+            except OSError:
+                pass
 
 
 # ─── Hash cache ───────────────────────────────────────────────────────────────
@@ -173,6 +241,29 @@ def _all_models() -> list:
     return models
 
 
+_ambiguous_legacy_filenames_cache: Optional[set] = None
+
+
+def _ambiguous_legacy_filenames() -> set:
+    """Legacy (pre-collision-resistant) metadata filenames that more than one
+    *currently installed* model would sanitize to. Migrating from one of
+    these would risk handing one model another's cached CivitAI data, so
+    `_load_meta()`/`_delete_meta()` skip auto-migration for them entirely.
+    Cached for the process lifetime; busted alongside the folder cache.
+    """
+    global _ambiguous_legacy_filenames_cache
+    if _ambiguous_legacy_filenames_cache is None:
+        counts: dict = {}
+        try:
+            for m in _all_models():
+                fn = _legacy_safe_filename(m["name"])
+                counts[fn] = counts.get(fn, 0) + 1
+        except Exception:
+            pass
+        _ambiguous_legacy_filenames_cache = {fn for fn, c in counts.items() if c > 1}
+    return _ambiguous_legacy_filenames_cache
+
+
 def _full_path(model_name: str) -> Optional[str]:
     # Check all folder types including unet_gguf
     for folder_type in ("checkpoints", "diffusion_models", "unet_gguf"):
@@ -208,11 +299,13 @@ def _model_save_dir(model_name: str) -> str:
 
 def _bust_folder_cache() -> None:
     """Force ComfyUI to rescan model folders on the next list request."""
+    global _ambiguous_legacy_filenames_cache
     try:
         for folder_type in ("checkpoints", "diffusion_models", "unet_gguf"):
             folder_paths.filename_list_cache.pop(folder_type, None)
     except Exception as e:
         print(f"[CWK] Warning: could not bust folder_paths cache: {e}")
+    _ambiguous_legacy_filenames_cache = None
 
 
 # ─── Hash computation ─────────────────────────────────────────────────────────
@@ -363,6 +456,17 @@ async def _fetch_base_models(force: bool = False) -> dict:
     return _save_base_models_cache(list(_DEFAULT_BASE_MODELS), "fallback")
 
 
+def _is_video_entry(img: dict) -> bool:
+    """CivitAI flags video entries via `type: "video"`; the URL usually (but
+    not always — some CDN/transcode URLs carry no recognisable extension)
+    also ends in `.mp4`/`.webm`. Check both so a video isn't accidentally
+    picked as a still thumbnail just because its URL doesn't match."""
+    if str(img.get("type", "")).lower() == "video":
+        return True
+    url = (img.get("url") or "").lower()
+    return url.endswith(".mp4") or url.endswith(".webm")
+
+
 def _parse_version(data: dict, filename: str) -> dict:
     if not data:
         return {
@@ -380,8 +484,7 @@ def _parse_version(data: dict, filename: str) -> dict:
         lvl = _normalize_nsfw_level(img.get("nsfwLevel", 0))
         norm_images.append({**img, "nsfwLevel": lvl})
 
-    non_video  = [img for img in norm_images
-                  if not img.get("url", "").lower().endswith(".mp4")]
+    non_video  = [img for img in norm_images if not _is_video_entry(img)]
     candidates = non_video if non_video else norm_images
     thumb_img  = min(candidates, key=lambda i: i["nsfwLevel"]) if candidates else None
     nsfw_level = thumb_img["nsfwLevel"] if thumb_img else 0

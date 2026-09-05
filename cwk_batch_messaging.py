@@ -76,11 +76,28 @@ class MessageState:
 
     @classmethod
     def stop_waiting(cls, graph_id: str) -> None:
+        # Known limitation: this relies on `_wait_for_response()`'s `finally`
+        # block to run. If the worker thread is killed abruptly (process
+        # crash / SIGKILL) rather than exiting normally or via
+        # InterruptProcessingException, the entry for that graph_id could be
+        # left orphaned in `_waiters` for the remainder of the process
+        # lifetime. This is harmless (it only blocks a future node from
+        # reusing that exact node id while a stale WAITING entry lingers,
+        # which start_waiting() already logs a warning for) but is not
+        # actively garbage-collected.
         with cls._lock:
             cls._waiters.pop(graph_id, None)
 
     @classmethod
     def waiting(cls, graph_id: str) -> bool:
+        # NOTE: waiting() and get_response() are separate lock acquisitions
+        # (not one atomic check-and-read), but this can't lose a delivered
+        # message: deliver() only ever overwrites `_waiters[gid]` while the
+        # existing entry's special is still WAITING_FOR_RESPONSE, and once a
+        # non-waiting entry is stored, any further deliver() for the same id
+        # is rejected as "not_waiting" until stop_waiting() clears it. So the
+        # eventual get_response() call always observes whichever message (if
+        # any) actually "won" the race, never a torn/partial state.
         with cls._lock:
             state = cls._waiters.get(graph_id)
             return state is not None and state.special == WAITING_FOR_RESPONSE

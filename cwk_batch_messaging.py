@@ -76,6 +76,13 @@ class MessageState:
 
     @classmethod
     def stop_waiting(cls, graph_id: str) -> None:
+        # Ordering dependency: callers must have already read whatever
+        # response deliver() may have stored (via get_response()) before
+        # calling this, since it unconditionally discards the entry. The
+        # only caller, `_wait_for_response()`, satisfies this because its
+        # `return MessageState.get_response(graph_id)` is evaluated before
+        # the `finally: MessageState.stop_waiting(graph_id)` block runs.
+        #
         # Known limitation: this relies on `_wait_for_response()`'s `finally`
         # block to run. If the worker thread is killed abruptly (process
         # crash / SIGKILL) rather than exiting normally or via
@@ -135,6 +142,13 @@ class MessageState:
 
 
 # ── HTTP endpoint — JS frontend posts here ──────────────────────────────────
+# Like every other CWK custom-node route (e.g. the `/cwk_live_preview/toggle`
+# route registered in `__init__.py`), this endpoint is unauthenticated and
+# trusts the local ComfyUI instance/network boundary — consistent with the
+# rest of this repo and with ComfyUI's own default routes, none of which
+# implement per-route auth or rate limiting. Logging is best-effort/debug
+# only and intentionally lightweight; add real rate limiting here only if
+# this route is ever exposed beyond a trusted local network.
 @PromptServer.instance.routes.post("/cwk-batch-selector-message")
 async def _cwk_batch_selector_message(request):
     post = await request.post()
@@ -162,6 +176,12 @@ async def _cwk_batch_selector_message(request):
 
 # ── Blocking wait loop (worker thread) ──────────────────────────────────────
 def _wait_for_response(uid: str, graph_id: str) -> Response:
+    # Ordering dependency: get_response() (which reads whatever deliver()
+    # stored) MUST run before stop_waiting() (which removes that entry).
+    # `return MessageState.get_response(graph_id)` evaluates and captures the
+    # return value *before* the `finally` block runs, so this holds for the
+    # only call site in this module. Do not reorder this into e.g. calling
+    # stop_waiting() first — that would discard a just-delivered response.
     MessageState.start_waiting(graph_id)
     try:
         while MessageState.waiting(graph_id):

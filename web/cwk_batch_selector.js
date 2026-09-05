@@ -93,32 +93,38 @@ function sendResponse(node, msg = {}) {
   const body = new FormData();
   body.append("response", JSON.stringify(msg));
 
-  // Fire-and-forget was silently swallowing delivery failures (network
-  // errors, non-OK responses, or the backend rejecting a graph_id/waiting
-  // mismatch). Await it and surface any failure via console.warn so a
-  // broken round-trip is visible instead of just "Send does nothing".
+  // Optimistically hide the "waiting" UI immediately so clicks feel
+  // responsive, but if delivery actually failed (network error, non-OK
+  // response, or the backend rejecting a graph_id/waiting mismatch), flip
+  // it back to waiting and warn — the click did NOT take effect, so the
+  // UI must not silently claim otherwise. Fire-and-forget previously
+  // swallowed these failures entirely (never awaited, no error surfaced).
+  node._cwkbs.waiting = false;
+  app.canvas.setDirty(true, true);
+
+  const revertToWaiting = (reason, detail) => {
+    console.warn(`[CWK Batch Selector] ${reason}`, detail, msg);
+    if (node._cwkbs) {
+      node._cwkbs.waiting = true;
+      app.canvas.setDirty(true, true);
+    }
+  };
+
   api.fetchApi("/cwk-batch-selector-message", { method: "POST", body })
     .then(async (res) => {
       if (!res.ok) {
-        console.warn(
-          `[CWK Batch Selector] Message POST failed: HTTP ${res.status}`, msg
-        );
+        revertToWaiting(`Message POST failed: HTTP ${res.status}`, res);
         return;
       }
       let ack = null;
       try { ack = await res.json(); } catch (_e) { /* ignore parse errors */ }
       if (ack && ack.ok === false) {
-        console.warn(
-          `[CWK Batch Selector] Message rejected by server (reason=${ack.reason}):`, msg
-        );
+        revertToWaiting(`Message rejected by server (reason=${ack.reason}):`, ack);
       }
     })
     .catch((err) => {
-      console.warn("[CWK Batch Selector] Message POST threw an error:", err, msg);
+      revertToWaiting("Message POST threw an error:", err);
     });
-
-  node._cwkbs.waiting = false;
-  app.canvas.setDirty(true, true);
 }
 
 // ── Layout and Draw ────────────────────────

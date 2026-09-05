@@ -7,6 +7,8 @@ import json
 import os
 import hashlib
 import re
+import time
+from datetime import datetime
 from typing import Optional
 
 import aiohttp
@@ -29,11 +31,19 @@ THUMBNAILS_CACHE  = os.path.join(NODE_DIR, "thumbnails_cache.json")
 HASH_CACHE_FILE   = os.path.join(NODE_DIR, "hash_cache.json")
 LOCAL_THUMBS_DIR  = os.path.join(NODE_DIR, "local_thumbnails")
 MODEL_META_DIR    = os.path.join(NODE_DIR, "model_metadata")
+BASE_MODELS_CACHE_FILE = os.path.join(NODE_DIR, "base_models_cache.json")
 
 _CONCURRENCY = 5
 _USER_AGENT  = "CWK-PresetManager/2.0 (ComfyUI custom node)"
 _REQ_TIMEOUT = aiohttp.ClientTimeout(total=20)
 _DL_TIMEOUT  = aiohttp.ClientTimeout(total=3600)
+_BASE_MODELS_TTL_SECONDS = 24 * 60 * 60  # 24h
+
+# Small built-in fallback used only if CivitAI is unreachable AND no cache exists yet.
+_DEFAULT_BASE_MODELS = [
+    "SD 1.5", "SDXL", "Pony", "Illustrious", "NoobAI", "Flux", "Chroma",
+    "Qwen", "Wan Video", "Hunyuan Video", "ZImage", "Other",
+]
 
 
 # ─── NSFW normalisation ───────────────────────────────────────────────────────
@@ -269,6 +279,88 @@ async def _cget(session: aiohttp.ClientSession, url: str) -> dict:
             )
         r.raise_for_status()
         return await r.json(content_type=None)
+
+
+# ─── Base-model enum list (CivitAI /api/v1/enums) ────────────────────────────
+
+def _extract_base_models_from_enums(data: dict) -> Optional[list]:
+    """Best-effort extraction of the baseModel enum values from CivitAI's
+    /api/v1/enums payload. The exact shape isn't guaranteed, so probe a few
+    plausible locations/keys defensively."""
+    if not isinstance(data, dict):
+        return None
+
+    candidates = []
+    # Most likely: a top-level key literally named "ModelFileMetadataBaseModel"
+    # or "baseModel", possibly nested under a wrapping object.
+    def _collect(node, depth=0):
+        if depth > 3 or not isinstance(node, dict):
+            return
+        for key, val in node.items():
+            lk = str(key).lower()
+            if isinstance(val, list) and val and all(isinstance(v, str) for v in val):
+                if "basemodel" in lk:
+                    candidates.append(val)
+            elif isinstance(val, dict):
+                _collect(val, depth + 1)
+
+    _collect(data)
+    for c in candidates:
+        if c:
+            # De-duplicate while preserving order.
+            seen = set()
+            out = []
+            for v in c:
+                if v not in seen:
+                    seen.add(v)
+                    out.append(v)
+            return out
+    return None
+
+
+def _load_base_models_cache() -> dict:
+    return _load_json(BASE_MODELS_CACHE_FILE)
+
+
+def _save_base_models_cache(base_models: list, source: str) -> dict:
+    cache = {
+        "base_models": base_models,
+        "cached_at": datetime.utcnow().isoformat() + "Z",
+        "source": source,
+    }
+    _save_json(BASE_MODELS_CACHE_FILE, cache)
+    return cache
+
+
+async def _fetch_base_models(force: bool = False) -> dict:
+    """Return {"base_models": [...], "cached_at": ..., "source": "civitai"|"cache"|"fallback"}."""
+    cache = _load_base_models_cache()
+    if not force and cache.get("base_models") and cache.get("cached_at"):
+        try:
+            cached_dt = datetime.fromisoformat(cache["cached_at"].rstrip("Z"))
+            age = (datetime.utcnow() - cached_dt).total_seconds()
+            if age < _BASE_MODELS_TTL_SECONDS:
+                result = dict(cache)
+                result["source"] = "cache"
+                return result
+        except Exception:
+            pass
+
+    try:
+        async with aiohttp.ClientSession(headers=_headers("")) as session:
+            data = await _cget(session, f"{CIVITAI_API_BASE}/enums")
+        base_models = _extract_base_models_from_enums(data)
+        if base_models:
+            return _save_base_models_cache(base_models, "civitai")
+    except Exception as e:
+        print(f"[CWK] Could not fetch CivitAI base-model enums: {e}")
+
+    if cache.get("base_models"):
+        result = dict(cache)
+        result["source"] = "fallback"
+        return result
+
+    return _save_base_models_cache(list(_DEFAULT_BASE_MODELS), "fallback")
 
 
 def _parse_version(data: dict, filename: str) -> dict:
@@ -1212,7 +1304,23 @@ async def handle_resolution_presets(req: web.Request) -> web.Response:
     for label, (w, h) in RESOLUTION_PRESETS.items():
         result.append({"label": label, "width": w, "height": h})
     return web.json_response(result)
-    
+
+
+# ─── Base-model list endpoint ─────────────────────────────────────────────
+
+async def handle_base_models(req: web.Request) -> web.Response:
+    """GET /cwk/civitai/base_models[?force=true] — Return the current list of
+    CivitAI baseModel enum values, cached locally with a 24h TTL."""
+    force = req.rel_url.query.get("force", "").lower() in ("1", "true", "yes")
+    result = await _fetch_base_models(force=force)
+    return web.json_response(result)
+
+
+async def handle_base_models_refresh(req: web.Request) -> web.Response:
+    """POST /cwk/civitai/base_models/refresh — Force-refresh the base-model list."""
+    result = await _fetch_base_models(force=True)
+    return web.json_response(result)
+
 # ─── Manual metadata edit endpoint ────────────────────────────────────────
 
 async def handle_edit_meta(req: web.Request) -> web.Response:
@@ -1291,4 +1399,6 @@ def register_routes(app: web.Application) -> None:
     r.add_post  ("/cwk/last_model",                   handle_save_last_model)
     r.add_get   ("/cwk/resolution_presets",           handle_resolution_presets)
     r.add_post  ("/cwk/civitai/meta/edit",            handle_edit_meta)
+    r.add_get   ("/cwk/civitai/base_models",          handle_base_models)
+    r.add_post  ("/cwk/civitai/base_models/refresh",  handle_base_models_refresh)
     print("[CWK_PresetManager] Routes registered.")

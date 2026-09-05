@@ -7,6 +7,7 @@ import { isVideoUrl, showContextMenu,
          showImagePicker,
          showVersionChecker }              from "./cwk_context_menu.js";
 import { showModelInfo }                   from "./cwk_model_info.js";
+import { getBaseModelMatchers, OTHERS_MATCH } from "./cwk_base_models.js";
 
 const DEFAULTS = {
   sampler_name: "euler", scheduler: "normal",
@@ -30,19 +31,11 @@ function isNsfwModel(model) {
 
 // ─── Base-model filters ───────────────────────────────────────────────────────
 
-const BASE_MODEL_FILTERS = [
-  { label: "All Types",   match: null },
-  { label: "SDXL",        match: ["sdxl"] },
-  { label: "SD15",        match: ["sd 1.5"] },
-  { label: "Illustrious", match: ["illustrious"] },
-  { label: "Pony",        match: ["pony"] },
-  { label: "NoobAI",      match: ["noobai"] },
-  { label: "Qwen",        match: ["qwen"] },
-  { label: "Flux",        match: ["flux"] },
-  { label: "Chroma",      match: ["chroma"] },
-  { label: "Wan",         match: ["wan video", "wan"] },
-  { label: "ZImage",      match: ["zimage"] },
-  { label: "Others",      match: "__others__" },
+// Static bookends shown immediately; the middle entries are populated
+// asynchronously from CivitAI's base-model list (see `_bindFilterDropdown`).
+const STATIC_BASE_MODEL_FILTERS = [
+  { label: "All Types", match: null },
+  { label: "Others",    match: OTHERS_MATCH },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,6 +102,7 @@ export class ModelBrowserPanel {
     this._revealed       = JSON.parse(localStorage.getItem("cwk_revealed") || "{}");
     this._filterMatch    = null;
     this._filterFavorite = false;
+    this._baseModelFilters = STATIC_BASE_MODEL_FILTERS;
     this._buildDOM();
     this._bindEvents();
   }
@@ -150,7 +144,7 @@ export class ModelBrowserPanel {
                 <span class="cwk-select-arrow">▾</span>
               </button>
               <div class="cwk-select-dropdown" id="cwk-filter-type-menu">
-                ${BASE_MODEL_FILTERS.map((f, i) =>
+                ${this._baseModelFilters.map((f, i) =>
                   `<div class="cwk-select-option" data-idx="${i}">${f.label}</div>`
                 ).join("")}
               </div>
@@ -353,13 +347,23 @@ export class ModelBrowserPanel {
       menu.querySelectorAll(".cwk-select-option").forEach(o => o.classList.remove("active"));
       opt.classList.add("active");
       const idx         = parseInt(opt.dataset.idx, 10);
-      lbl.textContent   = BASE_MODEL_FILTERS[idx].label;
-      this._filterMatch = BASE_MODEL_FILTERS[idx].match;
+      const entry        = this._baseModelFilters[idx];
+      lbl.textContent   = entry?.label ?? "All Types";
+      this._filterMatch = entry?.match ?? null;
       menu.classList.remove("open");
       this._applyFilter(document.getElementById("cwk-search")?.value ?? "");
     });
 
     document.addEventListener("click", () => menu.classList.remove("open"));
+
+    // Populate the middle entries asynchronously once CivitAI's base-model
+    // list resolves; "All Types"/"Others" bookends are already shown.
+    getBaseModelMatchers().then(list => {
+      this._baseModelFilters = list;
+      menu.innerHTML = list.map((f, i) =>
+        `<div class="cwk-select-option" data-idx="${i}">${f.label}</div>`
+      ).join("");
+    }).catch(() => { /* keep static bookends on failure */ });
   }
 
   // ── Key helpers ───────────────────────────────────────────────────────────────
@@ -680,8 +684,8 @@ export class ModelBrowserPanel {
       if (this._filterFavorite && !m.civitai?.favorite) return false;
       if (fm !== null) {
         const raw = (m.civitai?.base_model ?? "").toLowerCase();
-        if (fm === "__others__") {
-          const allKnown = BASE_MODEL_FILTERS
+        if (fm === OTHERS_MATCH) {
+          const allKnown = this._baseModelFilters
             .filter(f => Array.isArray(f.match))
             .flatMap(f => f.match);
           if (allKnown.some(s => raw.includes(s.toLowerCase()))) return false;

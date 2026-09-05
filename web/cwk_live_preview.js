@@ -99,22 +99,10 @@ app.registerExtension({
           // Keep a plain Image object too, for canvas fallback drawing
           if (!node._cwkImgObj) node._cwkImgObj = new Image();
           node._cwkImgObj.onload = () => {
-            // Fit the node's height to the image's aspect ratio so the
-            // preview area itself matches the incoming image shape.
-            const img = node._cwkImgObj;
-            const margin = PREVIEW_MARGIN;
-            const titleGap = PREVIEW_TITLE_GAP;
-            const imgAspect = img.naturalWidth / img.naturalHeight;
-            if (imgAspect > 0 && node.size && node.size[0] > margin * 2) {
-              const boxW = node.size[0] - margin * 2;
-              const boxH = node.size[1] - margin * 2 - titleGap;
-              // Skip when the current box is already close to the image's
-              // aspect ratio, to avoid jittery resizing on every preview
-              // tick during a multi-step generation.
-              if (boxH <= 0 || Math.abs(boxW / boxH - imgAspect) / imgAspect > 0.05) {
-                node.size[1] = Math.max(MIN_NODE_HEIGHT, boxW / imgAspect + margin * 2 + titleGap);
-              }
-            }
+            // Node keeps whatever fixed shape the user has set — only the
+            // preview content adapts (via CSS object-fit / canvas fallback
+            // letterboxing) to the current node size, preserving its own
+            // aspect ratio without resizing the node.
             app.canvas.setDirty(true, true);
           };
           node._cwkImgObj.src = image;

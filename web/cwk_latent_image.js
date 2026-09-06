@@ -637,20 +637,18 @@ app.registerExtension({
       };
 	  
 	  afterConfigureGraph() {
-    // Workflow finished loading: make sure every node of this type shows the
-    // values it was saved with (onConfigure normally already did), and treat
-    // the loaded values as the new "last used".
     for (const node of app.graph._nodes) {
       if (node.type !== NODE_TYPE) continue;
       node._cwkFromGraph = true;
       syncFromWidgets(node);
-      persistSettings(node);   // delete this line if you want only explicit
-                               // edits (not opened workflows) to update defaults
+      reconcilePresetDims(node);          // see Fix 2
+      persistSettings(node);
     }
-    // Late re-sync in case the frontend restores widget values asynchronously.
     setTimeout(() => {
       for (const node of app.graph._nodes) {
-        if (node.type === NODE_TYPE) syncFromWidgets(node);
+        if (node.type !== NODE_TYPE) continue;
+        syncFromWidgets(node);
+        reconcilePresetDims(node);
       }
       app.canvas?.setDirty?.(true, true);
     }, 500);

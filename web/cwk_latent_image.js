@@ -239,6 +239,37 @@ function applyRowValue(node, rowIdx, val) {
   app.canvas.setDirty(true, false);
 }
 
+// Show the dimensions that will actually be generated: Python ignores the
+// width/height widgets whenever a preset is selected.
+function reconcilePresetDims(node) {
+  const v = node._cwkValues ?? {};
+  if (!v.res_preset || v.res_preset === "(preset)") return;
+  const dims = RES_PRESETS_MAP[v.res_preset];
+  if (!dims || !(dims.width > 0) || !(dims.height > 0)) return;
+  if (Number(v.width) === Number(dims.width) &&
+      Number(v.height) === Number(dims.height)) return;
+  const wi = LATENT_ROWS.findIndex(r => r.key === "width");
+  const hi = LATENT_ROWS.findIndex(r => r.key === "height");
+  if (wi >= 0) applyRowValue(node, wi, dims.width);
+  if (hi >= 0) applyRowValue(node, hi, dims.height);
+}
+
+// User-driven edit of width/height: if the value no longer matches the selected
+// preset, clear the preset so the displayed numbers are the real ones.
+function userEditRow(node, rowIdx, val) {
+  applyRowValue(node, rowIdx, val);
+  const row = LATENT_ROWS[rowIdx];
+  if ((row.key === "width" || row.key === "height") &&
+      node._cwkValues?.res_preset && node._cwkValues.res_preset !== "(preset)") {
+    const dims = RES_PRESETS_MAP[node._cwkValues.res_preset];
+    const presetVal = dims ? (row.key === "width" ? dims.width : dims.height) : null;
+    if (presetVal === null || Number(val) !== Number(presetVal)) {
+      const ri = LATENT_ROWS.findIndex(r => r.key === "res_preset");
+      if (ri >= 0) applyRowValue(node, ri, "(preset)");
+    }
+  }
+}
+
 // ─── Inline number editor ─────────────────────────────────────────────────────
 
 function closeInlineEditor() {
@@ -539,7 +570,7 @@ app.registerExtension({
       node.color   = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
 
-            // Hide all LiteGraph widgets — canvas draws everything.
+      // Hide all LiteGraph widgets — canvas draws everything.
       setTimeout(() => {
         for (const w of node.widgets ?? []) {
           w.type = "hidden"; w.hidden = true;
@@ -547,30 +578,24 @@ app.registerExtension({
         }
 
         if (!node._cwkFromGraph) {
-          // Freshly added node (not restored from a workflow):
-          // start from the last-used settings.
+          // Freshly added node: start from the last-used settings.
           applyPersistedToNode(node);
         }
-        // Nodes restored from a workflow already have their widget values set
-        // by configure(); onConfigure/afterConfigureGraph synced them.
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
         node.size[1] = calcNodeHeight();
         app.canvas.setDirty(true, true);
       }, 0);
 
-      // LiteGraph calls this whenever serialized data is applied to the node
-      // (workflow load, copy/paste, clone). Widget values are already restored
-      // at this point — adopt them into the canvas state.
       node.onConfigure = function () {
         this._cwkFromGraph = true;
         syncFromWidgets(this);
       };
-		
+
       node.onDrawForeground = function (ctx) {
-		if (this.flags?.collapsed) return;
-		drawNode(this, ctx);
-	  };
+        if (this.flags?.collapsed) return;
+        drawNode(this, ctx);
+      };
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
@@ -589,7 +614,8 @@ app.registerExtension({
         if (row.type === "list") {
           openDropdown(node, rowIdx, cur, val => {
             applyRowValue(node, rowIdx, val);
-            // When a res preset is chosen, auto-fill width and height
+            // Preset chosen → auto-fill width and height (applyRowValue directly,
+            // so the auto-fill never counts as a "manual" edit).
             if (row.key === "res_preset" && val !== "(preset)") {
               const dims = RES_PRESETS_MAP[val];
               if (dims && dims.width > 0 && dims.height > 0) {
@@ -605,16 +631,16 @@ app.registerExtension({
 
         if (part === "left") {
           const step = row.key === "width" || row.key === "height" ? 8 : 1;
-          applyRowValue(node, rowIdx, clampValue(row, Number(cur) - step));
+          userEditRow(node, rowIdx, clampValue(row, Number(cur) - step));   // Fix 2b
           return true;
         }
         if (part === "right") {
           const step = row.key === "width" || row.key === "height" ? 8 : 1;
-          applyRowValue(node, rowIdx, clampValue(row, Number(cur) + step));
+          userEditRow(node, rowIdx, clampValue(row, Number(cur) + step));   // Fix 2b
           return true;
         }
         if (part === "center") {
-          openInlineNumberEditor(node, rowIdx, cur, val => applyRowValue(node, rowIdx, val));
+          openInlineNumberEditor(node, rowIdx, cur, val => userEditRow(node, rowIdx, val));  // Fix 2b
           return true;
         }
         return false;
@@ -635,15 +661,21 @@ app.registerExtension({
           app.canvas.setDirty(true, false);
         }
       };
-	  
-	  afterConfigureGraph() {
+      // ⚠ onNodeCreated ENDS HERE — afterConfigureGraph must NOT be inside it.
+    };
+  },
+
+  // ✅ Fix 1: lives HERE — a property of the object passed to registerExtension,
+  // a sibling of beforeRegisterNodeDef.
+  afterConfigureGraph() {
     for (const node of app.graph._nodes) {
       if (node.type !== NODE_TYPE) continue;
       node._cwkFromGraph = true;
       syncFromWidgets(node);
-      reconcilePresetDims(node);          // see Fix 2
+      reconcilePresetDims(node);          // Fix 2a
       persistSettings(node);
     }
+    // Late re-sync (also covers the preset list still loading async).
     setTimeout(() => {
       for (const node of app.graph._nodes) {
         if (node.type !== NODE_TYPE) continue;
@@ -652,7 +684,5 @@ app.registerExtension({
       }
       app.canvas?.setDirty?.(true, true);
     }, 500);
-  },
-    };
   },
 });

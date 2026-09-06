@@ -20,6 +20,8 @@ import folder_paths
 import comfy.samplers
 import comfy.sd
 
+from . import cwk_batch_messaging
+
 # ─── Preset file path ─────────────────────────────────────────────────────────
 
 _NODE_DIR          = os.path.dirname(__file__)

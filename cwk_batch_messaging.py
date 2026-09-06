@@ -111,7 +111,7 @@ def _wait_for_response(uid: str, graph_id: str) -> Response:
                 "cwk-batch-selector-tick",
                 {"tick": 0, "uid": uid, "graph_id": graph_id},
             )
-            time.sleep(0.5)
+            time.sleep(0.1)
         return MessageState.get_response()
     finally:
         MessageState.stop_waiting()

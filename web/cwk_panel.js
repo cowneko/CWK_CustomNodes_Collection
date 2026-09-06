@@ -563,51 +563,6 @@ export class ModelBrowserPanel {
         )) return;
         this._fetchCivitAI(true, true);
       });
-    // Re-snap when the grid area changes width: panel resize handle,
-    // window resize, panel becoming visible.
-    this._thumbObserver = new ResizeObserver(() => {
-      const l = this._thumbLayout();
-      if (l && l.usable !== this._lastThumbUsable) this._applyThumbLayout();
-      // (guard: applying the layout changes the grid HEIGHT as cards rewrap,
-      //  which re-triggers the observer — skip when only height changed)
-    });
-    this._thumbObserver.observe(document.getElementById("cwk-grid"));
-
-    this._applyThumbLayout();
-  }
-
-  /** Slider target → column count → exact-fill size. */
-  _thumbLayout() {
-    const grid = document.getElementById("cwk-grid");
-    if (!grid) return null;
-    const cs = getComputedStyle(grid);
-    // clientWidth includes padding but excludes the scrollbar — exactly the
-    // width the tracks must fill.
-    const usable = grid.clientWidth
-      - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    if (usable < THUMB_MIN) return null;
-
-    // Never below THUMB_MIN per card:
-    const maxCols = Math.max(1, Math.floor((usable + THUMB_GAP) / (THUMB_MIN + THUMB_GAP)));
-    // Column count that best approximates the slider target:
-    let cols = Math.round((usable + THUMB_GAP) / (this._thumbTarget + THUMB_GAP));
-    cols = Math.max(1, Math.min(cols, maxCols));
-    // Size that fills the row exactly — no ragged right edge:
-    const size = Math.floor((usable - (cols - 1) * THUMB_GAP) / cols);
-    return { cols, size, usable };
-  }
-
-  _applyThumbLayout() {
-    const l = this._thumbLayout();
-    if (!l) return;
-    const grid = document.getElementById("cwk-grid");
-    grid.classList.add("cwk-sized");
-    grid.style.gridTemplateColumns = `repeat(${l.cols}, 1fr)`;
-    grid.style.gap = `${THUMB_GAP}px`;
-    this._lastThumbUsable = l.usable;
-    const readout = document.getElementById("cwk-thumb-size-val");
-    if (readout) readout.textContent = `${l.size}px`;
-  }
            
     // ── Reload Models button ───────────────────────────────────────────────────
     document.getElementById("cwk-reload-btn")
@@ -680,6 +635,52 @@ export class ModelBrowserPanel {
       try { localStorage.setItem(THUMB_KEY, String(this._thumbTarget)); } catch {}
       this._applyThumbLayout();
     });
+
+    // Re-snap when the grid area changes width: panel resize handle,
+    // window resize, panel becoming visible.
+    this._thumbObserver = new ResizeObserver(() => {
+      const l = this._thumbLayout();
+      if (l && l.usable !== this._lastThumbUsable) this._applyThumbLayout();
+      // (guard: applying the layout changes the grid HEIGHT as cards rewrap,
+      //  which re-triggers the observer — skip when only height changed)
+    });
+    this._thumbObserver.observe(document.getElementById("cwk-grid"));
+
+    this._applyThumbLayout();
+  }
+
+  /** Slider target → column count → exact-fill size. */
+  _thumbLayout() {
+    const grid = document.getElementById("cwk-grid");
+    if (!grid) return null;
+    const cs = getComputedStyle(grid);
+    // clientWidth includes padding but excludes the scrollbar — exactly the
+    // width the tracks must fill.
+    const usable = grid.clientWidth
+      - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    if (usable < THUMB_MIN) return null;
+
+    // Never below THUMB_MIN per card:
+    const maxCols = Math.max(1, Math.floor((usable + THUMB_GAP) / (THUMB_MIN + THUMB_GAP)));
+    // Column count that best approximates the slider target:
+    let cols = Math.round((usable + THUMB_GAP) / (this._thumbTarget + THUMB_GAP));
+    cols = Math.max(1, Math.min(cols, maxCols));
+    // Size that fills the row exactly — no ragged right edge:
+    const size = Math.floor((usable - (cols - 1) * THUMB_GAP) / cols);
+    return { cols, size, usable };
+  }
+
+  _applyThumbLayout() {
+    const l = this._thumbLayout();
+    if (!l) return;
+    const grid = document.getElementById("cwk-grid");
+    grid.classList.add("cwk-sized");
+    grid.style.gridTemplateColumns = `repeat(${l.cols}, 1fr)`;
+    grid.style.gap = `${THUMB_GAP}px`;
+    this._lastThumbUsable = l.usable;
+    const readout = document.getElementById("cwk-thumb-size-val");
+    if (readout) readout.textContent = `${l.size}px`;
+  }
 
   // ── Open / close ──────────────────────────────────────────────────────────────
 

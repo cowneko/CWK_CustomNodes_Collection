@@ -618,14 +618,16 @@ export class ModelBrowserPanel {
            rules in cwk_styles.js (height:100%, object-fit:cover) and the
            placeholder rule (width/height:100%) are already correct once the
            card box is definite — no overrides needed for them. */
-        #cwk-grid.cwk-sized {
-          display:grid;
-          grid-auto-rows: auto;   /* rows size to the cards, not the old 400px */
-          align-content: start;   /* rows stack from the top, never fill panel height */
-          align-items: start;     /* cards never stretch to fill the row */
-        }
+        /* Card = exact track × row box:
+           - box-sizing:border-box makes width:100% include the 2px border
+           - row height is set INLINE by _applyThumbLayout() — inline styles
+             beat every stylesheet (incl. the base 400px rows) — and the grid
+             default align-stretch makes each card fill its row exactly.
+           No reliance on aspect-ratio or intrinsic auto-row sizing. */
         #cwk-grid.cwk-sized .cwk-card {
-          width: 100%; height: auto; min-width: 0;
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
           aspect-ratio: ${THUMB_AR_W} / ${THUMB_AR_H};
         }
       `;
@@ -674,19 +676,21 @@ export class ModelBrowserPanel {
     return { cols, size, usable };
   }
 
-  _applyThumbLayout() {
+   _applyThumbLayout() {
     const l = this._thumbLayout();
     if (!l) return;
     const grid = document.getElementById("cwk-grid");
+    const h = Math.round(l.size * THUMB_AR_H / THUMB_AR_W);
+
     grid.classList.add("cwk-sized");
     grid.style.gridTemplateColumns = `repeat(${l.cols}, 1fr)`;
+    grid.style.gridAutoRows = `${h}px`;   // rows exactly one card tall — inline, unbeatable
     grid.style.gap = `${THUMB_GAP}px`;
     this._lastThumbUsable = l.usable;
+
     const readout = document.getElementById("cwk-thumb-size-val");
-    if (readout) {
-      const h = Math.round(l.size * THUMB_AR_H / THUMB_AR_W);
-      readout.textContent = `${l.size}×${h}`;}
-    }
+    if (readout) readout.textContent = `${l.size}×${h}`;
+  }
 
   // ── Open / close ──────────────────────────────────────────────────────────────
 

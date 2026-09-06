@@ -77,17 +77,56 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function sendResponse(node, msg = {}) {
+async function sendResponse(node, msg = {}) {
   const gw = getW(node, "graph_id");
-  msg.graph_id = gw?.value || `${app.graph.id}` || `${node.id}`;
+  let graphId = String(gw?.value ?? "");
+  if (!graphId || graphId === "undefined" || graphId === "null") graphId = String(node.id);
+  msg.graph_id = graphId;
+  msg.node_id  = String(node.id);            // exact key the backend matches on
   if (!msg.special) {
-    msg.selection = Array.from(node._cwkbs.picked);
+    msg.selection = Array.from(node._cwkbs.picked).map(Number).sort((a, b) => a - b);
   }
   const body = new FormData();
   body.append("response", JSON.stringify(msg));
-  api.fetchApi("/cwk-batch-selector-message", { method: "POST", body });
-  node._cwkbs.waiting = false;
-  app.canvas.setDirty(true, true);
+  try {
+    const r = await api.fetchApi("/cwk-batch-selector-message", { method: "POST", body });
+    if (!r.ok) {
+      console.error(`[CWK Batch Selector] response rejected (HTTP ${r.status})`,
+                    await r.text().catch(() => ""));
+      return false;                          // still parked — keep "waiting" honest
+    }
+    node._cwkbs.waiting = false;
+    app.canvas.setDirty(true, true);
+    return true;
+  } catch (err) {
+    console.error("[CWK Batch Selector] failed to send response:", err);
+    return false;
+  }
+}
+
+async function onRegenerate(node) {
+  const st = node._cwkbs;
+  if (st._regenPending) return;              // debounce
+  st._regenPending = true;
+
+  const ok = await sendResponse(node, { special: REGENERATE });
+  if (!ok) { st._regenPending = false; return; }
+
+  const requeue = () => {
+    if (!st._regenPending) return;
+    st._regenPending = false;
+    try { app.queuePrompt(0, 1); }
+    catch (err) { console.warn("[CWK Batch Selector] regen re-queue failed:", err); }
+  };
+  const onInterrupted = () => {
+    api.removeEventListener("execution_interrupted", onInterrupted);
+    setTimeout(requeue, 50);
+  };
+  api.addEventListener("execution_interrupted", onInterrupted);
+  setTimeout(() => {                         // safety net
+    api.removeEventListener("execution_interrupted", onInterrupted);
+    requeue();
+  }, 3000);
 }
 
 // ── Layout and Draw ────────────────────────
@@ -510,17 +549,7 @@ function attachBehaviors(node) {
         sendResponse(this, { special: CANCEL });
         return true;
       }
-      if (btnId === "regen") {
-        // 1) Tell backend to abort the current run.
-        sendResponse(this, { special: REGENERATE });
-        // 2) Re-queue the prompt so upstream nodes execute again.
-        //    Tiny delay lets the interrupt propagate first.
-        setTimeout(() => {
-          try { app.queuePrompt(0, 1); }
-          catch (err) { console.warn("[CWK Batch Selector] regen queue failed:", err); }
-        }, 150);
-        return true;
-      }
+      if (btnId === "regen") { onRegenerate(this); return true; }
       return true;
     }
 
@@ -653,7 +682,7 @@ app.registerExtension({
           w.computeSize = () => [0, -4];
         }
         const gw = getW(node, "graph_id");
-        if (gw) gw.value = `${app.graph.id}` || `${node.id}`;
+        if (gw) gw.value = String(app.graph?.id ?? node.id);
         if (node.size[0] < NODE_MIN_W) node.size[0] = NODE_MIN_W;
         if (node.size[1] < NODE_MIN_H) node.size[1] = Math.max(NODE_MIN_H, calcNaturalHeight(node));
         app.canvas.setDirty(true, true);
@@ -675,7 +704,7 @@ app.registerExtension({
           w.computeSize = () => [0, -4];
         }
         const gw = getW(node, "graph_id");
-        if (gw) gw.value = `${app.graph.id}` || `${node.id}`;
+        gw.value = String(app.graph?.id ?? node.id);
 
         // Enforce minimums but KEEP the user's saved size
         node.size[0] = Math.max(NODE_MIN_W, node.size[0]);

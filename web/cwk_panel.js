@@ -299,9 +299,6 @@ export class ModelBrowserPanel {
         <div class="cwk-progress-wrap" id="cwk-progress-wrap">
           <div class="cwk-progress-bar" id="cwk-progress-bar" style="width:0%"></div>
         </div>
-        <div class="cwk-progress-wrap" id="cwk-progress-wrap">
-          <div class="cwk-progress-bar" id="cwk-progress-bar" style="width:0%"></div>
-        </div>
         <div class="cwk-thumb-size" id="cwk-thumb-size"
              title="Thumbnail size (steps to fit the grid)">
           <span class="cwk-ts-label">Size</span>
@@ -309,7 +306,6 @@ export class ModelBrowserPanel {
                  min="${THUMB_MIN}" max="${THUMB_MAX}" step="${THUMB_STEP}"/>
           <span class="cwk-ts-val" id="cwk-thumb-size-val"></span>
         </div>
-        <button class="cwk-btn cwk-btn-primary" id="cwk-edit-btn">Edit Preset</button>
         <button class="cwk-btn cwk-btn-primary" id="cwk-edit-btn">Edit Preset</button>
         <button class="cwk-btn cwk-btn-primary" id="cwk-save-preset-btn">Save Preset</button>
         <button class="cwk-btn cwk-btn-accent"  id="cwk-load-model-btn">Load Model</button>

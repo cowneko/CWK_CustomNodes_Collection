@@ -36,6 +36,8 @@ const THUMB_MAX  = 384;   // px — largest thumbnail
 const THUMB_STEP = 16;    // px — slider granularity
 const THUMB_GAP  = 10;    // px — grid gap (forced by _applyThumbLayout)
 const THUMB_DEF  = 160;   // px — default target
+const THUMB_AR_W = 2;     // aspect ratio numerator   (width)
+const THUMB_AR_H = 3;     // aspect ratio denominator (height) → 2:3 portrait
 
 // ─── Base-model filters ───────────────────────────────────────────────────────
 
@@ -610,18 +612,25 @@ export class ModelBrowserPanel {
         .cwk-thumb-size .cwk-ts-val { font:11px Inter,system-ui,sans-serif;
           color:#cdd6f4; min-width:38px; text-align:right; white-space:nowrap; }
 
-        /* Cards follow the grid tracks set by _applyThumbLayout(). */
-        #cwk-grid.cwk-sized { display:grid; align-content:start; }
-        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; }
-        #cwk-grid.cwk-sized .cwk-card img,
-        #cwk-grid.cwk-sized .cwk-card video { width:100%; }
-
-        /* OPTIONAL — uncomment if .cwk-card media has a fixed pixel height in
-           cwk_styles.js and you want heights to scale with widths too:
+      /* Cards follow the grid tracks set by _applyThumbLayout();
+           media scales on BOTH axes via the fixed aspect ratio. */
+        #cwk-grid.cwk-sized {
+          display:grid;
+          grid-auto-rows: auto;          /* ← defeats the fixed 400px rows */
+          align-content:start;
+        }
+        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; height:auto; }
         #cwk-grid.cwk-sized .cwk-card img,
         #cwk-grid.cwk-sized .cwk-card video {
-          width:100%; height:auto; aspect-ratio:3/4; object-fit:cover; }
-        */
+          width:100%; height:auto; display:block;
+          aspect-ratio: ${THUMB_AR_W} / ${THUMB_AR_H};
+          object-fit:cover;
+        }
+        #cwk-grid.cwk-sized .cwk-card-placeholder {
+          width:100%; height:auto;
+          aspect-ratio: ${THUMB_AR_W} / ${THUMB_AR_H};
+          display:flex; align-items:center; justify-content:center;
+        }
       `;
       document.head.appendChild(s);
     }

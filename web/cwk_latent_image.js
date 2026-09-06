@@ -93,6 +93,62 @@ const SEP_BEFORE = new Set([1]);
 
 _loadResolutionPresets();
 
+// ─── Settings persistence (survives reloads / browser restarts) ──────────────
+
+const LS_KEY   = "CWK_LatentImage_settings";
+const DEFAULTS = { res_preset: "(preset)", width: 1024, height: 1024, batch_size: 1 };
+
+function loadPersistedSettings() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== "object") return null;
+    const out = { ...DEFAULTS };
+    if (typeof d.res_preset === "string" && d.res_preset) out.res_preset = d.res_preset;
+    for (const k of ["width", "height", "batch_size"]) {
+      const v = Number(d[k]);
+      if (Number.isFinite(v)) out[k] = Math.round(v);
+    }
+    return out;
+  } catch { return null; }
+}
+
+let _persistTimer = null;
+function persistSettings(node) {
+  const v = node?._cwkValues ?? DEFAULTS;
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(v)); }
+    catch (e) { console.warn("[CWK LatentImage] Could not persist settings:", e); }
+  }, 200);
+}
+
+// Adopt widget values (restored by LiteGraph from a saved workflow or a clone)
+// into the canvas-drawn state.
+function syncFromWidgets(node) {
+  if (!node._cwkValues) node._cwkValues = { ...DEFAULTS };
+  for (const row of LATENT_ROWS) {
+    const w = node.widgets?.find(w => w.name === row.widget);
+    if (w && w.value !== undefined && w.value !== null && w.value !== "") {
+      node._cwkValues[row.key] = row.type === "int" ? Number(w.value) : String(w.value);
+    }
+  }
+}
+
+// Apply last-used settings to a freshly created node (widgets + canvas state).
+function applyPersistedToNode(node) {
+  const saved = loadPersistedSettings();
+  if (!saved) return;
+  node._cwkValues = { ...DEFAULTS, ...saved };
+  for (const row of LATENT_ROWS) {
+    const w = node.widgets?.find(w => w.name === row.widget);
+    const val = node._cwkValues[row.key];
+    if (w && val !== undefined) { w.value = val; w.callback?.(val); }
+  }
+}
+
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
 function getRowsStartY() {
@@ -179,6 +235,7 @@ function applyRowValue(node, rowIdx, val) {
   node._cwkValues[row.key] = val;
   const w = node.widgets?.find(w => w.name === row.widget);
   if (w) { w.value = val; w.callback?.(val); }
+  persistSettings(node);               // ← NEW: remember last-used values
   app.canvas.setDirty(true, false);
 }
 
@@ -482,24 +539,34 @@ app.registerExtension({
       node.color   = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
 
-      // Hide all LiteGraph widgets — canvas draws everything
+            // Hide all LiteGraph widgets — canvas draws everything.
       setTimeout(() => {
         for (const w of node.widgets ?? []) {
           w.type = "hidden"; w.hidden = true;
           w.computeSize = () => [0, -4];
         }
-        // Set sensible defaults on the hidden widgets too
-        const getW = n => node.widgets?.find(w => w.name === n);
-        const rp = getW("resolution_preset"); if (rp) { rp.value = "(preset)"; }
-        const wi = getW("width");             if (wi) { wi.value = 1024; }
-        const hi = getW("height");            if (hi) { hi.value = 1024; }
-        const bs = getW("batch_size");        if (bs) { bs.value = 1; }
+
+        if (!node._cwkFromGraph) {
+          // Freshly added node (not restored from a workflow):
+          // start from the last-used settings.
+          applyPersistedToNode(node);
+        }
+        // Nodes restored from a workflow already have their widget values set
+        // by configure(); onConfigure/afterConfigureGraph synced them.
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
         node.size[1] = calcNodeHeight();
         app.canvas.setDirty(true, true);
       }, 0);
 
+      // LiteGraph calls this whenever serialized data is applied to the node
+      // (workflow load, copy/paste, clone). Widget values are already restored
+      // at this point — adopt them into the canvas state.
+      node.onConfigure = function () {
+        this._cwkFromGraph = true;
+        syncFromWidgets(this);
+      };
+		
       node.onDrawForeground = function (ctx) {
 		if (this.flags?.collapsed) return;
 		drawNode(this, ctx);
@@ -568,6 +635,26 @@ app.registerExtension({
           app.canvas.setDirty(true, false);
         }
       };
+	  
+	  afterConfigureGraph() {
+    // Workflow finished loading: make sure every node of this type shows the
+    // values it was saved with (onConfigure normally already did), and treat
+    // the loaded values as the new "last used".
+    for (const node of app.graph._nodes) {
+      if (node.type !== NODE_TYPE) continue;
+      node._cwkFromGraph = true;
+      syncFromWidgets(node);
+      persistSettings(node);   // delete this line if you want only explicit
+                               // edits (not opened workflows) to update defaults
+    }
+    // Late re-sync in case the frontend restores widget values asynchronously.
+    setTimeout(() => {
+      for (const node of app.graph._nodes) {
+        if (node.type === NODE_TYPE) syncFromWidgets(node);
+      }
+      app.canvas?.setDirty?.(true, true);
+    }, 500);
+  },
     };
   },
 });

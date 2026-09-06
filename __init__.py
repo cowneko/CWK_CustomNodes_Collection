@@ -106,6 +106,6 @@ WEB_DIRECTORY = "./web"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 # Force clear any caching
-import sys
-if 'comfy.nodes' in sys.modules:
-    del sys.modules['comfy.nodes']
+#import sys
+#if 'comfy.nodes' in sys.modules:
+    #del sys.modules['comfy.nodes']

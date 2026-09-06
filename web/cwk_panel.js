@@ -29,6 +29,14 @@ function isNsfwModel(model) {
   return (c.nsfw_level ?? 0) >= NSFW_R;
 }
 
+// ─── Thumbnail size slider ───────────────────────────────────────────────────
+const THUMB_KEY  = "cwk_thumb_size";
+const THUMB_MIN  = 64;    // px — smallest thumbnail
+const THUMB_MAX  = 384;   // px — largest thumbnail
+const THUMB_STEP = 16;    // px — slider granularity
+const THUMB_GAP  = 10;    // px — grid gap (forced by _applyThumbLayout)
+const THUMB_DEF  = 160;   // px — default target
+
 // ─── Base-model filters ───────────────────────────────────────────────────────
 
 // Static bookends shown immediately; the middle entries are populated
@@ -102,6 +110,13 @@ export class ModelBrowserPanel {
     this._revealed       = JSON.parse(localStorage.getItem("cwk_revealed") || "{}");
     this._filterMatch    = null;
     this._filterFavorite = false;
+    // Thumbnail-size slider state (see _installThumbSizeSlider)
+    this._thumbTarget = (() => {
+      const v = Number(localStorage.getItem(THUMB_KEY));
+      return Number.isFinite(v) ? Math.min(THUMB_MAX, Math.max(THUMB_MIN, v)) : THUMB_DEF;
+    })();
+    this._thumbObserver  = null;
+    this._lastThumbUsable = -1;
     // Full CivitAI-derived matcher list (bookends + every known base model,
     // regardless of whether any model is installed for it).
     this._baseModelMatchers = STATIC_BASE_MODEL_FILTERS;
@@ -284,6 +299,17 @@ export class ModelBrowserPanel {
         <div class="cwk-progress-wrap" id="cwk-progress-wrap">
           <div class="cwk-progress-bar" id="cwk-progress-bar" style="width:0%"></div>
         </div>
+        <div class="cwk-progress-wrap" id="cwk-progress-wrap">
+          <div class="cwk-progress-bar" id="cwk-progress-bar" style="width:0%"></div>
+        </div>
+        <div class="cwk-thumb-size" id="cwk-thumb-size"
+             title="Thumbnail size (steps to fit the grid)">
+          <span class="cwk-ts-label">Size</span>
+          <input type="range" id="cwk-thumb-size-slider"
+                 min="${THUMB_MIN}" max="${THUMB_MAX}" step="${THUMB_STEP}"/>
+          <span class="cwk-ts-val" id="cwk-thumb-size-val"></span>
+        </div>
+        <button class="cwk-btn cwk-btn-primary" id="cwk-edit-btn">Edit Preset</button>
         <button class="cwk-btn cwk-btn-primary" id="cwk-edit-btn">Edit Preset</button>
         <button class="cwk-btn cwk-btn-primary" id="cwk-save-preset-btn">Save Preset</button>
         <button class="cwk-btn cwk-btn-accent"  id="cwk-load-model-btn">Load Model</button>
@@ -333,6 +359,7 @@ export class ModelBrowserPanel {
     this._bindFilterDropdown();
     this._populateDropdowns();
     this._updateKeyLabel();
+    this._installThumbSizeSlider();
   }
 
   // ── Filter dropdown ───────────────────────────────────────────────────────────
@@ -541,6 +568,101 @@ export class ModelBrowserPanel {
         this._fetchCivitAI(true, true);
       });
 
+      // ── Thumbnail size slider ──────────────────────────────────────────────────
+
+  _installThumbSizeSlider() {
+    if (!document.getElementById("cwk-thumb-size-style")) {
+      const s = document.createElement("style");
+      s.id = "cwk-thumb-size-style";
+      s.textContent = `
+        .cwk-thumb-size { display:inline-flex; align-items:center; gap:6px;
+          height:28px; padding:0 10px; background:#1e2335;
+          border:1px solid #313552; border-radius:6px; }
+        .cwk-thumb-size .cwk-ts-label { font:11px Inter,system-ui,sans-serif;
+          color:#6c7086; user-select:none; white-space:nowrap; }
+        .cwk-thumb-size input[type=range] { -webkit-appearance:none; appearance:none;
+          width:90px; height:4px; margin:0; background:#313552; border-radius:2px;
+          outline:none; cursor:pointer; }
+        .cwk-thumb-size input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;
+          width:12px; height:12px; border-radius:50%; background:#89b4fa;
+          border:2px solid #141824; }
+        .cwk-thumb-size input[type=range]::-moz-range-thumb { width:12px; height:12px;
+          border-radius:50%; background:#89b4fa; border:2px solid #141824; }
+        .cwk-thumb-size .cwk-ts-val { font:11px Inter,system-ui,sans-serif;
+          color:#cdd6f4; min-width:38px; text-align:right; white-space:nowrap; }
+
+        /* Cards follow the grid tracks set by _applyThumbLayout(). */
+        #cwk-grid.cwk-sized { display:grid; align-content:start; }
+        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; }
+        #cwk-grid.cwk-sized .cwk-card img,
+        #cwk-grid.cwk-sized .cwk-card video { width:100%; }
+
+        /* OPTIONAL — uncomment if .cwk-card media has a fixed pixel height in
+           cwk_styles.js and you want heights to scale with widths too:
+        #cwk-grid.cwk-sized .cwk-card img,
+        #cwk-grid.cwk-sized .cwk-card video {
+          width:100%; height:auto; aspect-ratio:3/4; object-fit:cover; }
+        */
+      `;
+      document.head.appendChild(s);
+    }
+
+    const slider = document.getElementById("cwk-thumb-size-slider");
+    if (!slider) return;
+    slider.value = String(this._thumbTarget);
+
+    slider.addEventListener("input", () => {
+      this._thumbTarget = Math.min(THUMB_MAX, Math.max(THUMB_MIN, Number(slider.value)));
+      try { localStorage.setItem(THUMB_KEY, String(this._thumbTarget)); } catch {}
+      this._applyThumbLayout();
+    });
+
+    // Re-snap when the grid area changes width: panel resize handle,
+    // window resize, panel becoming visible.
+    this._thumbObserver = new ResizeObserver(() => {
+      const l = this._thumbLayout();
+      if (l && l.usable !== this._lastThumbUsable) this._applyThumbLayout();
+      // (guard: applying the layout changes the grid HEIGHT as cards rewrap,
+      //  which re-triggers the observer — skip when only height changed)
+    });
+    this._thumbObserver.observe(document.getElementById("cwk-grid"));
+
+    this._applyThumbLayout();
+  }
+
+  /** Slider target → column count → exact-fill size. */
+  _thumbLayout() {
+    const grid = document.getElementById("cwk-grid");
+    if (!grid) return null;
+    const cs = getComputedStyle(grid);
+    // clientWidth includes padding but excludes the scrollbar — exactly the
+    // width the tracks must fill.
+    const usable = grid.clientWidth
+      - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    if (usable < THUMB_MIN) return null;
+
+    // Never below THUMB_MIN per card:
+    const maxCols = Math.max(1, Math.floor((usable + THUMB_GAP) / (THUMB_MIN + THUMB_GAP)));
+    // Column count that best approximates the slider target:
+    let cols = Math.round((usable + THUMB_GAP) / (this._thumbTarget + THUMB_GAP));
+    cols = Math.max(1, Math.min(cols, maxCols));
+    // Size that fills the row exactly — no ragged right edge:
+    const size = Math.floor((usable - (cols - 1) * THUMB_GAP) / cols);
+    return { cols, size, usable };
+  }
+
+  _applyThumbLayout() {
+    const l = this._thumbLayout();
+    if (!l) return;
+    const grid = document.getElementById("cwk-grid");
+    grid.classList.add("cwk-sized");
+    grid.style.gridTemplateColumns = `repeat(${l.cols}, 1fr)`;
+    grid.style.gap = `${THUMB_GAP}px`;
+    this._lastThumbUsable = l.usable;
+    const readout = document.getElementById("cwk-thumb-size-val");
+    if (readout) readout.textContent = `${l.size}px`;
+  }
+           
     // ── Reload Models button ───────────────────────────────────────────────────
     document.getElementById("cwk-reload-btn")
       .addEventListener("click", async () => {
@@ -589,6 +711,7 @@ export class ModelBrowserPanel {
     this._setStatus("Loading models…");
     this._panel.classList.add("visible");
     this._overlay.classList.add("visible");
+    requestAnimationFrame(() => this._applyThumbLayout());
     try {
       this._models = await apiFetch("/cwk/models");
       this._rebuildFilterDropdown();

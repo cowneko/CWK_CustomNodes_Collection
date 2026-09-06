@@ -589,7 +589,7 @@ export class ModelBrowserPanel {
       .addEventListener("click", () => this._loadModel());
   }
 
-      // ── Thumbnail size slider ──────────────────────────────────────────────────
+  // ── Thumbnail size slider ──────────────────────────────────────────────────
 
   _installThumbSizeSlider() {
     if (!document.getElementById("cwk-thumb-size-style")) {
@@ -610,26 +610,23 @@ export class ModelBrowserPanel {
         .cwk-thumb-size input[type=range]::-moz-range-thumb { width:12px; height:12px;
           border-radius:50%; background:#89b4fa; border:2px solid #141824; }
         .cwk-thumb-size .cwk-ts-val { font:11px Inter,system-ui,sans-serif;
-          color:#cdd6f4; min-width:38px; text-align:right; white-space:nowrap; }
+          color:#cdd6f4; min-width:44px; text-align:right; white-space:nowrap; }
 
-      /* Cards follow the grid tracks set by _applyThumbLayout();
-           media scales on BOTH axes via the fixed aspect ratio. */
+        /* ── The CARD is the fixed 2:3 box ──
+           Height is locked to trackWidth × 1.5 and cannot come from the
+           media's shape, the old 400px rows, or grid stretching. The media
+           rules in cwk_styles.js (height:100%, object-fit:cover) and the
+           placeholder rule (width/height:100%) are already correct once the
+           card box is definite — no overrides needed for them. */
         #cwk-grid.cwk-sized {
           display:grid;
-          grid-auto-rows: auto;          /* ← defeats the fixed 400px rows */
-          align-content:start;
+          grid-auto-rows: auto;   /* rows size to the cards, not the old 400px */
+          align-content: start;   /* rows stack from the top, never fill panel height */
+          align-items: start;     /* cards never stretch to fill the row */
         }
-        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; height:auto; }
-        #cwk-grid.cwk-sized .cwk-card img,
-        #cwk-grid.cwk-sized .cwk-card video {
-          width:100%; height:auto; display:block;
+        #cwk-grid.cwk-sized .cwk-card {
+          width: 100%; height: auto; min-width: 0;
           aspect-ratio: ${THUMB_AR_W} / ${THUMB_AR_H};
-          object-fit:cover;
-        }
-        #cwk-grid.cwk-sized .cwk-card-placeholder {
-          width:100%; height:auto;
-          aspect-ratio: ${THUMB_AR_W} / ${THUMB_AR_H};
-          display:flex; align-items:center; justify-content:center;
         }
       `;
       document.head.appendChild(s);
@@ -645,13 +642,11 @@ export class ModelBrowserPanel {
       this._applyThumbLayout();
     });
 
-    // Re-snap when the grid area changes width: panel resize handle,
-    // window resize, panel becoming visible.
+    // Re-snap when the grid area changes width (panel resize, window resize,
+    // panel becoming visible). Height-only reflows are ignored by the guard.
     this._thumbObserver = new ResizeObserver(() => {
       const l = this._thumbLayout();
       if (l && l.usable !== this._lastThumbUsable) this._applyThumbLayout();
-      // (guard: applying the layout changes the grid HEIGHT as cards rewrap,
-      //  which re-triggers the observer — skip when only height changed)
     });
     this._thumbObserver.observe(document.getElementById("cwk-grid"));
 
@@ -688,8 +683,10 @@ export class ModelBrowserPanel {
     grid.style.gap = `${THUMB_GAP}px`;
     this._lastThumbUsable = l.usable;
     const readout = document.getElementById("cwk-thumb-size-val");
-    if (readout) readout.textContent = `${l.size}px`;
-  }
+    if (readout) {
+      const h = Math.round(l.size * THUMB_AR_H / THUMB_AR_W);
+      readout.textContent = `${l.size}×${h}`;
+    }
 
   // ── Open / close ──────────────────────────────────────────────────────────────
 

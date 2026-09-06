@@ -685,7 +685,7 @@ export class ModelBrowserPanel {
     const readout = document.getElementById("cwk-thumb-size-val");
     if (readout) {
       const h = Math.round(l.size * THUMB_AR_H / THUMB_AR_W);
-      readout.textContent = `${l.size}×${h}`;
+      readout.textContent = `${l.size}×${h}`;}
     }
 
   // ── Open / close ──────────────────────────────────────────────────────────────

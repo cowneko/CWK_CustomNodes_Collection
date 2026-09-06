@@ -563,56 +563,6 @@ export class ModelBrowserPanel {
         )) return;
         this._fetchCivitAI(true, true);
       });
-
-      // ── Thumbnail size slider ──────────────────────────────────────────────────
-
-  _installThumbSizeSlider() {
-    if (!document.getElementById("cwk-thumb-size-style")) {
-      const s = document.createElement("style");
-      s.id = "cwk-thumb-size-style";
-      s.textContent = `
-        .cwk-thumb-size { display:inline-flex; align-items:center; gap:6px;
-          height:28px; padding:0 10px; background:#1e2335;
-          border:1px solid #313552; border-radius:6px; }
-        .cwk-thumb-size .cwk-ts-label { font:11px Inter,system-ui,sans-serif;
-          color:#6c7086; user-select:none; white-space:nowrap; }
-        .cwk-thumb-size input[type=range] { -webkit-appearance:none; appearance:none;
-          width:90px; height:4px; margin:0; background:#313552; border-radius:2px;
-          outline:none; cursor:pointer; }
-        .cwk-thumb-size input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;
-          width:12px; height:12px; border-radius:50%; background:#89b4fa;
-          border:2px solid #141824; }
-        .cwk-thumb-size input[type=range]::-moz-range-thumb { width:12px; height:12px;
-          border-radius:50%; background:#89b4fa; border:2px solid #141824; }
-        .cwk-thumb-size .cwk-ts-val { font:11px Inter,system-ui,sans-serif;
-          color:#cdd6f4; min-width:38px; text-align:right; white-space:nowrap; }
-
-        /* Cards follow the grid tracks set by _applyThumbLayout(). */
-        #cwk-grid.cwk-sized { display:grid; align-content:start; }
-        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; }
-        #cwk-grid.cwk-sized .cwk-card img,
-        #cwk-grid.cwk-sized .cwk-card video { width:100%; }
-
-        /* OPTIONAL — uncomment if .cwk-card media has a fixed pixel height in
-           cwk_styles.js and you want heights to scale with widths too:
-        #cwk-grid.cwk-sized .cwk-card img,
-        #cwk-grid.cwk-sized .cwk-card video {
-          width:100%; height:auto; aspect-ratio:3/4; object-fit:cover; }
-        */
-      `;
-      document.head.appendChild(s);
-    }
-
-    const slider = document.getElementById("cwk-thumb-size-slider");
-    if (!slider) return;
-    slider.value = String(this._thumbTarget);
-
-    slider.addEventListener("input", () => {
-      this._thumbTarget = Math.min(THUMB_MAX, Math.max(THUMB_MIN, Number(slider.value)));
-      try { localStorage.setItem(THUMB_KEY, String(this._thumbTarget)); } catch {}
-      this._applyThumbLayout();
-    });
-
     // Re-snap when the grid area changes width: panel resize handle,
     // window resize, panel becoming visible.
     this._thumbObserver = new ResizeObserver(() => {
@@ -681,6 +631,55 @@ export class ModelBrowserPanel {
     document.getElementById("cwk-load-model-btn")
       .addEventListener("click", () => this._loadModel());
   }
+
+      // ── Thumbnail size slider ──────────────────────────────────────────────────
+
+  _installThumbSizeSlider() {
+    if (!document.getElementById("cwk-thumb-size-style")) {
+      const s = document.createElement("style");
+      s.id = "cwk-thumb-size-style";
+      s.textContent = `
+        .cwk-thumb-size { display:inline-flex; align-items:center; gap:6px;
+          height:28px; padding:0 10px; background:#1e2335;
+          border:1px solid #313552; border-radius:6px; }
+        .cwk-thumb-size .cwk-ts-label { font:11px Inter,system-ui,sans-serif;
+          color:#6c7086; user-select:none; white-space:nowrap; }
+        .cwk-thumb-size input[type=range] { -webkit-appearance:none; appearance:none;
+          width:90px; height:4px; margin:0; background:#313552; border-radius:2px;
+          outline:none; cursor:pointer; }
+        .cwk-thumb-size input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;
+          width:12px; height:12px; border-radius:50%; background:#89b4fa;
+          border:2px solid #141824; }
+        .cwk-thumb-size input[type=range]::-moz-range-thumb { width:12px; height:12px;
+          border-radius:50%; background:#89b4fa; border:2px solid #141824; }
+        .cwk-thumb-size .cwk-ts-val { font:11px Inter,system-ui,sans-serif;
+          color:#cdd6f4; min-width:38px; text-align:right; white-space:nowrap; }
+
+        /* Cards follow the grid tracks set by _applyThumbLayout(). */
+        #cwk-grid.cwk-sized { display:grid; align-content:start; }
+        #cwk-grid.cwk-sized .cwk-card { width:auto; min-width:0; }
+        #cwk-grid.cwk-sized .cwk-card img,
+        #cwk-grid.cwk-sized .cwk-card video { width:100%; }
+
+        /* OPTIONAL — uncomment if .cwk-card media has a fixed pixel height in
+           cwk_styles.js and you want heights to scale with widths too:
+        #cwk-grid.cwk-sized .cwk-card img,
+        #cwk-grid.cwk-sized .cwk-card video {
+          width:100%; height:auto; aspect-ratio:3/4; object-fit:cover; }
+        */
+      `;
+      document.head.appendChild(s);
+    }
+
+    const slider = document.getElementById("cwk-thumb-size-slider");
+    if (!slider) return;
+    slider.value = String(this._thumbTarget);
+
+    slider.addEventListener("input", () => {
+      this._thumbTarget = Math.min(THUMB_MAX, Math.max(THUMB_MIN, Number(slider.value)));
+      try { localStorage.setItem(THUMB_KEY, String(this._thumbTarget)); } catch {}
+      this._applyThumbLayout();
+    });
 
   // ── Open / close ──────────────────────────────────────────────────────────────
 

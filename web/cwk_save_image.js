@@ -557,7 +557,8 @@ function openSaveSettingsPopup(node) {
     const r = row();
     const l = document.createElement("span"); l.textContent = "JPG quality"; l.style.cssText = labelCss;
     const s = document.createElement("input"); s.type = "range"; s.min = 1; s.max = 100;
-    s.value = Math.min(100, Math.max(1, Number(getVal(node, "jpg_quality", 95)) || 95));
+    s.value = _numSetting(node, "jpg_quality", 95, 1, 100);
+    setVal(node, "jpg_quality", s.value);
     s.style.cssText = sliderCss;
     const v = document.createElement("span"); v.textContent = s.value;
     v.style.cssText = "width:28px; text-align:right; color:#89b4fa; font-weight:600;";
@@ -571,7 +572,8 @@ function openSaveSettingsPopup(node) {
     const r = row();
     const l = document.createElement("span"); l.textContent = "WebP quality"; l.style.cssText = labelCss;
     webpSlider = document.createElement("input"); webpSlider.type = "range"; webpSlider.min = 1; webpSlider.max = 100;
-    webpSlider.value = Math.min(100, Math.max(1, Number(getVal(node, "webp_quality", 95)) || 95));
+    webpSlider.value = _numSetting(node, "webp_quality", 95, 1, 100);
+    setVal(node, "webp_quality", webpSlider.value);
     webpSlider.style.cssText = sliderCss;
     webpVal = document.createElement("span"); webpVal.textContent = webpSlider.value;
     webpVal.style.cssText = "width:28px; text-align:right; color:#89b4fa; font-weight:600;";
@@ -612,7 +614,8 @@ function openSaveSettingsPopup(node) {
     const r = row();
     const l = document.createElement("span"); l.textContent = "Counter digits"; l.style.cssText = labelCss;
     const inp = document.createElement("input"); inp.type = "number"; inp.min = 1; inp.max = 8; inp.step = 1;
-    inp.value = Math.min(8, Math.max(1, Number(getVal(node, "counter_digits", 4)) || 4));
+    inp.value = _numSetting(node, "counter_digits", 4, 1, 8);
+    setVal(node, "counter_digits", Number(inp.value));
     inp.style.cssText = "width:64px; background:#1e2335; border:1px solid #313552; border-radius:6px; color:#cdd6f4; padding:4px 8px; outline:none; font-size:13px;";
     inp.addEventListener("change", () => {
       const d = Math.min(8, Math.max(1, parseInt(inp.value, 10) || 4));
@@ -750,11 +753,11 @@ async function handleSave(node) {
         imprint_infos: node._cwkInfos ?? {},
         entire_batch: !!getVal(node, "save_entire_batch", true),
         batch_index: Math.max(0, node._cwkBatchIndex ?? 0),
-        jpg_quality:    Math.min(100, Math.max(1, Number(getVal(node, "jpg_quality", 95)) || 95)),
-        webp_quality:   Math.min(100, Math.max(1, Number(getVal(node, "webp_quality", 95)) || 95)),
+        jpg_quality:    _numSetting(node, "jpg_quality", 95, 1, 100),
+        webp_quality:   _numSetting(node, "webp_quality", 95, 1, 100),
         webp_lossless:  !!getVal(node, "webp_lossless", false),
         save_workflow:  saveWf,
-        counter_digits: Math.min(8, Math.max(1, Number(getVal(node, "counter_digits", 4)) || 4)),
+        counter_digits: _numSetting(node, "counter_digits", 4, 1, 8),
         workflow_json:  (saveWf && fmt === "PNG") ? _safeSerializeGraph() : null,
       }),
     });
@@ -1267,14 +1270,14 @@ app.registerExtension({
       node.setSizeForImage = function () {};
 
       setTimeout(() => {
+        // Repair values shifted in by workflows saved with an older node
+        // definition (ComfyUI applies widgets_values positionally).
+        _normalizeWidgets(node);
         for (const w of node.widgets ?? []) {
           w.type = "hidden"; w.hidden = true;
           w.computeSize = () => [0, -4];
         }
-        const tpl = getW(node, "filename_template");
-        if (tpl && (tpl.value === undefined || tpl.value === null || tpl.value === "")) {
-          tpl.value = "{model_name}_{sampler_name}_cfg{cfg}_steps{steps}";
-        }
+        
         node.size[0] = Math.max(node.size[0] ?? 0, 400);
         node.size[1] = Math.max(node.size[1] ?? 0, 560);
         _refreshInfos(node);

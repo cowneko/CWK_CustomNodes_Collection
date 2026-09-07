@@ -9,19 +9,19 @@ CWK Save Image — manual image saver node (CWK Custom Nodes Collection).
 There is NO autosave: execute() only writes temp preview files; real files are
 written exclusively through the REST route when the user clicks Save.
 
-Delivery: execute() returns ONLY the custom "cwk" ui payload (per-channel
-entries + infos + batch info). It reaches the frontend through exactly the same
-channel a standard "images" key would (same `executed` event, same
-node.onExecuted(message) call), but the stock frontend's node-image machinery
-(node.imgs drawing, click-to-cycle image previews, ctrl-click viewer /
-mask-editor hooks, setSizeForImage) never engages, because that machinery keys
-on the standard "images" ui field. That machinery also CONSUMES pointer events
-across the whole node body — which is why the custom buttons became
-unclickable while the standard key was still being sent.
+Delivery (primary): a dedicated WebSocket event "cwk_save_image_data", pushed
+with server.send_sync() exactly like the collection's CWKLivePreview node does
+with "cwk_live_preview". Custom ui keys are filtered out by some frontends
+before reaching the JS, and the standard "images" ui key engages the stock
+node-image machinery (which draws over the UI, resizes the node and CONSUMES
+pointer events across the whole body). A dedicated ws event avoids both
+problems and is proven to work in this collection. Secondary (redundant,
+deduped): the custom "cwk" ui key, received via onExecuted / the "executed"
+event on frontends that forward it.
 
-Temp filenames still carry channel/mask prefixes (cwkA_/cwkN_ + rgb/rgba/
-alpha) so the JS fallback parser can rebuild the channels from a standard
-"images" payload in case of a Python/JS version mismatch.
+Temp filenames carry channel/mask prefixes (cwkA_/cwkN_ + rgb/rgba/alpha) so
+the JS fallback parser can rebuild the channels from a standard "images"
+payload in case of a Python/JS version mismatch.
 
 Settings live as (JS-hidden) widgets so they persist inside the workflow:
 filename_template, imprint_infos, output_format, save_folder, subfolder_tag,
@@ -45,6 +45,8 @@ import folder_paths
 
 OUTPUT_FORMATS = ["PNG", "JPG", "WebP"]
 CHANNELS       = ["RGB", "RGBA", "ALPHA"]
+
+_WS_EVENT = "cwk_save_image_data"
 
 _IMPRINT_KEYS = [
     "model_name", "sampler_name", "scheduler", "cfg", "steps", "seed",
@@ -160,6 +162,28 @@ def _save_temp(img: Image.Image, prefix: str) -> Dict[str, str]:
     fname = f"{prefix}_{time.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
     img.save(os.path.join(temp_dir, fname))
     return {"filename": fname, "subfolder": "", "type": "temp"}
+
+
+def _send_node_payload(unique_id, cwk_payload: Dict[str, Any]) -> None:
+    """Push the preview payload to the frontend over a dedicated WebSocket event.
+
+    Same pattern as the collection's CWKLivePreview node: server.send_sync()
+    is safe to call from the execution worker thread and arrives at the
+    frontend as an api event ("cwk_save_image_data") that the JS routes by
+    node id. This bypasses ui-payload filtering entirely and never touches
+    node.imgs / node.images, so the stock image machinery cannot engage.
+    """
+    try:
+        from server import PromptServer
+        server = PromptServer.instance
+        if server is None:
+            return
+        sid = getattr(server, "client_id", None)
+        payload = dict(cwk_payload)
+        payload["node"] = str(unique_id)
+        server.send_sync(_WS_EVENT, payload, sid)
+    except Exception as e:
+        print(f"[CWK SaveImage] send_sync failed: {e}")
 
 # ─── Imprint (black footer / white text) ──────────────────────────────────────
 
@@ -291,8 +315,10 @@ class CWK_SaveImage:
     """
     CWK Save Image — manual image saver (sink node, no outputs).
 
-    execute() prepares RGB / RGBA / ALPHA previews (temp files) for the
-    frontend. Files are written only when the user presses the Save button
+    execute() prepares RGB / RGBA / ALPHA previews (temp files), pushes them
+    to the frontend over the "cwk_save_image_data" WebSocket event, and also
+    returns them under the custom "cwk" ui key (secondary channel).
+    Files are written only when the user presses the Save button
     (POST /cwk_save_image/save).
     """
 
@@ -366,27 +392,28 @@ class CWK_SaveImage:
             rgba_entries.append(_save_temp(rgba, f"{tag}_rgba"))
             alpha_entries.append(_save_temp(alpha_img, f"{tag}_alpha"))
 
+        cwk_payload = {
+            "rgb":        rgb_entries,
+            "rgba":       rgba_entries,
+            "alpha":      alpha_entries,
+            "infos":      infos_dict,
+            "batch_size": batch,
+            "has_masks":  m is not None,
+        }
+
+        # PRIMARY transport: dedicated WebSocket event (like CWKLivePreview).
+        _send_node_payload(unique_id, cwk_payload)
+
         print(f"[CWK SaveImage] node {unique_id}: {batch} image(s) ready | "
               f"masks={'yes' if m is not None else 'no'} | "
               f"infos tags={list(infos_dict.keys())}")
 
-        # ONLY the custom "cwk" key — deliberately NO standard "images" key:
-        # the stock frontend's image machinery keys on "images" and would
-        # install click-to-cycle / viewer handling that consumes pointer
-        # events over the whole node body (breaking the custom buttons).
-        # The "cwk" payload reaches the frontend through the very same
-        # executed event / onExecuted call.
+        # SECONDARY transport: custom "cwk" ui key (used automatically on
+        # frontends that forward unknown ui keys; deduped with the ws event).
+        # Deliberately NO standard "images" key — that's what engages the
+        # stock node-image machinery (overlay drawing + click interception).
         return {
-            "ui": {
-                "cwk": {
-                    "rgb":   rgb_entries,
-                    "rgba":  rgba_entries,
-                    "alpha": alpha_entries,
-                    "infos": infos_dict,
-                    "batch_size": batch,
-                    "has_masks":  m is not None,
-                },
-            },
+            "ui": {"cwk": cwk_payload},
             "result": (),
         }
 

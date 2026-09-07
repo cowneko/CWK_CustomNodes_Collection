@@ -16,9 +16,15 @@
  *   └─────────────────────────────────────────────────┘
  *   status line
  *
- * infos tags: refreshed LIVE from the graph (walks the infos link upstream,
- * collects widget values, finds the loader's model_name, searches downstream
- * for a KSampler seed) and merged with the values returned at execution.
+ * Payload delivery is redundant on purpose:
+ *   1) node.onExecuted(message)          — message may be the ui dict
+ *      {images, cwk} or a full event detail {node, output}.
+ *   2) api "executed" listener           — receives the raw event detail.
+ * The structured "cwk" payload is used when present; otherwise the channels
+ * are rebuilt from the standard "images" entries by their temp-filename
+ * prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha).
+ * ComfyUI's built-in node-image rendering (node.imgs + setSizeForImage) is
+ * suppressed so previews only ever appear inside the preview frame.
  */
 
 import { app } from "../../scripts/app.js";
@@ -49,6 +55,9 @@ const UPSTREAM_TAG_KEYS = [
   "clip_skip", "rng", "model_sampling", "clip_name", "clip_type", "vae_name",
 ];
 
+// Temp filename prefixes produced by the backend
+const TEMP_PREFIXES = ["cwkA_", "cwkN_"];   // A = masks, N = no masks
+
 const C = {
   bg: "#1a1f2e", bgFull: "#141824", surface: "#1e2335", border: "#313552",
   text: "#cdd6f4", textDim: "#6c7086", textBlue: "#89b4fa", hoverBg: "#2a2f45",
@@ -72,7 +81,7 @@ function channelKey(node) { return String(getVal(node, "channel", "RGB")).toUppe
 function isFolded(node)   { return !!getVal(node, "settings_folded", false); }
 function getTags(node)    { return [...Object.keys(node._cwkInfos ?? {}), ...EXTRA_TAGS]; }
 
-// ─── infos: live graph sync (fixes tags not refreshing on connect) ───────────
+// ─── infos: live graph sync (tags refresh on connect / edits) ────────────────
 
 function _getInfosSource(node) {
   const input = node.inputs?.find(i => i.name === "infos");
@@ -148,7 +157,6 @@ function _refreshInfos(node) {
   }
   node._cwkGraphInfos = graphInfos;
 
-  // graph values win (live edits); executed values fill the rest
   const merged = { ...(node._cwkExecInfos ?? {}), ...graphInfos };
   const j = JSON.stringify(merged);
   if (j !== node._cwkInfosJson) {
@@ -483,29 +491,92 @@ async function handleSave(node) {
   }
 }
 
-// ─── Execution output → node state ────────────────────────────────────────────
+// ─── Execution output → node state (redundant delivery) ──────────────────────
+
+/** Accepts the ui dict {images, cwk} OR a full event detail {node, output}. */
+function normalizePayload(message) {
+  const out = { entries: null, cwk: null };
+  if (!message || typeof message !== "object") return out;
+  let ui = message;
+  if (!ui.cwk && !ui.images && ui.output && typeof ui.output === "object") {
+    ui = ui.output;
+  }
+  if (ui.cwk && Array.isArray(ui.cwk.rgb)) out.cwk = ui.cwk;
+  if (Array.isArray(ui.images)) {
+    const entries = ui.images.filter(e => e && typeof e.filename === "string" && e.filename);
+    if (entries.length) out.entries = entries;
+  }
+  return out;
+}
+
+/** Rebuild the three channels from the standard "images" entries
+ *  using the temp-filename prefixes written by the backend. */
+function _entriesFromImages(entries) {
+  const rgb = [], rgba = [], alpha = [];
+  let hasMasks = false;
+  for (const e of entries) {
+    const fn = String(e.filename ?? "");
+    let tagged = false;
+    for (const p of TEMP_PREFIXES) {
+      if (fn.startsWith(p)) {
+        tagged = true;
+        if (p === "cwkA_") hasMasks = true;
+        // NOTE: check rgba/alpha before rgb ("cwkA_rgb" is a prefix of "cwkA_rgba")
+        if (fn.startsWith(p + "rgba_"))      rgba.push(e);
+        else if (fn.startsWith(p + "alpha_")) alpha.push(e);
+        else                                   rgb.push(e);
+        break;
+      }
+    }
+    if (!tagged) rgb.push(e);   // unknown temp entry → treat as RGB
+  }
+  return { rgb, rgba, alpha, hasMasks };
+}
 
 function applyOutput(node, message) {
-  const cwk = message?.cwk;
-  if (!cwk) return;
-  const sig = JSON.stringify(cwk);
-  if (sig === node._cwkLastSig) return;   // guard double delivery (onExecuted + listener)
+  const { entries, cwk } = normalizePayload(message);
+  if (!cwk && !entries) return;
+
+  const sig = cwk ? "cwk:" + JSON.stringify(cwk) : "img:" + JSON.stringify(entries);
+  if (sig === node._cwkLastSig) return;   // dedupe (onExecuted + event listener)
   node._cwkLastSig = sig;
 
-  node._cwkExecInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
-  node._cwkEntries = {
-    rgb:   Array.isArray(cwk.rgb)   ? cwk.rgb   : [],
-    rgba:  Array.isArray(cwk.rgba)  ? cwk.rgba  : [],
-    alpha: Array.isArray(cwk.alpha) ? cwk.alpha : [],
-  };
-  node._cwkBatchSize  = cwk.batch_size ?? node._cwkEntries.rgb.length ?? 1;
+  if (cwk) {
+    node._cwkExecInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
+    node._cwkEntries = {
+      rgb:   Array.isArray(cwk.rgb)   ? cwk.rgb   : [],
+      rgba:  Array.isArray(cwk.rgba)  ? cwk.rgba  : [],
+      alpha: Array.isArray(cwk.alpha) ? cwk.alpha : [],
+    };
+    node._cwkHasMasks  = !!cwk.has_masks;
+    node._cwkBatchSize = cwk.batch_size ?? node._cwkEntries.rgb.length ?? 1;
+  } else {
+    // Fallback path: structured payload not forwarded by this frontend build —
+    // rebuild from the standard "images" entries.
+    const cls = _entriesFromImages(entries);
+    node._cwkEntries  = { rgb: cls.rgb, rgba: cls.rgba, alpha: cls.alpha };
+    node._cwkHasMasks = cls.hasMasks;
+    node._cwkBatchSize = cls.rgb.length || 1;
+    // infos keep coming from the live graph sync
+  }
+
   node._cwkBatchIndex = 0;
   node._cwkImgCache   = {};
-  node._cwkHasMasks   = !!cwk.has_masks;
   _refreshInfos(node);
+
+  // Suppress ComfyUI's built-in node-image rendering (node.imgs / node.images)
+  _clearStockImages(node);
+
   const n = node._cwkBatchSize;
   _setStatus(node, `✓ ${n} image${n === 1 ? "" : "s"} ready${node._cwkHasMasks ? "" : " (no masks)"} — press Save to write`);
   app.canvas.setDirty(true, false);
+}
+
+/** Kill the stock preview machinery: images, imgs array, image index. */
+function _clearStockImages(node) {
+  node.imgs = null;
+  node.images = null;
+  node.imageIndex = null;
 }
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────
@@ -776,6 +847,10 @@ function drawStatus(node, ctx) {
 }
 
 function drawNode(node, ctx) {
+  // last-resort suppression of stock image rendering: if anything re-set
+  // node.imgs after our handlers ran, wipe it before drawing this frame.
+  if (node.imgs?.length) _clearStockImages(node);
+
   const w = node.size[0], h = node.size[1];
   const cornerR = LiteGraph.NODE_BORDER_RADIUS ?? 8;
   ctx.save();
@@ -855,6 +930,10 @@ app.registerExtension({
       node._cwkHasMasks = false;
       node._cwkSaving = false;
 
+      // Prevent the stock image machinery from resizing the node when
+      // the standard "images" ui key is delivered.
+      node.setSizeForImage = function () {};
+
       setTimeout(() => {
         // hide all widgets (values still persist in the workflow)
         for (const w of node.widgets ?? []) {
@@ -884,18 +963,28 @@ app.registerExtension({
       };
       node._cwkInfoSyncInterval = setInterval(() => _refreshInfos(node), 500);
 
-      // ── receive execution results (ui.cwk payload) ──
+      // ── Delivery path 1: node.onExecuted (message = ui dict or full detail) ──
       node.onExecuted = function (message) {
         try {
           applyOutput(node, message);
-          // belt & braces: never let any stock preview machinery draw here
-          if (this.images) this.images = null;
-        } catch (e) { console.warn("[CWK SaveImage] onExecuted:", e); }
+        } catch (e) {
+          console.warn("[CWK SaveImage] onExecuted:", e);
+        }
+        // Suppress stock image rendering, whatever the payload shape was.
+        _clearStockImages(this);
       };
-      // fallback listener (guarded by signature inside applyOutput)
+
+      // ── Delivery path 2: raw "executed" api event ──
       node._cwkApiExec = ev => {
-        if (String(ev?.detail?.node) !== String(node.id)) return;
-        if (ev?.detail?.output) applyOutput(node, ev.detail.output);
+        try {
+          const d = ev?.detail;
+          if (!d) return;
+          const target = d.display_node ?? d.node;
+          if (target == null || String(target) !== String(node.id)) return;
+          applyOutput(node, d);   // normalizePayload unwraps d.output
+        } catch (e) {
+          console.warn("[CWK SaveImage] executed event:", e);
+        }
       };
       api.addEventListener("executed", node._cwkApiExec);
 

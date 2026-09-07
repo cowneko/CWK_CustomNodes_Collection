@@ -1,40 +1,20 @@
 /**
  * CWK Save Image — ComfyUI canvas node extension.
  *
- * Layout (node size is fixed; folding only shrinks the preview):
  *   [ RGB | RGBA | ALPHA ]                [💾 Save] [▲]
  *   ┌─ settings panel (foldable) ─────────────────────┐
  *   │ File name  [ {model_name}_{sampler_name}_... ]  │
- *   │ (model_name)(sampler_name)(scheduler)(cfg)...   │
- *   │ Preview    myModel_euler_cfg7.0_steps20.png     │
- *   │ Imprint infos  [✓]   Format  [PNG ▾]            │
- *   │ Save folder  [(output)]  Subfolder [(none) ▾]   │
- *   │ Whole batch [✓]                                 │
+ *   │ (name)(model_name)(sampler_name)(cfg)...  ← toggle chips
+ *   │ Preview    myModel_rgb_0000.png                 │
+ *   │ Imprint infos  [✓]                              │
+ *   │ Imprint text [ {name} | {model_name} | ... ]    │
+ *   │ (name)(model_name)(cfg)...              ← toggle chips
+ *   │ Format  [PNG ▾]  [⚙] → settings popup (quality, │
+ *   │        lossless, workflow embed, counter digits)│
+ *   │ Save folder / Subfolder / Whole batch           │
  *   └─────────────────────────────────────────────────┘
- *   ┌─ image preview (clipped to frame, channel +   ──┐
- *   │  batch navigation)                              │
- *   └─────────────────────────────────────────────────┘
- *   status line
- *
- * Reception (in order of reliability, all deduped by payload signature):
- *   1) PRIMARY — dedicated WebSocket event "cwk_save_image_data" sent by the
- *      backend via server.send_sync() (same pattern as CWKLivePreview). The
- *      global listener in setup() routes payloads by node id. Custom ui keys
- *      are filtered out by some frontends; the standard "images" ui key
- *      engages the stock image machinery (overlay + click interception) —
- *      this event avoids both.
- *   2) node.onExecuted(message) — ui dict or full event detail.
- *   3) api "executed" event — raw event detail.
- * A fallback parser rebuilds the channels from a standard "images" payload
- * by temp-filename prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha).
- *
- * node.imgs / node.images are permanently blackholed (reads → null, writes
- * swallowed) and setSizeForImage is a no-op, so the stock image machinery can
- * never classify this node as an image node.
- *
- * Preview loading: /view URLs are built as api.apiURL("/view?" + query)
- * (safe under every apiURL signature) with a plain-URL retry and onerror
- * diagnostics (URL + HTTP status logged to the browser console).
+ *   image preview frame + batch navigation
+ *   footer: status (center) + image resolution (right)
  */
 
 import { app } from "../../scripts/app.js";
@@ -60,14 +40,16 @@ const FORMATS     = ["PNG", "JPG", "WebP"];
 const CHANNEL_KEYS = ["RGB", "RGBA", "ALPHA"];
 const EXTRA_TAGS   = ["date", "time"];
 
-// Widget names we harvest upstream of the infos link (matches pipe infos keys)
+const FNAME_CHIP_MAX_ROWS = 3;
+const IMPRINT_CHIP_MAX_ROWS = 2;
+
+// Widget names harvested upstream of the infos link (matches pipe infos keys)
 const UPSTREAM_TAG_KEYS = [
-  "model_name", "sampler_name", "scheduler", "cfg", "steps",
+  "name", "model_name", "sampler_name", "scheduler", "cfg", "steps",
   "clip_skip", "rng", "model_sampling", "clip_name", "clip_type", "vae_name",
 ];
 
-// Temp filename prefixes produced by the backend (fallback parser only)
-const TEMP_PREFIXES = ["cwkA_", "cwkN_"];   // A = masks, N = no masks
+const TEMP_PREFIXES = ["cwkA_", "cwkN_"];
 
 const C = {
   bg: "#1a1f2e", bgFull: "#141824", surface: "#1e2335", border: "#313552",
@@ -79,8 +61,8 @@ const NODE_BGCOLOR = "#1e2335";
 
 const TITLE_H = () => LiteGraph.NODE_TITLE_HEIGHT ?? 30;
 const SLOT_H  = () => LiteGraph.NODE_SLOT_HEIGHT  ?? 20;
-const N_INPUTS  = 3;   // images, masks, infos
-const N_OUTPUTS = 0;   // sink node — no outputs
+const N_INPUTS  = 3;
+const N_OUTPUTS = 0;
 
 // ─── Widget / value helpers ───────────────────────────────────────────────────
 
@@ -92,7 +74,7 @@ function channelKey(node) { return String(getVal(node, "channel", "RGB")).toUppe
 function isFolded(node)   { return !!getVal(node, "settings_folded", false); }
 function getTags(node)    { return [...Object.keys(node._cwkInfos ?? {}), ...EXTRA_TAGS]; }
 
-// ─── infos: live graph sync (tags refresh on connect / edits) ────────────────
+// ─── infos: live graph sync ──────────────────────────────────────────────────
 
 function _getInfosSource(node) {
   const input = node.inputs?.find(i => i.name === "infos");
@@ -102,7 +84,6 @@ function _getInfosSource(node) {
   return app.graph.getNodeById(link.origin_id) ?? null;
 }
 
-/** BFS upstream through inputs, harvesting known widget values (closest first). */
 function _collectInfosUpstream(startNode, maxNodes = 30) {
   const infos = {};
   if (!startNode) return infos;
@@ -129,7 +110,6 @@ function _collectInfosUpstream(startNode, maxNodes = 30) {
   return infos;
 }
 
-/** BFS downstream through output links looking for a KSampler-style seed widget. */
 function _findSeedDownstream(startNode, skipNodeId, maxNodes = 12) {
   if (!startNode) return null;
   const queue = [startNode];
@@ -156,7 +136,6 @@ function _findSeedDownstream(startNode, skipNodeId, maxNodes = 12) {
   return null;
 }
 
-/** Recompute _cwkInfos = graph-derived values (win) merged over executed values. */
 function _refreshInfos(node) {
   if (!app.graph) return;
   const graphInfos = {};
@@ -177,7 +156,7 @@ function _refreshInfos(node) {
   }
 }
 
-// ─── Filename resolution ──────────────────────────────────────────────────────
+// ─── Filename / imprint resolution ────────────────────────────────────────────
 
 function sanitizeName(s) {
   return String(s)
@@ -187,14 +166,14 @@ function sanitizeName(s) {
     .replace(/^[\s._-]+|[\s._-]+$/g, "") || "_";
 }
 
-function resolveTag(node, key) {
+function resolveTag(node, key) {   // sanitized (for file names)
   if (key === "date") {
     const d = new Date();
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
   }
   if (key === "time") {
     const d = new Date();
-    return `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+    return `${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}`;
   }
   let v = (node._cwkInfos ?? {})[key];
   if (v === undefined || v === null) return "";
@@ -203,11 +182,44 @@ function resolveTag(node, key) {
   return sanitizeName(v);
 }
 
+function resolveTagRaw(node, key) {   // raw value (for imprint text)
+  if (key === "date" || key === "time") return resolveTag(node, key);
+  const v = (node._cwkInfos ?? {})[key];
+  return v == null ? "" : String(v).trim();
+}
+
 function resolveTemplate(node, template) {
   return String(template ?? "").replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k) => resolveTag(node, k));
 }
 
+function buildImprintText(node) {
+  const tpl = String(getVal(node, "imprint_template", "") ?? "");
+  if (!tpl.trim()) return "";
+  return tpl.replace(/\{([a-zA-Z0-9_]+)\}/g, (m, k) => resolveTagRaw(node, k))
+            .replace(/\s{2,}/g, " ")
+            .replace(/(\s*\|\s*){2,}/g, " | ")
+            .trim();
+}
+
 function fmtExt(f) { return f === "JPG" ? "jpg" : String(f).toLowerCase(); }
+
+function templateHas(node, widgetName, tag) {
+  return String(getVal(node, widgetName, "") ?? "").includes(`{${tag}}`);
+}
+
+/** Toggle a {tag} token in/out of a template widget (chips are click-to-toggle). */
+function toggleTag(node, widgetName, tag, sep) {
+  const token = `{${tag}}`;
+  let t = String(getVal(node, widgetName, "") ?? "");
+  if (t.includes(token)) {
+    t = t.split(token).join("");
+    t = t.replace(/_{2,}/g, "_").replace(/\s{2,}/g, " ")
+         .replace(/(\s*\|\s*){2,}/g, " | ").trim();
+  } else {
+    t = t.trim() ? t.replace(/[\s_]+$/, "") + sep + token : token;
+  }
+  setVal(node, widgetName, t);
+}
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -236,49 +248,65 @@ function getFoldRect(node) {
 
 const _measure = document.createElement("canvas").getContext("2d");
 
+function _layoutChips(tags, startX, startY, width, maxRows) {
+  const chips = [];
+  const chipH = 18, gap = 6;
+  let cx = startX, cy = startY, rowCount = 1, hidden = 0;
+  _measure.font = "10px Inter,system-ui,sans-serif";
+  for (let ti = 0; ti < tags.length; ti++) {
+    const tag = tags[ti];
+    const cw = Math.ceil(_measure.measureText(tag).width) + 16;
+    if (cx > startX && cx + cw > startX + width) {
+      if (rowCount >= maxRows) { hidden = tags.length - ti; break; }
+      cx = startX; cy += chipH + 4; rowCount++;
+    }
+    chips.push({ tag, x: cx, y: cy, w: cw, h: chipH });
+    cx += cw + gap;
+  }
+  return { chips, hidden, endY: cy + chipH };
+}
+
 function getSettingsLayout(node) {
   const W = node.size[0] - PAD * 2;
   let y = getSettingsY();
   const rows = [];
+  const tags = getTags(node);
 
   // 1) filename template (text)
   rows.push({ key: "filename_template", label: "File name", type: "text", x: PAD, y, w: W, h: ROW_H });
   y += ROW_H + 4;
 
-  // 2) info tag chips (wrapped, capped at 4 rows to protect the preview)
-  const tags = getTags(node);
-  const chips = [];
-  const chipH = 18, gap = 6, maxRows = 4;
-  let cx = PAD, cy = y, rowCount = 1, hidden = 0;
-  _measure.font = "10px Inter,system-ui,sans-serif";
-  for (let ti = 0; ti < tags.length; ti++) {
-    const tag = tags[ti];
-    const cw = Math.ceil(_measure.measureText(tag).width) + 16;
-    if (cx > PAD && cx + cw > PAD + W) {
-      if (rowCount >= maxRows) { hidden = tags.length - ti; break; }
-      cx = PAD; cy += chipH + 4; rowCount++;
-    }
-    chips.push({ tag, x: cx, y: cy, w: cw, h: chipH });
-    cx += cw + gap;
+  // 2) filename tag chips (toggle)
+  const fl = _layoutChips(tags, PAD, y, W, FNAME_CHIP_MAX_ROWS);
+  const chips = fl.chips;
+  if (fl.hidden > 0 && fl.endY - 22 + 34 <= PAD + W) {
+    chips.push({ tag: `+${fl.hidden}`, x: PAD + 0, y: fl.endY - 22, w: 30, h: 18, dim: true });
   }
-  if (hidden > 0 && cx + 34 <= PAD + W) chips.push({ tag: `+${hidden}`, x: cx + gap, y: cy, w: 30, h: chipH, dim: true });
-  y = cy + chipH + 6;
+  y = fl.endY + 6;
 
   // 3) filename preview
   rows.push({ key: "_fname_preview", label: "Preview", type: "preview", x: PAD, y, w: W, h: 16 });
   y += 22;
 
-  // 4) simple rows
+  // 4) imprint toggle + template + imprint chips (toggle)
+  rows.push({ key: "imprint_infos", label: "Imprint infos", type: "toggle", x: PAD, y, w: W, h: ROW_H - 2 });
+  y += ROW_H;
+  rows.push({ key: "imprint_template", label: "Imprint text", type: "text", x: PAD, y, w: W, h: ROW_H - 2 });
+  y += ROW_H + 2;
+  const il = _layoutChips(tags, PAD, y, W, IMPRINT_CHIP_MAX_ROWS);
+  const ichips = il.chips;
+  y = il.endY + 6;
+
+  // 5) simple rows (Format has a gear button)
   const simple = [
-    { key: "imprint_infos",     label: "Imprint infos", type: "toggle" },
-    { key: "output_format",     label: "Format",        type: "dropdown" },
-    { key: "save_folder",       label: "Save folder",   type: "text", placeholder: "(output)" },
-    { key: "subfolder_tag",     label: "Subfolder",     type: "dropdown" },
-    { key: "save_entire_batch", label: "Whole batch",   type: "toggle" },
+    { key: "output_format",     label: "Format",      type: "dropdown", gear: true },
+    { key: "save_folder",       label: "Save folder", type: "text", placeholder: "(output)" },
+    { key: "subfolder_tag",     label: "Subfolder",   type: "dropdown" },
+    { key: "save_entire_batch", label: "Whole batch", type: "toggle" },
   ];
   for (const r of simple) { rows.push({ ...r, x: PAD, y, w: W, h: ROW_H - 2 }); y += ROW_H; }
 
-  return { rows, chips, height: y - getSettingsY() };
+  return { rows, chips, ichips, height: y - getSettingsY() };
 }
 
 function getPreviewRect(node) {
@@ -297,7 +325,13 @@ function getNavRects(node) {
   };
 }
 
-// ─── Screen coords / overlay editors (same pattern as the Pipe node) ─────────
+function getGearRect(row) {
+  const gearW = 24;
+  const vx = row.x + LABEL_W, vw = row.w - LABEL_W - gearW;
+  return { x: vx + vw + 4, y: row.y + 1, w: 20, h: row.h - 2 };
+}
+
+// ─── Screen coords / overlay editors ─────────────────────────────────────────
 
 function _canvasToScreen(node, vr) {
   const bbox = app.canvas.canvas.getBoundingClientRect();
@@ -329,13 +363,13 @@ function openInlineTextEditor(node, rect, current, onCommit) {
 
   const backdrop = document.createElement("div");
   backdrop.id = "cwk-si-backdrop";
-  Object.assign(backdrop.style, { position: "fixed", inset: "0", zIndex: "99998", background: "transparent" });
+  Object.assign(backdrop.style, { position:"fixed", inset:"0", zIndex:"99998", background:"transparent" });
 
   const input = document.createElement("input");
   input.id = "cwk-si-editor"; input.type = "text";
   input.value = String(current ?? "");
   Object.assign(input.style, {
-    position: "fixed", left: sc.x + "px", top: sc.y + "px", width: sc.w + "px", height: sc.h + "px",
+    position:"fixed", left: sc.x + "px", top: sc.y + "px", width: sc.w + "px", height: sc.h + "px",
     fontSize: Math.max(11, Math.round(11 * zoom)) + "px", fontFamily: "Inter,system-ui,sans-serif",
     background: C.bgFull, color: C.text, border: `1px solid ${C.textBlue}`,
     borderRadius: "3px", outline: "none", zIndex: "99999", padding: "0 6px", boxSizing: "border-box",
@@ -415,13 +449,147 @@ function openDropdown(node, rect, options, current, onCommit) {
   setTimeout(() => document.addEventListener("pointerdown", _ddOutside, { capture: true }), 50);
 }
 
-// ─── Preview image loading (hardened /view URLs) ──────────────────────────────
+// ─── Save-settings popup (gear) ───────────────────────────────────────────────
 
-/**
- * Build the /view URL for a temp entry. The query string is baked into the
- * route argument (api.apiURL("/view?" + qs)) — exactly like stock ComfyUI —
- * which is safe under every apiURL signature.
- */
+let _setPanel = null, _setBackdrop = null;
+
+function closeSaveSettingsPopup() {
+  _setPanel?.remove(); _setBackdrop?.remove();
+  _setPanel = null; _setBackdrop = null;
+  app.canvas?.setDirty?.(true, false);
+}
+
+function openSaveSettingsPopup(node) {
+  closeSaveSettingsPopup();
+
+  _setBackdrop = document.createElement("div");
+  Object.assign(_setBackdrop.style, { position:"fixed", inset:"0", background:"rgba(0,0,0,.5)", zIndex:"100001" });
+  _blockCanvasEvents(_setBackdrop);
+  _setBackdrop.addEventListener("mousedown", () => closeSaveSettingsPopup());
+
+  _setPanel = document.createElement("div");
+  Object.assign(_setPanel.style, {
+    position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)",
+    width: "min(92vw, 400px)", background: "#141824", border: "1px solid #313552",
+    borderRadius: "10px", color: "#cdd6f4", fontFamily: "Inter,system-ui,sans-serif",
+    fontSize: "13px", zIndex: "100002", boxShadow: "0 24px 80px rgba(0,0,0,.7)", userSelect: "none",
+  });
+  _blockCanvasEvents(_setPanel);
+
+  // header
+  const header = document.createElement("div");
+  Object.assign(header.style, { display:"flex", alignItems:"center", padding:"12px 16px",
+    background:"#1a2035", borderBottom:"1px solid #2a2f45", borderRadius:"10px 10px 0 0" });
+  const title = document.createElement("span");
+  title.textContent = "⚙ Save Settings"; title.style.cssText = "font-weight:600; flex:1;";
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "✕";
+  closeBtn.style.cssText = "background:none; border:none; color:#6c7086; font-size:16px; cursor:pointer; line-height:1;";
+  closeBtn.onmouseenter = () => closeBtn.style.color = "#f38ba8";
+  closeBtn.onmouseleave = () => closeBtn.style.color = "#6c7086";
+  closeBtn.onclick = closeSaveSettingsPopup;
+  header.append(title, closeBtn);
+
+  const body = document.createElement("div");
+  Object.assign(body.style, { padding: "14px 16px", display: "flex", flexDirection: "column", gap: "13px" });
+
+  const row = () => {
+    const r = document.createElement("div");
+    Object.assign(r.style, { display: "flex", alignItems: "center", gap: "10px" });
+    body.appendChild(r);
+    return r;
+  };
+  const labelCss = "width:130px; flex-shrink:0; color:#cdd6f4;";
+  const sliderCss = "flex:1; accent-color:#89b4fa; cursor:pointer;";
+
+  // JPG quality
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "JPG quality"; l.style.cssText = labelCss;
+    const s = document.createElement("input"); s.type = "range"; s.min = 1; s.max = 100;
+    s.value = Math.min(100, Math.max(1, Number(getVal(node, "jpg_quality", 95)) || 95));
+    s.style.cssText = sliderCss;
+    const v = document.createElement("span"); v.textContent = s.value;
+    v.style.cssText = "width:28px; text-align:right; color:#89b4fa; font-weight:600;";
+    s.addEventListener("input", () => { setVal(node, "jpg_quality", Number(s.value)); v.textContent = s.value; });
+    r.append(l, s, v);
+  }
+
+  // WebP quality (slider disabled when lossless)
+  let webpSlider = null, webpVal = null;
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "WebP quality"; l.style.cssText = labelCss;
+    webpSlider = document.createElement("input"); webpSlider.type = "range"; webpSlider.min = 1; webpSlider.max = 100;
+    webpSlider.value = Math.min(100, Math.max(1, Number(getVal(node, "webp_quality", 95)) || 95));
+    webpSlider.style.cssText = sliderCss;
+    webpVal = document.createElement("span"); webpVal.textContent = webpSlider.value;
+    webpVal.style.cssText = "width:28px; text-align:right; color:#89b4fa; font-weight:600;";
+    webpSlider.addEventListener("input", () => { setVal(node, "webp_quality", Number(webpSlider.value)); webpVal.textContent = webpSlider.value; });
+    r.append(l, webpSlider, webpVal);
+  }
+
+  // WebP lossless
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "WebP lossless"; l.style.cssText = labelCss;
+    const cb = document.createElement("input"); cb.type = "checkbox";
+    cb.checked = !!getVal(node, "webp_lossless", false);
+    cb.style.accentColor = "#89b4fa"; cb.style.cursor = "pointer";
+    const sync = () => {
+      webpSlider.disabled = cb.checked;
+      webpVal.style.opacity = cb.checked ? ".45" : "1";
+      webpSlider.style.opacity = cb.checked ? ".45" : "1";
+    };
+    cb.addEventListener("change", () => { setVal(node, "webp_lossless", cb.checked); sync(); });
+    sync();
+    r.append(l, cb);
+  }
+
+  // Save workflow with image (PNG)
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Save workflow (PNG)"; l.style.cssText = labelCss;
+    const cb = document.createElement("input"); cb.type = "checkbox";
+    cb.checked = !!getVal(node, "save_workflow", false);
+    cb.style.accentColor = "#89b4fa"; cb.style.cursor = "pointer";
+    cb.addEventListener("change", () => setVal(node, "save_workflow", cb.checked));
+    r.append(l, cb);
+  }
+
+  // Counter digits
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Counter digits"; l.style.cssText = labelCss;
+    const inp = document.createElement("input"); inp.type = "number"; inp.min = 1; inp.max = 8; inp.step = 1;
+    inp.value = Math.min(8, Math.max(1, Number(getVal(node, "counter_digits", 4)) || 4));
+    inp.style.cssText = "width:64px; background:#1e2335; border:1px solid #313552; border-radius:6px; color:#cdd6f4; padding:4px 8px; outline:none; font-size:13px;";
+    inp.addEventListener("change", () => {
+      const d = Math.min(8, Math.max(1, parseInt(inp.value, 10) || 4));
+      inp.value = d;
+      setVal(node, "counter_digits", d);
+      app.canvas.setDirty(true, false);   // refresh filename preview
+    });
+    r.append(l, inp);
+  }
+
+  // Done
+  {
+    const r = row(); r.style.justifyContent = "flex-end";
+    const b = document.createElement("button"); b.textContent = "Done";
+    b.style.cssText = "background:#313552; color:#cdd6f4; border:1px solid #313552; border-radius:6px; padding:6px 20px; font-weight:600; cursor:pointer; font-size:13px;";
+    b.onmouseenter = () => b.style.filter = "brightness(1.15)";
+    b.onmouseleave = () => b.style.filter = "";
+    b.onclick = closeSaveSettingsPopup;
+    r.appendChild(b);
+  }
+
+  _setPanel.append(header, body);
+  document.body.append(_setBackdrop, _setPanel);
+}
+
+// ─── Preview image loading ────────────────────────────────────────────────────
+
 function viewUrl(entry, mode) {
   const qs = new URLSearchParams({
     filename: String(entry?.filename ?? ""),
@@ -446,7 +614,6 @@ function _makeImg(node, key, entry, mode) {
   img.onload = () => { app.canvas?.setDirty?.(true, true); };
   img.onerror = () => {
     if (mode === "api") {
-      // retry once with the plain relative URL (covers base-path/proxy cases)
       node._cwkImgCache[key] = _makeImg(node, key, entry, "plain");
       app.canvas?.setDirty?.(true, true);
       return;
@@ -456,9 +623,7 @@ function _makeImg(node, key, entry, mode) {
     fetch(url).then(r => {
       console.warn(`[CWK SaveImage]   → /view returned HTTP ${r.status}`);
       app.canvas?.setDirty?.(true, true);
-    }).catch(err => {
-      console.warn("[CWK SaveImage]   → fetch probe failed:", err);
-    });
+    }).catch(err => console.warn("[CWK SaveImage]   → fetch probe failed:", err));
     app.canvas?.setDirty?.(true, true);
   };
   img.src = url;
@@ -496,6 +661,11 @@ function _flash(node, label, color) {
 
 // ─── Save action ──────────────────────────────────────────────────────────────
 
+function _safeSerializeGraph() {
+  try { return JSON.stringify(app.graph.serialize()); }
+  catch (e) { console.warn("[CWK SaveImage] graph serialize failed:", e); return null; }
+}
+
 async function handleSave(node) {
   const ch = channelKey(node).toLowerCase();
   const entries = node._cwkEntries?.[ch] ?? [];
@@ -509,6 +679,9 @@ async function handleSave(node) {
   const base = resolveTemplate(node, getVal(node, "filename_template", "")).trim() || "ComfyUI";
   const subTag = String(getVal(node, "subfolder_tag", "") ?? "");
   const sub = (subTag && subTag !== "(none)") ? resolveTag(node, subTag) : "";
+  const fmt = String(getVal(node, "output_format", "PNG"));
+  const imprintOn = !!getVal(node, "imprint_infos", false);
+  const saveWf = !!getVal(node, "save_workflow", false);
 
   node._cwkSaving = true; app.canvas.setDirty(true, false);
   try {
@@ -521,11 +694,18 @@ async function handleSave(node) {
         base_name: base,
         subfolder: sub,
         folder: String(getVal(node, "save_folder", "") ?? "").trim(),
-        format: String(getVal(node, "output_format", "PNG")),
-        imprint: !!getVal(node, "imprint_infos", false),
+        format: fmt,
+        imprint: imprintOn,
+        imprint_text: imprintOn ? buildImprintText(node) : "",
         imprint_infos: node._cwkInfos ?? {},
         entire_batch: !!getVal(node, "save_entire_batch", true),
         batch_index: Math.max(0, node._cwkBatchIndex ?? 0),
+        jpg_quality:    Math.min(100, Math.max(1, Number(getVal(node, "jpg_quality", 95)) || 95)),
+        webp_quality:   Math.min(100, Math.max(1, Number(getVal(node, "webp_quality", 95)) || 95)),
+        webp_lossless:  !!getVal(node, "webp_lossless", false),
+        save_workflow:  saveWf,
+        counter_digits: Math.min(8, Math.max(1, Number(getVal(node, "counter_digits", 4)) || 4)),
+        workflow_json:  (saveWf && fmt === "PNG") ? _safeSerializeGraph() : null,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -543,16 +723,13 @@ async function handleSave(node) {
   }
 }
 
-// ─── Execution output → node state (redundant reception, deduped) ───────────
+// ─── Execution output → node state ────────────────────────────────────────────
 
-/** Accepts the ui dict {images, cwk} OR a full event detail {node, output}. */
 function normalizePayload(message) {
   const out = { entries: null, cwk: null };
   if (!message || typeof message !== "object") return out;
   let ui = message;
-  if (!ui.cwk && !ui.images && ui.output && typeof ui.output === "object") {
-    ui = ui.output;
-  }
+  if (!ui.cwk && !ui.images && ui.output && typeof ui.output === "object") ui = ui.output;
   if (ui.cwk && Array.isArray(ui.cwk.rgb)) out.cwk = ui.cwk;
   if (Array.isArray(ui.images)) {
     const entries = ui.images.filter(e => e && typeof e.filename === "string" && e.filename);
@@ -561,8 +738,6 @@ function normalizePayload(message) {
   return out;
 }
 
-/** Rebuild the three channels from a standard "images" payload using the
- *  temp-filename prefixes (fallback for version mismatches only). */
 function _entriesFromImages(entries) {
   const rgb = [], rgba = [], alpha = [];
   let hasMasks = false;
@@ -573,14 +748,13 @@ function _entriesFromImages(entries) {
       if (fn.startsWith(p)) {
         tagged = true;
         if (p === "cwkA_") hasMasks = true;
-        // NOTE: check rgba/alpha before rgb ("cwkA_rgb" is a prefix of "cwkA_rgba")
-        if (fn.startsWith(p + "rgba_"))      rgba.push(e);
+        if (fn.startsWith(p + "rgba_"))       rgba.push(e);
         else if (fn.startsWith(p + "alpha_")) alpha.push(e);
         else                                   rgb.push(e);
         break;
       }
     }
-    if (!tagged) rgb.push(e);   // unknown temp entry → treat as RGB
+    if (!tagged) rgb.push(e);
   }
   return { rgb, rgba, alpha, hasMasks };
 }
@@ -590,7 +764,7 @@ function applyOutput(node, message, source) {
   if (!cwk && !entries) return;
 
   const sig = cwk ? "cwk:" + JSON.stringify(cwk) : "img:" + JSON.stringify(entries);
-  if (sig === node._cwkLastSig) return;   // dedupe across all reception paths
+  if (sig === node._cwkLastSig) return;
   node._cwkLastSig = sig;
   console.log("[CWK SaveImage] payload received via", source ?? (cwk ? "'cwk' ui key" : "'images' fallback"));
 
@@ -608,24 +782,21 @@ function applyOutput(node, message, source) {
     node._cwkEntries  = { rgb: cls.rgb, rgba: cls.rgba, alpha: cls.alpha };
     node._cwkHasMasks = cls.hasMasks;
     node._cwkBatchSize = cls.rgb.length || 1;
-    // infos keep coming from the live graph sync
   }
 
   node._cwkBatchIndex = 0;
   node._cwkImgCache   = {};
   node._cwkImgErrors  = new Set();
+  node._cwkRes        = null;
   _refreshInfos(node);
-  _clearStockImages(node);
+  node.imageIndex = null;
 
   const n = node._cwkBatchSize;
   _setStatus(node, `✓ ${n} image${n === 1 ? "" : "s"} ready${node._cwkHasMasks ? "" : " (no masks)"} — press Save to write`);
   app.canvas.setDirty(true, true);
 }
 
-/** Kill leftover stock preview state (imageIndex; imgs/images are blackholed). */
-function _clearStockImages(node) {
-  node.imageIndex = null;
-}
+function _clearStockImages(node) { node.imageIndex = null; }
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────
 
@@ -680,11 +851,31 @@ function drawTopBar(node, ctx) {
   ctx.fillText(isFolded(node) ? "▼" : "▲", fr.x + fr.w / 2, fr.y + fr.h / 2 + 1);
 }
 
+function _drawChips(node, ctx, chips, widgetName, hoverType) {
+  const hover = node._cwkHover;
+  for (const chip of chips) {
+    const hov = hover?.type === hoverType && hover.key === chip.tag;
+    if (chip.dim) {
+      ctx.fillStyle = C.textDim; ctx.font = "10px Inter,system-ui,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(chip.tag, chip.x + chip.w / 2, chip.y + chip.h / 2 + 0.5);
+      continue;
+    }
+    const active = templateHas(node, widgetName, chip.tag);
+    roundRect(ctx, chip.x, chip.y, chip.w, chip.h, 8);
+    ctx.fillStyle = (active || hov) ? C.hoverBg : C.surface; ctx.fill();
+    ctx.strokeStyle = (active || hov) ? C.textBlue : C.border;
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = active ? C.textBlue : (hov ? C.text : C.text);
+    ctx.font = "10px Inter,system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(chip.tag, chip.x + chip.w / 2, chip.y + chip.h / 2 + 0.5);
+  }
+}
+
 function drawSettings(node, ctx) {
   const L = getSettingsLayout(node);
   const hover = node._cwkHover;
 
-  // panel background
   roundRect(ctx, PAD - 2, getSettingsY() - 4, node.size[0] - 2 * (PAD - 2), L.height + 8, 5);
   ctx.fillStyle = "#171c2b"; ctx.fill();
   ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
@@ -699,19 +890,23 @@ function drawSettings(node, ctx) {
       const base = resolveTemplate(node, getVal(node, "filename_template", "")) || "ComfyUI";
       const subTag = String(getVal(node, "subfolder_tag", "") ?? "");
       const sub = (subTag && subTag !== "(none)") ? resolveTag(node, subTag) + "/" : "";
-      const txt = sub + base + "." + fmtExt(getVal(node, "output_format", "PNG"));
+      const chl = channelKey(node).toLowerCase();
+      const n = node._cwkEntries?.[chl]?.length ?? 0;
+      const digits = Math.min(8, Math.max(1, Number(getVal(node, "counter_digits", 4)) || 4));
+      const counter = (n > 1 && !!getVal(node, "save_entire_batch", true)) ? "_" + "0".repeat(digits) : "";
+      const txt = sub + base + "_" + chl + counter + "." + fmtExt(getVal(node, "output_format", "PNG"));
       ctx.font = "10px Consolas,monospace"; ctx.fillStyle = C.textBlue;
       ctx.fillText(fitText(ctx, txt, row.w - LABEL_W), PAD + LABEL_W, row.y + row.h / 2);
       continue;
     }
 
-    // label
     ctx.fillStyle = C.textDim; ctx.font = "10px Inter,system-ui,sans-serif";
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.fillText(row.label, PAD + 4, row.y + row.h / 2);
 
-    // value box
-    const vx = PAD + LABEL_W, vw = row.w - LABEL_W;
+    // value box (shrunk if a gear follows)
+    const gearW = row.gear ? 24 : 0;
+    const vx = PAD + LABEL_W, vw = row.w - LABEL_W - gearW;
     roundRect(ctx, vx, row.y + 1, vw, row.h - 2, 4);
     ctx.fillStyle = C.surface; ctx.fill();
     ctx.strokeStyle = hov ? C.textBlue : C.border; ctx.lineWidth = 1; ctx.stroke();
@@ -741,20 +936,22 @@ function drawSettings(node, ctx) {
       ctx.fillStyle = hov ? C.textBlue : C.textDim; ctx.font = "9px sans-serif"; ctx.textAlign = "right";
       ctx.fillText("▾", vx + vw - 6, row.y + row.h / 2);
     }
+
+    // gear button
+    if (row.gear) {
+      const g = getGearRect(row);
+      const gHov = hover?.type === "gear";
+      roundRect(ctx, g.x, g.y, g.w, g.h, 4);
+      ctx.fillStyle = gHov ? C.hoverBg : C.surface; ctx.fill();
+      ctx.strokeStyle = gHov ? C.textBlue : C.border; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = gHov ? C.textBlue : C.textDim;
+      ctx.font = "11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("⚙", g.x + g.w / 2, g.y + g.h / 2 + 0.5);
+    }
   }
 
-  // tag chips
-  for (const chip of L.chips) {
-    const hov = hover?.type === "chip" && hover.key === chip.tag;
-    roundRect(ctx, chip.x, chip.y, chip.w, chip.h, 8);
-    ctx.fillStyle = chip.dim ? "transparent" : (hov ? C.hoverBg : C.surface);
-    if (!chip.dim) ctx.fill();
-    ctx.strokeStyle = chip.dim ? "transparent" : (hov ? C.textBlue : C.border);
-    if (!chip.dim) ctx.stroke();
-    ctx.fillStyle = chip.dim ? C.textDim : (hov ? C.textBlue : C.text);
-    ctx.font = "10px Inter,system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(chip.tag, chip.x + chip.w / 2, chip.y + chip.h / 2 + 0.5);
-  }
+  _drawChips(node, ctx, L.chips, "filename_template", "chip");
+  _drawChips(node, ctx, L.ichips, "imprint_template", "ichip");
 }
 
 function drawCheckerboard(ctx, x, y, w, h) {
@@ -770,46 +967,33 @@ function drawCheckerboard(ctx, x, y, w, h) {
   ctx.restore();
 }
 
-function buildImprintLines(node) {
-  const g = k => { const v = (node._cwkInfos ?? {})[k]; return v == null ? "" : String(v).trim(); };
-  const l1 = [];
-  const model = g("model_name").replace(/\.(safetensors|ckpt|gguf|pt|bin|sft|pth)$/i, "");
-  if (model) l1.push(model);
-  const gen = [g("sampler_name"), g("scheduler")].filter(Boolean).join(" / ");
-  if (gen) l1.push(gen);
-  const params = ["cfg", "steps", "seed"].filter(k => g(k) !== "").map(k => `${k}: ${g(k)}`);
-  if (params.length) l1.push(params.join("  "));
-  const line1 = l1.join("  |  ");
-
-  const rest = [];
-  for (const k of ["clip_skip", "rng", "model_sampling", "clip_name", "vae_name", "clip_type"]) {
-    if (g(k)) rest.push(`${k}: ${g(k)}`);
-  }
-  const known = new Set(["model_name","sampler_name","scheduler","cfg","steps","seed",
-                         "clip_skip","rng","model_sampling","clip_name","vae_name","clip_type"]);
-  for (const [k, v] of Object.entries(node._cwkInfos ?? {})) {
-    if (!known.has(k) && v != null && String(v).trim()) rest.push(`${k}: ${v}`);
-  }
-  return [line1, rest.join("  |  ")].filter(Boolean);
-}
-
 function drawImprintSim(node, ctx, dx, dy, dw, dh, s) {
-  // approximates the footer the backend will burn in at save time
-  const lines = buildImprintLines(node);
-  if (!lines.length) return;
+  const text = buildImprintText(node);
+  if (!text) return;
   const origW = dw / (s || 1);
   const fsOrig = Math.max(13, Math.min(30, origW / 46));
   const fs = fsOrig * s;
-  const lineH = (fsOrig + 10) * s;
-  const footerH = lines.length * lineH + 12 * s;
+  const lineH = (fsOrig + 8) * s;
+  ctx.font = `${Math.max(7, Math.round(fs))}px Inter,system-ui,sans-serif`;
+  const maxW = dw - 24 * s;
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const t = cur ? cur + " " + w : w;
+    if (ctx.measureText(t).width <= maxW || !cur) cur = t;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  const shown = lines.slice(0, 3);
+  const footerH = shown.length * lineH + 12 * s;
   ctx.fillStyle = "rgba(0,0,0,.92)";
   ctx.fillRect(dx, dy + dh - footerH, dw, footerH);
   ctx.fillStyle = "#fff";
-  ctx.font = `${Math.max(7, Math.round(fs))}px Inter,system-ui,sans-serif`;
   ctx.textAlign = "left"; ctx.textBaseline = "top";
   let y = dy + dh - footerH + 6 * s;
-  for (const l of lines) {
-    ctx.fillText(fitText(ctx, l, dw - 24 * s), dx + 12 * s, y);
+  for (const l of shown) {
+    ctx.fillText(fitText(ctx, l, maxW), dx + 12 * s, y);
     y += lineH;
   }
 }
@@ -836,17 +1020,16 @@ function drawPreview(node, ctx) {
   const ch = channelKey(node).toLowerCase();
   const entries = node._cwkEntries?.[ch] ?? [];
 
-  // frame
   roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 5);
   ctx.fillStyle = "#10131f"; ctx.fill();
   ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
 
-  // ── everything below is hard-clipped to the frame ──
   ctx.save();
   roundRect(ctx, pr.x + 1, pr.y + 1, pr.w - 2, pr.h - 2, 4);
   ctx.clip();
 
   if (!entries.length) {
+    node._cwkRes = null;
     ctx.fillStyle = C.textDim; ctx.font = "11px Inter,system-ui,sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("No images yet — run the workflow", pr.x + pr.w / 2, pr.y + pr.h / 2);
@@ -860,6 +1043,7 @@ function drawPreview(node, ctx) {
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText("preview failed to load — see browser console", pr.x + pr.w / 2, pr.y + pr.h / 2);
     } else if (img && img.complete && img.naturalWidth) {
+      node._cwkRes = `${img.naturalWidth}×${img.naturalHeight}`;   // footer resolution
       const pad = 6;
       const availW = pr.w - pad * 2, availH = pr.h - pad * 2;
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
@@ -893,10 +1077,21 @@ function drawStatus(node, ctx) {
   if (!text && channelKey(node) === "RGBA" && String(getVal(node, "output_format", "PNG")) === "JPG") {
     text = "note: JPG flattens the alpha channel"; color = C.warn;
   }
+
+  const fy = node.size[1] - STATUS_H / 2 - 2;
+
+  // image resolution — right-aligned footer
+  if (node._cwkRes) {
+    ctx.fillStyle = C.textDim; ctx.font = "10px Inter,system-ui,sans-serif";
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText(node._cwkRes, node.size[0] - PAD - 4, fy);
+  }
+
   if (!text) return;
+  const resRoom = node._cwkRes ? 80 : 0;
   ctx.fillStyle = color; ctx.font = "bold 10px Inter,system-ui,sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(fitText(ctx, text, node.size[0] - PAD * 2), node.size[0] / 2, node.size[1] - STATUS_H / 2 - 2);
+  ctx.fillText(fitText(ctx, text, node.size[0] - PAD * 2 - resRoom), node.size[0] / 2, fy);
 }
 
 function drawNode(node, ctx) {
@@ -934,9 +1129,13 @@ function hitTestSettings(node, lx, ly) {
   for (const chip of L.chips) {
     if (!chip.dim && contains(chip, lx, ly)) return { type: "chip", key: chip.tag, tag: chip.tag };
   }
+  for (const chip of L.ichips) {
+    if (contains(chip, lx, ly)) return { type: "ichip", key: chip.tag, tag: chip.tag };
+  }
   for (const row of L.rows) {
     if (ly < row.y || ly > row.y + row.h) continue;
     if (lx < PAD || lx > PAD + row.w) continue;
+    if (row.gear && contains(getGearRect(row), lx, ly)) return { type: "gear", key: "gear", row };
     const part = lx >= PAD + LABEL_W ? "value" : "label";
     return { type: "row", key: row.key, part, row };
   }
@@ -957,14 +1156,10 @@ function hitTestNav(node, lx, ly) {
 app.registerExtension({
   name: "CWK.SaveImage",
 
-  // PRIMARY reception: dedicated WebSocket event pushed by the backend's
-  // _send_node_payload() (same transport as the collection's Live Preview).
-  // Registered once globally; payloads are routed by node id.
   async setup() {
     const onWs = ev => {
       try {
         let d = ev?.detail ?? ev?.data ?? ev;
-        // tolerate a wrapped message shape {type, data}
         if (d && typeof d === "object" && d.type === WS_EVENT && d.data) d = d.data;
         if (!d || typeof d !== "object" || !Array.isArray(d.rgb)) return;
 
@@ -977,8 +1172,6 @@ app.registerExtension({
         }
         if (!node) return;
 
-        // strip the routing key so the signature matches the ui-'cwk' payload
-        // (keeps the cross-path dedupe exact)
         const { node: _route, ...rest } = d;
         applyOutput(node, { cwk: rest }, `websocket event ('${WS_EVENT}')`);
       } catch (e) {
@@ -996,13 +1189,7 @@ app.registerExtension({
       node.color = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
 
-      // ── Stock image machinery: permanent neutralization ──────────────────
-      // A node the frontend considers an "image node" (node.imgs / node.images
-      // set from an "images" ui payload) gets built-in click handling
-      // (click-to-cycle previews, ctrl-click viewer / mask editor) that
-      // CONSUMES pointer events over the whole node body BEFORE
-      // node.onMouseDown runs. Instance-level accessors permanently shadow
-      // those properties: reads see null, writes are swallowed.
+      // stock image machinery: permanent neutralization
       try {
         const blackhole = { get: () => null, set: () => {}, configurable: true, enumerable: false };
         Object.defineProperty(node, "imgs", blackhole);
@@ -1025,13 +1212,11 @@ app.registerExtension({
       node._cwkImgErrors = new Set();
       node._cwkHasMasks = false;
       node._cwkSaving = false;
+      node._cwkRes = null;
 
-      // Prevent the stock image machinery from resizing the node, should it
-      // ever be fed (e.g. Python/JS version mismatch).
       node.setSizeForImage = function () {};
 
       setTimeout(() => {
-        // hide all widgets (values still persist in the workflow)
         for (const w of node.widgets ?? []) {
           w.type = "hidden"; w.hidden = true;
           w.computeSize = () => [0, -4];
@@ -1041,12 +1226,11 @@ app.registerExtension({
           tpl.value = "{model_name}_{sampler_name}_cfg{cfg}_steps{steps}";
         }
         node.size[0] = Math.max(node.size[0] ?? 0, 400);
-        node.size[1] = Math.max(node.size[1] ?? 0, 500);
+        node.size[1] = Math.max(node.size[1] ?? 0, 560);
         _refreshInfos(node);
         app.canvas.setDirty(true, true);
       }, 0);
 
-      // ── infos live sync: on link changes + light polling ──
       node.onConnectionsChange = function (side, slotIndex, connected) {
         setTimeout(() => {
           _refreshInfos(node);
@@ -1059,16 +1243,10 @@ app.registerExtension({
       };
       node._cwkInfoSyncInterval = setInterval(() => _refreshInfos(node), 500);
 
-      // ── Reception path 2: node.onExecuted (message = ui dict or full detail) ──
       node.onExecuted = function (message) {
-        try {
-          applyOutput(node, message);
-        } catch (e) {
-          console.warn("[CWK SaveImage] onExecuted:", e);
-        }
+        try { applyOutput(node, message); } catch (e) { console.warn("[CWK SaveImage] onExecuted:", e); }
       };
 
-      // ── Reception path 3: raw "executed" api event ──
       node._cwkApiExec = ev => {
         try {
           const d = ev?.detail;
@@ -1078,9 +1256,7 @@ app.registerExtension({
           const viaDisplay = d.display_node != null && String(d.display_node) === nid;
           if (!viaNode && !viaDisplay) return;
           applyOutput(node, d);
-        } catch (e) {
-          console.warn("[CWK SaveImage] executed event:", e);
-        }
+        } catch (e) { console.warn("[CWK SaveImage] executed event:", e); }
       };
       api.addEventListener("executed", node._cwkApiExec);
 
@@ -1111,12 +1287,9 @@ app.registerExtension({
 
         const st = hitTestSettings(this, pos[0], pos[1]);
         if (st) {
-          if (st.type === "chip") {
-            const t = String(getVal(node, "filename_template", "") ?? "");
-            setVal(node, "filename_template", t + `{${st.tag}}`);
-            app.canvas.setDirty(true, false);
-            return true;
-          }
+          if (st.type === "chip")  { toggleTag(node, "filename_template", st.tag, "_");    app.canvas.setDirty(true, false); return true; }
+          if (st.type === "ichip") { toggleTag(node, "imprint_template",   st.tag, " | "); app.canvas.setDirty(true, false); return true; }
+          if (st.type === "gear")  { openSaveSettingsPopup(node); return true; }
           if (st.type === "row") {
             const row = st.row;
             if (row.type === "toggle") {
@@ -1125,7 +1298,8 @@ app.registerExtension({
               return true;
             }
             if (st.part === "value") {
-              const rect = { x: row.x + LABEL_W, y: row.y + 1, w: row.w - LABEL_W, h: row.h - 2 };
+              const gearW = row.gear ? 24 : 0;
+              const rect = { x: row.x + LABEL_W, y: row.y + 1, w: row.w - LABEL_W - gearW, h: row.h - 2 };
               if (row.type === "dropdown") {
                 const opts = row.key === "subfolder_tag" ? ["(none)", ...getTags(node)] : FORMATS;
                 let cur = String(getVal(node, row.key, "") ?? "");

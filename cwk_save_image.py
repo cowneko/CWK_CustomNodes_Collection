@@ -8,8 +8,15 @@ CWK Save Image — manual image saver node (CWK Custom Nodes Collection).
 
 There is NO autosave: execute() only writes temp preview files; real files are
 written exclusively through the REST route when the user clicks Save.
-Only the custom "cwk" ui payload is sent — NO standard "images" field, so
-ComfyUI's built-in node-preview never draws over the custom UI.
+
+Delivery: execute() returns BOTH
+  - the standard "images" ui key (all channels, identifiable by temp-filename
+    prefixes cwkA_/cwkN_ + _rgb/_rgba/_alpha) so every frontend build receives
+    the previews, and
+  - a custom "cwk" dict (per-channel entries + infos + batch info) used by the
+    frontend when available.
+The frontend suppresses ComfyUI's built-in node-image rendering (node.imgs /
+setSizeForImage) so previews only appear inside the custom preview frame.
 
 Settings live as (JS-hidden) widgets so they persist inside the workflow:
 filename_template, imprint_infos, output_format, save_folder, subfolder_tag,
@@ -39,6 +46,9 @@ _IMPRINT_KEYS = [
     "clip_skip", "rng", "model_sampling", "clip_name", "vae_name", "clip_type",
 ]
 _KNOWN_KEYS = set(_IMPRINT_KEYS)
+
+# Temp filename tags: A = masks connected, N = no masks
+_MASK_TAG = {"A": "cwkA", "N": "cwkN"}
 
 # ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -134,7 +144,12 @@ def _build_item_images(img_t, alpha_u8: Optional[np.ndarray]) -> Tuple[Image.Ima
 
 
 def _save_temp(img: Image.Image, prefix: str) -> Dict[str, str]:
-    """Save a PIL image into ComfyUI's temp folder; return a /view entry."""
+    """Save a PIL image into ComfyUI's temp folder; return a /view entry.
+
+    The prefix encodes mask state + channel (cwkA_/cwkN_ + rgb/rgba/alpha) so
+    the frontend can classify entries delivered via the standard "images"
+    ui key, even when the custom "cwk" payload is not forwarded.
+    """
     temp_dir = folder_paths.get_temp_directory()
     fname = f"{prefix}_{time.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
     img.save(os.path.join(temp_dir, fname))
@@ -272,9 +287,7 @@ class CWK_SaveImage:
 
     execute() prepares RGB / RGBA / ALPHA previews (temp files) for the
     frontend. Files are written only when the user presses the Save button
-    (POST /cwk_save_image/save). Only the custom "cwk" ui payload is sent —
-    no standard "images" field, so ComfyUI's built-in node preview never
-    draws over the custom UI.
+    (POST /cwk_save_image/save).
     """
 
     @classmethod
@@ -336,24 +349,31 @@ class CWK_SaveImage:
                 infos_dict = {}
 
         # ── Build & save the three preview channels per batch item ──
+        # temp filename prefix encodes mask state + channel so the frontend
+        # can rebuild the channels from the standard "images" ui key alone.
+        tag = _MASK_TAG["A" if m is not None else "N"]
         rgb_entries, rgba_entries, alpha_entries = [], [], []
         for i in range(batch):
             alpha = None
             if m is not None:
                 alpha = (np.clip(m[i, ..., 0], 0.0, 1.0) * 255.0).astype(np.uint8)
             rgb, rgba, alpha_img = _build_item_images(images[i], alpha)
-            rgb_entries.append(_save_temp(rgb, "cwk_rgb"))
-            rgba_entries.append(_save_temp(rgba, "cwk_rgba"))
-            alpha_entries.append(_save_temp(alpha_img, "cwk_alpha"))
+            rgb_entries.append(_save_temp(rgb,   f"{tag}_rgb"))
+            rgba_entries.append(_save_temp(rgba, f"{tag}_rgba"))
+            alpha_entries.append(_save_temp(alpha_img, f"{tag}_alpha"))
+
+        # Standard "images" key → guaranteed delivery through the same path
+        # stock PreviewImage uses (also shows the previews in the queue
+        # history). The custom "cwk" dict carries the structured payload.
+        all_entries = rgb_entries + rgba_entries + alpha_entries
 
         print(f"[CWK SaveImage] node {unique_id}: {batch} image(s) ready | "
               f"masks={'yes' if m is not None else 'no'} | "
               f"infos tags={list(infos_dict.keys())}")
 
-        # NOTE: only the custom "cwk" key — no standard "images" field, so
-        # stock ComfyUI never renders its own node preview over our UI.
         return {
             "ui": {
+                "images": all_entries,
                 "cwk": {
                     "rgb":   rgb_entries,
                     "rgba":  rgba_entries,
@@ -363,6 +383,7 @@ class CWK_SaveImage:
                     "has_masks":  m is not None,
                 },
             },
+            "result": (),
         }
 
 # ─── REST route (manual save — no autosave) ───────────────────────────────────

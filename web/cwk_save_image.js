@@ -23,6 +23,11 @@
  * The structured "cwk" payload is used when present; otherwise the channels
  * are rebuilt from the standard "images" entries by their temp-filename
  * prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha).
+ *
+ * Preview loading is hardened: the /view URL is built as
+ * api.apiURL("/view?" + query) (safe under every apiURL signature), with a
+ * sanity check on the result, an automatic retry using a plain relative URL,
+ * and onerror diagnostics that log the URL + HTTP status to the console.
  * ComfyUI's built-in node-image rendering (node.imgs + setSizeForImage) is
  * suppressed so previews only ever appear inside the preview frame.
  */
@@ -404,24 +409,75 @@ function openDropdown(node, rect, options, current, onCommit) {
   setTimeout(() => document.addEventListener("pointerdown", _ddOutside, { capture: true }), 50);
 }
 
-// ─── Preview image cache ──────────────────────────────────────────────────────
+// ─── Preview image loading (hardened /view URLs) ──────────────────────────────
 
-function viewUrl(entry) {
-  const params = { filename: entry.filename, subfolder: entry.subfolder ?? "", type: entry.type ?? "temp" };
-  if (typeof api.apiURL === "function") return api.apiURL("/view", params);
-  return "/view?" + new URLSearchParams(params).toString();
+/**
+ * Build the /view URL for a temp entry.
+ *
+ * CRITICAL: the query string is baked into the route argument
+ * (api.apiURL("/view?" + qs)) — exactly like stock ComfyUI's app.js does.
+ * This is safe under BOTH apiURL signatures found in the wild:
+ *   apiURL(route)              → returns base + route
+ *   apiURL(route, params)      → params omitted → returns base + route
+ * The previous 2-argument call api.apiURL("/view", paramsObject) silently
+ * dropped the query on frontends with the 1-arg signature, producing a bare
+ * "/view" request that 404s and leaves the preview stuck on "loading…" forever.
+ */
+function viewUrl(entry, mode) {
+  const qs = new URLSearchParams({
+    filename: String(entry?.filename ?? ""),
+    subfolder: String(entry?.subfolder ?? ""),
+    type:      String(entry?.type ?? "temp"),
+  }).toString();
+  const plain = "/view?" + qs;
+  if (mode === "plain" || typeof api?.apiURL !== "function") return plain;
+  try {
+    const u = api.apiURL("/view?" + qs);
+    // sanity check: the query must have survived apiURL()
+    if (typeof u === "string" && u.includes("filename=")) return u;
+    console.warn("[CWK SaveImage] api.apiURL mangled the /view URL, using plain form:", u);
+  } catch (e) {
+    console.warn("[CWK SaveImage] api.apiURL threw, using plain form:", e);
+  }
+  return plain;
+}
+
+function _makeImg(node, key, entry, mode) {
+  const img = new Image();
+  const url = viewUrl(entry, mode);
+  img.onload = () => { app.canvas?.setDirty?.(true, true); };
+  img.onerror = () => {
+    if (mode === "api") {
+      // retry once with the plain relative URL (covers base-path/proxy cases)
+      const retry = _makeImg(node, key, entry, "plain");
+      node._cwkImgCache[key] = retry;
+      app.canvas?.setDirty?.(true, true);
+      return;
+    }
+    node._cwkImgErrors.add(key);
+    console.warn("[CWK SaveImage] preview load failed:", url, JSON.stringify(entry));
+    // probe the URL so the console shows the actual HTTP status
+    fetch(url).then(r => {
+      console.warn(`[CWK SaveImage]   → /view returned HTTP ${r.status}`);
+      app.canvas?.setDirty?.(true, true);
+    }).catch(err => {
+      console.warn("[CWK SaveImage]   → fetch probe failed:", err);
+    });
+    app.canvas?.setDirty?.(true, true);
+  };
+  img.src = url;
+  return img;
 }
 
 function getImg(node, ch, idx) {
-  node._cwkImgCache ?? (node._cwkImgCache = {});
+  node._cwkImgCache  ?? (node._cwkImgCache  = {});
+  node._cwkImgErrors ?? (node._cwkImgErrors = new Set());
   const entry = (node._cwkEntries?.[ch] ?? [])[idx];
   if (!entry) return null;
   const key = ch + ":" + idx;
   let img = node._cwkImgCache[key];
   if (!img) {
-    img = new Image();
-    img.onload = () => app.canvas.setDirty(true, false);
-    img.src = viewUrl(entry);
+    img = _makeImg(node, key, entry, "api");
     node._cwkImgCache[key] = img;
   }
   return img;
@@ -562,6 +618,7 @@ function applyOutput(node, message) {
 
   node._cwkBatchIndex = 0;
   node._cwkImgCache   = {};
+  node._cwkImgErrors  = new Set();
   _refreshInfos(node);
 
   // Suppress ComfyUI's built-in node-image rendering (node.imgs / node.images)
@@ -569,7 +626,7 @@ function applyOutput(node, message) {
 
   const n = node._cwkBatchSize;
   _setStatus(node, `✓ ${n} image${n === 1 ? "" : "s"} ready${node._cwkHasMasks ? "" : " (no masks)"} — press Save to write`);
-  app.canvas.setDirty(true, false);
+  app.canvas.setDirty(true, true);
 }
 
 /** Kill the stock preview machinery: images, imgs array, image index. */
@@ -803,10 +860,15 @@ function drawPreview(node, ctx) {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("No images yet — run the workflow", pr.x + pr.w / 2, pr.y + pr.h / 2);
   } else {
-    const idx = Math.min(node._cwkBatchIndex ?? 0, entries.length - 1);
-    const img = getImg(node, ch, idx);
+    const idx  = Math.min(node._cwkBatchIndex ?? 0, entries.length - 1);
+    const ekey = ch + ":" + idx;
+    const img  = getImg(node, ch, idx);
 
-    if (img && img.complete && img.naturalWidth) {
+    if (node._cwkImgErrors?.has(ekey)) {
+      ctx.fillStyle = C.warn; ctx.font = "11px Inter,system-ui,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("preview failed to load — see browser console", pr.x + pr.w / 2, pr.y + pr.h / 2);
+    } else if (img && img.complete && img.naturalWidth) {
       const pad = 6;
       const availW = pr.w - pad * 2, availH = pr.h - pad * 2;
       const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
@@ -927,6 +989,7 @@ app.registerExtension({
       node._cwkEntries = { rgb: [], rgba: [], alpha: [] };
       node._cwkBatchIndex = 0;
       node._cwkImgCache = {};
+      node._cwkImgErrors = new Set();
       node._cwkHasMasks = false;
       node._cwkSaving = false;
 

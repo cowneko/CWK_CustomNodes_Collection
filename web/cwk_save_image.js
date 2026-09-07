@@ -16,19 +16,21 @@
  *   └─────────────────────────────────────────────────┘
  *   status line
  *
- * Delivery: the backend sends ONLY the custom "cwk" ui payload (no standard
- * "images" key), so ComfyUI's stock node-image machinery never classifies this
- * node as an image node — that machinery installs click-to-cycle / viewer
- * handling which CONSUMES pointer events over the whole node body and would
- * kill all custom buttons. As a second layer, node.imgs / node.images are
- * permanently blackholed (reads → null, writes swallowed): our previews keep
- * everything in node._cwkEntries and never touch those properties.
+ * Reception (in order of reliability, all deduped by payload signature):
+ *   1) PRIMARY — dedicated WebSocket event "cwk_save_image_data" sent by the
+ *      backend via server.send_sync() (same pattern as CWKLivePreview). The
+ *      global listener in setup() routes payloads by node id. Custom ui keys
+ *      are filtered out by some frontends; the standard "images" ui key
+ *      engages the stock image machinery (overlay + click interception) —
+ *      this event avoids both.
+ *   2) node.onExecuted(message) — ui dict or full event detail.
+ *   3) api "executed" event — raw event detail.
+ * A fallback parser rebuilds the channels from a standard "images" payload
+ * by temp-filename prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha).
  *
- * Redundant reception: node.onExecuted(message) (ui dict or full event
- * detail) AND an api "executed" listener; results are deduped. A fallback
- * parser rebuilds the channels from a standard "images" payload by temp
- * filename prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha) in case of a
- * Python/JS version mismatch.
+ * node.imgs / node.images are permanently blackholed (reads → null, writes
+ * swallowed) and setSizeForImage is a no-op, so the stock image machinery can
+ * never classify this node as an image node.
  *
  * Preview loading: /view URLs are built as api.apiURL("/view?" + query)
  * (safe under every apiURL signature) with a plain-URL retry and onerror
@@ -41,6 +43,7 @@ import { api } from "../../scripts/api.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const NODE_TYPE  = "CWK_Save_Image";
+const WS_EVENT   = "cwk_save_image_data";
 const NODE_MIN_W = 360;
 const NODE_MIN_H = 460;
 
@@ -417,8 +420,7 @@ function openDropdown(node, rect, options, current, onCommit) {
 /**
  * Build the /view URL for a temp entry. The query string is baked into the
  * route argument (api.apiURL("/view?" + qs)) — exactly like stock ComfyUI —
- * which is safe under every apiURL signature. A 2-argument call would
- * silently drop the query on frontends with a 1-arg signature.
+ * which is safe under every apiURL signature.
  */
 function viewUrl(entry, mode) {
   const qs = new URLSearchParams({
@@ -541,7 +543,7 @@ async function handleSave(node) {
   }
 }
 
-// ─── Execution output → node state (redundant reception) ─────────────────────
+// ─── Execution output → node state (redundant reception, deduped) ───────────
 
 /** Accepts the ui dict {images, cwk} OR a full event detail {node, output}. */
 function normalizePayload(message) {
@@ -560,8 +562,7 @@ function normalizePayload(message) {
 }
 
 /** Rebuild the three channels from a standard "images" payload using the
- *  temp-filename prefixes (fallback for version mismatches only — the
- *  backend no longer sends a standard "images" key). */
+ *  temp-filename prefixes (fallback for version mismatches only). */
 function _entriesFromImages(entries) {
   const rgb = [], rgba = [], alpha = [];
   let hasMasks = false;
@@ -584,14 +585,14 @@ function _entriesFromImages(entries) {
   return { rgb, rgba, alpha, hasMasks };
 }
 
-function applyOutput(node, message) {
+function applyOutput(node, message, source) {
   const { entries, cwk } = normalizePayload(message);
   if (!cwk && !entries) return;
 
   const sig = cwk ? "cwk:" + JSON.stringify(cwk) : "img:" + JSON.stringify(entries);
-  if (sig === node._cwkLastSig) return;   // dedupe (onExecuted + event listener)
+  if (sig === node._cwkLastSig) return;   // dedupe across all reception paths
   node._cwkLastSig = sig;
-  console.log("[CWK SaveImage] payload received via", cwk ? "'cwk' (structured)" : "'images' fallback");
+  console.log("[CWK SaveImage] payload received via", source ?? (cwk ? "'cwk' ui key" : "'images' fallback"));
 
   if (cwk) {
     node._cwkExecInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
@@ -956,6 +957,37 @@ function hitTestNav(node, lx, ly) {
 app.registerExtension({
   name: "CWK.SaveImage",
 
+  // PRIMARY reception: dedicated WebSocket event pushed by the backend's
+  // _send_node_payload() (same transport as the collection's Live Preview).
+  // Registered once globally; payloads are routed by node id.
+  async setup() {
+    const onWs = ev => {
+      try {
+        let d = ev?.detail ?? ev?.data ?? ev;
+        // tolerate a wrapped message shape {type, data}
+        if (d && typeof d === "object" && d.type === WS_EVENT && d.data) d = d.data;
+        if (!d || typeof d !== "object" || !Array.isArray(d.rgb)) return;
+
+        const nid = d.node;
+        let node = null;
+        try { node = app.graph?.getNodeById?.(nid) ?? null; } catch { node = null; }
+        if (!node || node.type !== NODE_TYPE) {
+          const nodes = app.graph?._nodes ?? app.graph?.nodes ?? [];
+          node = nodes.find(n => n?.type === NODE_TYPE && String(n.id) === String(nid)) ?? null;
+        }
+        if (!node) return;
+
+        // strip the routing key so the signature matches the ui-'cwk' payload
+        // (keeps the cross-path dedupe exact)
+        const { node: _route, ...rest } = d;
+        applyOutput(node, { cwk: rest }, `websocket event ('${WS_EVENT}')`);
+      } catch (e) {
+        console.warn("[CWK SaveImage] ws payload error:", e);
+      }
+    };
+    api.addEventListener(WS_EVENT, onWs);
+  },
+
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== NODE_TYPE) return;
 
@@ -965,15 +997,12 @@ app.registerExtension({
       node.bgcolor = NODE_BGCOLOR;
 
       // ── Stock image machinery: permanent neutralization ──────────────────
-      // Any node the frontend considers an "image node" (node.imgs /
-      // node.images set from an "images" ui payload) gets built-in click
-      // handling (click-to-cycle previews, ctrl-click viewer / mask editor)
-      // that CONSUMES pointer events over the whole node body BEFORE
-      // node.onMouseDown runs — which killed all our custom buttons. Clearing
-      // the properties after execution races with the frontend's asynchronous
-      // assignments, so we neutralize them permanently instead: reads always
-      // see null, writes are swallowed. Our previews never use node.imgs /
-      // node.images (everything lives in node._cwkEntries).
+      // A node the frontend considers an "image node" (node.imgs / node.images
+      // set from an "images" ui payload) gets built-in click handling
+      // (click-to-cycle previews, ctrl-click viewer / mask editor) that
+      // CONSUMES pointer events over the whole node body BEFORE
+      // node.onMouseDown runs. Instance-level accessors permanently shadow
+      // those properties: reads see null, writes are swallowed.
       try {
         const blackhole = { get: () => null, set: () => {}, configurable: true, enumerable: false };
         Object.defineProperty(node, "imgs", blackhole);
@@ -1030,7 +1059,7 @@ app.registerExtension({
       };
       node._cwkInfoSyncInterval = setInterval(() => _refreshInfos(node), 500);
 
-      // ── Reception path 1: node.onExecuted (message = ui dict or full detail) ──
+      // ── Reception path 2: node.onExecuted (message = ui dict or full detail) ──
       node.onExecuted = function (message) {
         try {
           applyOutput(node, message);
@@ -1039,14 +1068,16 @@ app.registerExtension({
         }
       };
 
-      // ── Reception path 2: raw "executed" api event ──
+      // ── Reception path 3: raw "executed" api event ──
       node._cwkApiExec = ev => {
         try {
           const d = ev?.detail;
           if (!d) return;
-          const target = d.display_node ?? d.node;
-          if (target == null || String(target) !== String(node.id)) return;
-          applyOutput(node, d);   // normalizePayload unwraps d.output
+          const nid = String(node.id);
+          const viaNode    = d.node != null && String(d.node) === nid;
+          const viaDisplay = d.display_node != null && String(d.display_node) === nid;
+          if (!viaNode && !viaDisplay) return;
+          applyOutput(node, d);
         } catch (e) {
           console.warn("[CWK SaveImage] executed event:", e);
         }

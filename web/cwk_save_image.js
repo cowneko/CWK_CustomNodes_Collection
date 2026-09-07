@@ -69,6 +69,56 @@ const N_OUTPUTS = 0;
 function getW(node, name) { return node.widgets?.find(w => w.name === name); }
 function getVal(node, name, fb) { const w = getW(node, name); return w ? w.value : fb; }
 function setVal(node, name, val) { const w = getW(node, name); if (w) { w.value = val; w.callback?.(val); } }
+/** Sanitized numeric setting: finite & within [lo,hi], else the default. */
+function _numSetting(node, name, fb, lo, hi) {
+  const v = Number(getVal(node, name, fb));
+  return (Number.isFinite(v) && v >= lo && v <= hi) ? Math.round(v) : fb;
+}
+
+/**
+ * Repair widget values after loading a workflow saved with an older node
+ * definition. ComfyUI applies saved widgets_values POSITIONALLY, so a save
+ * from before widgets were added leaves shifted/stale values (e.g.
+ * webp_quality = 0, output_format = "", booleans holding strings).
+ * Everything invalid is reset to a type-safe default; the corrected values
+ * persist the next time the workflow is saved.
+ */
+function _normalizeWidgets(node) {
+  const str = (name, fb) => {
+    const w = getW(node, name);
+    if (w && typeof w.value !== "string") w.value = fb;
+  };
+  const bool = (name, fb) => {
+    const w = getW(node, name);
+    if (w && typeof w.value !== "boolean") w.value = fb;
+  };
+  const num = (name, lo, hi, fb) => {
+    const w = getW(node, name);
+    if (!w) return;
+    if (typeof w.value !== "number" || !Number.isFinite(w.value)
+        || w.value < lo || w.value > hi) w.value = fb;
+    else w.value = Math.round(w.value);
+  };
+  const oneOf = (name, list, fb) => {
+    const w = getW(node, name);
+    if (w && !list.includes(String(w.value))) w.value = fb;
+  };
+
+  str("filename_template", "{model_name}_{sampler_name}_cfg{cfg}_steps{steps}");
+  str("imprint_template",  "{name} | {model_name} | {sampler_name}/{scheduler} | cfg {cfg} steps {steps} seed {seed}");
+  str("save_folder", "");
+  str("subfolder_tag", "");
+  bool("imprint_infos", false);
+  bool("webp_lossless", false);
+  bool("save_workflow", true);
+  bool("save_entire_batch", true);
+  bool("settings_folded", false);
+  num("jpg_quality", 1, 100, 95);
+  num("webp_quality", 1, 100, 95);
+  num("counter_digits", 1, 8, 4);
+  oneOf("output_format", FORMATS, "PNG");
+  oneOf("channel", CHANNEL_KEYS, "RGB");
+}
 
 function channelKey(node) { return String(getVal(node, "channel", "RGB")).toUpperCase(); }
 function isFolded(node)   { return !!getVal(node, "settings_folded", false); }

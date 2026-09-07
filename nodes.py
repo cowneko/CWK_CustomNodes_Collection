@@ -50,7 +50,29 @@ def save_last_used_model(model_name: str) -> None:
             json.dump({"model_name": model_name}, f)
     except Exception as e:
         print(f"[CWK] Error saving last model: {e}")
+        
+        
+_LAST_PIPE_NAME_FILE = os.path.join(_NODE_DIR, "last_pipe_name.json")
 
+
+def get_last_pipe_name() -> Optional[str]:
+    """Return the last-used CWK_ModelLoaderPipe "Name" label, or None."""
+    if os.path.exists(_LAST_PIPE_NAME_FILE):
+        try:
+            with open(_LAST_PIPE_NAME_FILE, "r", encoding="utf-8") as f:
+                return json.load(f).get("name") or None
+        except Exception:
+            pass
+    return None
+
+
+def save_last_pipe_name(name: str) -> None:
+    """Persist the last-used pipe "Name" label to disk."""
+    try:
+        with open(_LAST_PIPE_NAME_FILE, "w", encoding="utf-8") as f:
+            json.dump({"name": name}, f)
+    except Exception as e:
+        print(f"[CWK] Error saving last pipe name: {e}")
 
 # ─── Model Sampling types ──────────────────────────────────────────────────────
 
@@ -787,6 +809,11 @@ class CWK_ModelLoaderPipe:
         clip  = pipe.get("clip")
         vae   = pipe.get("vae")
 
+        # ── Normalize + persist the "Name" label (last-used, like last model) ──
+        name = (name or "").strip()
+        if name:
+            save_last_pipe_name(name)
+        
         # ── Apply RNG & model sampling ──────────────────────────────────────────
         if rng and rng != "default":
             model = _apply_rng(model, rng)
@@ -1028,6 +1055,31 @@ class CWKLivePreview:
         """No-op execute; all work is done via WebSocket events."""
         return ()
 
+# ─── CWK_ModelLoaderPipe: last "Name" persistence routes ──────────────────────
+
+try:
+    from aiohttp import web
+    from server import PromptServer
+
+    _pipe_routes = PromptServer.instance.routes
+
+    @_pipe_routes.get("/cwk/pipe/last_name")
+    async def cwk_get_last_pipe_name(request):
+        return web.json_response({"name": get_last_pipe_name() or ""})
+
+    @_pipe_routes.post("/cwk/pipe/last_name")
+    async def cwk_set_last_pipe_name(request):
+        try:
+            data = await request.json()
+            name = str(data.get("name", "")).strip()
+            if name:
+                save_last_pipe_name(name)
+            return web.json_response({"ok": True, "name": name})
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=400)
+
+except Exception as e:
+    print(f"[CWK] Could not register pipe-name routes: {e}")
 
 # ─── Node mappings ────────────────────────────────────────────────────────────
 

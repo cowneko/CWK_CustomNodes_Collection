@@ -11,9 +11,14 @@
  *   │ Save folder  [(output)]  Subfolder [(none) ▾]   │
  *   │ Whole batch [✓]                                 │
  *   └─────────────────────────────────────────────────┘
- *   ┌─ image preview (channel + batch navigation) ────┐
+ *   ┌─ image preview (clipped to frame, channel +   ──┐
+ *   │  batch navigation)                              │
  *   └─────────────────────────────────────────────────┘
  *   status line
+ *
+ * infos tags: refreshed LIVE from the graph (walks the infos link upstream,
+ * collects widget values, finds the loader's model_name, searches downstream
+ * for a KSampler seed) and merged with the values returned at execution.
  */
 
 import { app } from "../../scripts/app.js";
@@ -38,6 +43,12 @@ const FORMATS     = ["PNG", "JPG", "WebP"];
 const CHANNEL_KEYS = ["RGB", "RGBA", "ALPHA"];
 const EXTRA_TAGS   = ["date", "time"];
 
+// Widget names we harvest upstream of the infos link (matches pipe infos keys)
+const UPSTREAM_TAG_KEYS = [
+  "model_name", "sampler_name", "scheduler", "cfg", "steps",
+  "clip_skip", "rng", "model_sampling", "clip_name", "clip_type", "vae_name",
+];
+
 const C = {
   bg: "#1a1f2e", bgFull: "#141824", surface: "#1e2335", border: "#313552",
   text: "#cdd6f4", textDim: "#6c7086", textBlue: "#89b4fa", hoverBg: "#2a2f45",
@@ -49,7 +60,7 @@ const NODE_BGCOLOR = "#1e2335";
 const TITLE_H = () => LiteGraph.NODE_TITLE_HEIGHT ?? 30;
 const SLOT_H  = () => LiteGraph.NODE_SLOT_HEIGHT  ?? 20;
 const N_INPUTS  = 3;   // images, masks, infos
-const N_OUTPUTS = 3;   // images, masks, infos
+const N_OUTPUTS = 0;   // sink node — no outputs
 
 // ─── Widget / value helpers ───────────────────────────────────────────────────
 
@@ -60,6 +71,92 @@ function setVal(node, name, val) { const w = getW(node, name); if (w) { w.value 
 function channelKey(node) { return String(getVal(node, "channel", "RGB")).toUpperCase(); }
 function isFolded(node)   { return !!getVal(node, "settings_folded", false); }
 function getTags(node)    { return [...Object.keys(node._cwkInfos ?? {}), ...EXTRA_TAGS]; }
+
+// ─── infos: live graph sync (fixes tags not refreshing on connect) ───────────
+
+function _getInfosSource(node) {
+  const input = node.inputs?.find(i => i.name === "infos");
+  if (!input || input.link == null) return null;
+  const link = app.graph?.links?.[input.link];
+  if (!link) return null;
+  return app.graph.getNodeById(link.origin_id) ?? null;
+}
+
+/** BFS upstream through inputs, harvesting known widget values (closest first). */
+function _collectInfosUpstream(startNode, maxNodes = 30) {
+  const infos = {};
+  if (!startNode) return infos;
+  const queue = [startNode];
+  const seen  = new Set();
+  while (queue.length && seen.size < maxNodes) {
+    const n = queue.shift();
+    if (!n || seen.has(n.id)) continue;
+    seen.add(n.id);
+    for (const w of n.widgets ?? []) {
+      if (UPSTREAM_TAG_KEYS.includes(w.name)
+          && infos[w.name] === undefined
+          && w.value !== undefined && w.value !== null && w.value !== "") {
+        infos[w.name] = w.value;
+      }
+    }
+    for (const input of n.inputs ?? []) {
+      if (input.link == null) continue;
+      const link = app.graph?.links?.[input.link];
+      if (!link) continue;
+      queue.push(app.graph.getNodeById(link.origin_id));
+    }
+  }
+  return infos;
+}
+
+/** BFS downstream through output links looking for a KSampler-style seed widget. */
+function _findSeedDownstream(startNode, skipNodeId, maxNodes = 12) {
+  if (!startNode) return null;
+  const queue = [startNode];
+  const seen  = new Set([skipNodeId]);
+  let visited = 0;
+  while (queue.length && visited < maxNodes) {
+    const n = queue.shift();
+    if (!n || seen.has(n.id)) continue;
+    seen.add(n.id); visited++;
+    for (const w of n.widgets ?? []) {
+      if ((w.name === "seed" || w.name === "noise_seed")
+          && w.value !== undefined && w.value !== null && w.value !== "") {
+        return String(w.value);
+      }
+    }
+    for (const out of n.outputs ?? []) {
+      for (const linkId of out.links ?? []) {
+        const link = app.graph?.links?.[linkId];
+        if (!link) continue;
+        queue.push(app.graph.getNodeById(link.target_id));
+      }
+    }
+  }
+  return null;
+}
+
+/** Recompute _cwkInfos = graph-derived values (win) merged over executed values. */
+function _refreshInfos(node) {
+  if (!app.graph) return;
+  const graphInfos = {};
+  const src = _getInfosSource(node);
+  if (src) {
+    Object.assign(graphInfos, _collectInfosUpstream(src));
+    const seed = _findSeedDownstream(src, node.id);
+    if (seed !== null && graphInfos.seed === undefined) graphInfos.seed = seed;
+  }
+  node._cwkGraphInfos = graphInfos;
+
+  // graph values win (live edits); executed values fill the rest
+  const merged = { ...(node._cwkExecInfos ?? {}), ...graphInfos };
+  const j = JSON.stringify(merged);
+  if (j !== node._cwkInfosJson) {
+    node._cwkInfos = merged;
+    node._cwkInfosJson = j;
+    app.canvas.setDirty(true, false);
+  }
+}
 
 // ─── Filename resolution ──────────────────────────────────────────────────────
 
@@ -391,7 +488,11 @@ async function handleSave(node) {
 function applyOutput(node, message) {
   const cwk = message?.cwk;
   if (!cwk) return;
-  node._cwkInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
+  const sig = JSON.stringify(cwk);
+  if (sig === node._cwkLastSig) return;   // guard double delivery (onExecuted + listener)
+  node._cwkLastSig = sig;
+
+  node._cwkExecInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
   node._cwkEntries = {
     rgb:   Array.isArray(cwk.rgb)   ? cwk.rgb   : [],
     rgba:  Array.isArray(cwk.rgba)  ? cwk.rgba  : [],
@@ -401,6 +502,7 @@ function applyOutput(node, message) {
   node._cwkBatchIndex = 0;
   node._cwkImgCache   = {};
   node._cwkHasMasks   = !!cwk.has_masks;
+  _refreshInfos(node);
   const n = node._cwkBatchSize;
   _setStatus(node, `✓ ${n} image${n === 1 ? "" : "s"} ready${node._cwkHasMasks ? "" : " (no masks)"} — press Save to write`);
   app.canvas.setDirty(true, false);
@@ -615,42 +717,49 @@ function drawPreview(node, ctx) {
   const ch = channelKey(node).toLowerCase();
   const entries = node._cwkEntries?.[ch] ?? [];
 
+  // frame
   roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 5);
   ctx.fillStyle = "#10131f"; ctx.fill();
   ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
+
+  // ── everything below is hard-clipped to the frame ──
+  ctx.save();
+  roundRect(ctx, pr.x + 1, pr.y + 1, pr.w - 2, pr.h - 2, 4);
+  ctx.clip();
 
   if (!entries.length) {
     ctx.fillStyle = C.textDim; ctx.font = "11px Inter,system-ui,sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("No images yet — run the workflow", pr.x + pr.w / 2, pr.y + pr.h / 2);
-    return;
-  }
-
-  const idx = Math.min(node._cwkBatchIndex ?? 0, entries.length - 1);
-  const img = getImg(node, ch, idx);
-
-  if (img && img.complete && img.naturalWidth) {
-    const pad = 6;
-    const availW = pr.w - pad * 2, availH = pr.h - pad * 2;
-    const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
-    const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
-    const dx = pr.x + pad + (availW - dw) / 2, dy = pr.y + pad + (availH - dh) / 2;
-    if (ch === "rgba") drawCheckerboard(ctx, dx, dy, dw, dh);
-    ctx.drawImage(img, dx, dy, dw, dh);
-    if (ch !== "alpha" && !!getVal(node, "imprint_infos", false)) drawImprintSim(node, ctx, dx, dy, dw, dh, s);
   } else {
-    ctx.fillStyle = C.textDim; ctx.font = "11px Inter,system-ui,sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("loading preview…", pr.x + pr.w / 2, pr.y + pr.h / 2);
+    const idx = Math.min(node._cwkBatchIndex ?? 0, entries.length - 1);
+    const img = getImg(node, ch, idx);
+
+    if (img && img.complete && img.naturalWidth) {
+      const pad = 6;
+      const availW = pr.w - pad * 2, availH = pr.h - pad * 2;
+      const s = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+      const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+      const dx = pr.x + pad + (availW - dw) / 2, dy = pr.y + pad + (availH - dh) / 2;
+      if (ch === "rgba") drawCheckerboard(ctx, dx, dy, dw, dh);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      if (ch !== "alpha" && !!getVal(node, "imprint_infos", false)) drawImprintSim(node, ctx, dx, dy, dw, dh, s);
+    } else {
+      ctx.fillStyle = C.textDim; ctx.font = "11px Inter,system-ui,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("loading preview…", pr.x + pr.w / 2, pr.y + pr.h / 2);
+    }
+
+    if (ch !== "rgb" && node._cwkEntries && !node._cwkHasMasks) {
+      ctx.fillStyle = C.warn; ctx.font = "9px Inter,system-ui,sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.fillText("no masks connected", pr.x + 6, pr.y + 4);
+    }
+
+    if (entries.length > 1) drawNav(node, ctx, idx, entries.length);
   }
 
-  if (ch !== "rgb" && node._cwkEntries && !node._cwkHasMasks) {
-    ctx.fillStyle = C.warn; ctx.font = "9px Inter,system-ui,sans-serif";
-    ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText("no masks connected", pr.x + 6, pr.y + 4);
-  }
-
-  if (entries.length > 1) drawNav(node, ctx, idx, entries.length);
+  ctx.restore();
 }
 
 function drawStatus(node, ctx) {
@@ -735,7 +844,11 @@ app.registerExtension({
       node._cwkHover = null;
       node._cwkStatus = null;
       node._cwkFlash = false; node._cwkFlashLabel = null; node._cwkFlashColor = null;
+      node._cwkGraphInfos = {};
+      node._cwkExecInfos = {};
       node._cwkInfos = {};
+      node._cwkInfosJson = "{}";
+      node._cwkLastSig = null;
       node._cwkEntries = { rgb: [], rgba: [], alpha: [] };
       node._cwkBatchIndex = 0;
       node._cwkImgCache = {};
@@ -754,14 +867,32 @@ app.registerExtension({
         }
         node.size[0] = Math.max(node.size[0] ?? 0, 400);
         node.size[1] = Math.max(node.size[1] ?? 0, 500);
+        _refreshInfos(node);
         app.canvas.setDirty(true, true);
       }, 0);
 
-      // receive execution results (ui.cwk payload)
-      node.onExecuted = function (message) {
-        try { applyOutput(node, message); } catch (e) { console.warn("[CWK SaveImage] onExecuted:", e); }
+      // ── infos live sync: on link changes + light polling ──
+      node.onConnectionsChange = function (side, slotIndex, connected) {
+        setTimeout(() => {
+          _refreshInfos(node);
+          const src = _getInfosSource(node);
+          if (src && !(node._cwkEntries?.rgb?.length)) {
+            const n = Object.keys(node._cwkInfos ?? {}).length;
+            _setStatus(node, n ? `✓ Infos connected — ${n} tags available` : "Infos connected — no tags found yet", n ? C.flashGreen : C.warn);
+          }
+        }, 20);
       };
-      // fallback listener (harmless if both fire)
+      node._cwkInfoSyncInterval = setInterval(() => _refreshInfos(node), 500);
+
+      // ── receive execution results (ui.cwk payload) ──
+      node.onExecuted = function (message) {
+        try {
+          applyOutput(node, message);
+          // belt & braces: never let any stock preview machinery draw here
+          if (this.images) this.images = null;
+        } catch (e) { console.warn("[CWK SaveImage] onExecuted:", e); }
+      };
+      // fallback listener (guarded by signature inside applyOutput)
       node._cwkApiExec = ev => {
         if (String(ev?.detail?.node) !== String(node.id)) return;
         if (ev?.detail?.output) applyOutput(node, ev.detail.output);
@@ -770,6 +901,7 @@ app.registerExtension({
 
       const prevOnRemoved = node.onRemoved;
       node.onRemoved = function () {
+        if (node._cwkInfoSyncInterval) { clearInterval(node._cwkInfoSyncInterval); node._cwkInfoSyncInterval = null; }
         if (node._cwkApiExec) { api.removeEventListener("executed", node._cwkApiExec); node._cwkApiExec = null; }
         prevOnRemoved?.apply(this, arguments);
       };
@@ -845,15 +977,4 @@ app.registerExtension({
         const h = hitTestTop(this, pos[0], pos[1]) || hitTestSettings(this, pos[0], pos[1]) || hitTestNav(this, pos[0], pos[1]);
         const norm = h ? { type: h.type, key: h.key ?? h.tag ?? null } : null;
         const prev = this._cwkHover;
-        if ((prev?.type ?? null) !== (norm?.type ?? null) || (prev?.key ?? null) !== (norm?.key ?? null)) {
-          this._cwkHover = norm;
-          app.canvas.setDirty(true, false);
-        }
-      };
-
-      node.onMouseLeave = function () {
-        if (this._cwkHover !== null) { this._cwkHover = null; app.canvas.setDirty(true, false); }
-      };
-    };
-  },
-});
+        if ((prev?.type ?? null) !== (norm?.type ?? null) || (

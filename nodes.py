@@ -715,7 +715,8 @@ class CWK_ModelLoaderPipe:
 
     Accepts a PIPE_LOADER + LATENT, applies clip_skip, resolves sampler/scheduler,
     and fans out all values. Optional model/clip inputs override what comes
-    from the pipe.
+    from the pipe. The "name" widget is a free-form label cast through the
+    infos output (used by CWK_Save_Image as the {name} tag).
     """
 
     @classmethod
@@ -734,6 +735,7 @@ class CWK_ModelLoaderPipe:
             },
             "optional": {
                 "model_override": ("MODEL", {}),
+                "name":           ("STRING", {"default": "", "multiline": False}),
                 "clip_name": (get_clip_list(),),
                 "clip_type": (_get_clip_types(), {"default": _default_clip_type(_get_clip_types())}),
                 "vae_name":  (get_vae_list(),),
@@ -773,6 +775,7 @@ class CWK_ModelLoaderPipe:
         steps:         int,
         clip_skip:     str,
         model_override = None,
+        name:           str = "",
         clip_name:      str = "embedded",
         clip_type:      str = "stable_diffusion",
         vae_name:       str = "embedded",
@@ -784,13 +787,7 @@ class CWK_ModelLoaderPipe:
         clip  = pipe.get("clip")
         vae   = pipe.get("vae")
 
-        # ── Apply RNG & model sampling (centralized here for both pipe/override paths) ──
-        # NOTE: this patches whatever model is resolved above, whether it came from
-        # `pipe` or `model_override`. Feeding in a model that has already been
-        # patched (e.g. re-using a previous CWK_ModelLoaderPipe output as
-        # model_override) will apply the patch on top of the existing one; pass an
-        # unpatched model (raw CheckpointLoaderSimple output) via model_override
-        # for the documented "identical to plain checkpoint" behavior.
+        # ── Apply RNG & model sampling ──────────────────────────────────────────
         if rng and rng != "default":
             model = _apply_rng(model, rng)
         if model_sampling and model_sampling != "default":
@@ -820,7 +817,6 @@ class CWK_ModelLoaderPipe:
             if clip is not None:
                 print("[CWK Pipe] clip_skip: Disabled (clip passed through untouched)")
         else:
-            # Old workflows/presets may hold clip_skip as an int — normalize to str
             clip_skip_applied = str(clip_skip)
             if clip is not None:
                 try:
@@ -838,6 +834,7 @@ class CWK_ModelLoaderPipe:
         applied_clip_name = clip_name if clip_overridden else pipe.get("clip_name", "embedded")
         applied_clip_type = clip_type if clip_overridden else pipe.get("clip_type", "stable_diffusion")
         infos = json.dumps({
+            "name":           (name or "").strip(),
             "model_name":     pipe.get("model_name",    ""),
             "vae_name":       applied_vae_name,
             "clip_name":      applied_clip_name,
@@ -853,6 +850,7 @@ class CWK_ModelLoaderPipe:
 
         print(
             f"[CWK Pipe] model={pipe.get('model_name','?')} | "
+            f"name={(name or '').strip()!r} | "
             f"sampler={sampler_name} sched={scheduler} cfg={cfg} "
             f"steps={steps} clip_skip={clip_skip_applied} "
             f"rng={rng} model_sampling={model_sampling}"

@@ -977,4 +977,15 @@ app.registerExtension({
         const h = hitTestTop(this, pos[0], pos[1]) || hitTestSettings(this, pos[0], pos[1]) || hitTestNav(this, pos[0], pos[1]);
         const norm = h ? { type: h.type, key: h.key ?? h.tag ?? null } : null;
         const prev = this._cwkHover;
-        if ((prev?.type ?? null) !== (norm?.type ?? null) || (
+        if ((prev?.type ?? null) !== (norm?.type ?? null) || (prev?.key ?? null) !== (norm?.key ?? null)) {
+          this._cwkHover = norm;
+          app.canvas.setDirty(true, false);
+        }
+      };
+
+      node.onMouseLeave = function () {
+        if (this._cwkHover !== null) { this._cwkHover = null; app.canvas.setDirty(true, false); }
+      };
+    };
+  },
+});

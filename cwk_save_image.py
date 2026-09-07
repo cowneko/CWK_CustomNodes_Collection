@@ -63,6 +63,18 @@ def _sanitize_component(name) -> str:
     s = re.sub(r"_{2,}", "_", s).strip("._")
     return "" if s in ("", ".", "..") else s
 
+def _clamp_int(value, lo: int, hi: int, default: int) -> int:
+    """Robustly clamp a frontend-supplied value; fall back on garbage.
+    (Also fixes a latent crash: the old int(...) could raise on strings.)"""
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return default
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
 
 def _strip_model_ext(value) -> str:
     s = str(value or "")
@@ -351,11 +363,11 @@ class CWK_SaveImage:
                 }),
                 "imprint_infos":     ("BOOLEAN", {"default": False}),
                 "output_format":     (OUTPUT_FORMATS, {"default": "PNG"}),
-                "jpg_quality":       ("INT",   {"default": 95, "min": 1, "max": 100, "step": 1}),
-                "webp_quality":      ("INT",   {"default": 95, "min": 1, "max": 100, "step": 1}),
+                "jpg_quality":       ("INT",   {"default": 95, "min": 0, "max": 100, "step": 1}),
+                "webp_quality":      ("INT",   {"default": 95, "min": 0, "max": 100, "step": 1}),
                 "webp_lossless":     ("BOOLEAN", {"default": False}),
                 "save_workflow":     ("BOOLEAN", {"default": True}),
-                "counter_digits":    ("INT",   {"default": 4, "min": 1, "max": 8, "step": 1}),
+                "counter_digits":    ("INT",   {"default": 4, "min": 0, "max": 8, "step": 1}),
                 "save_folder":       ("STRING", {"default": "", "multiline": False}),
                 "subfolder_tag":     ("STRING", {"default": "", "multiline": False}),
                 "save_entire_batch": ("BOOLEAN", {"default": True}),
@@ -465,11 +477,11 @@ try:
         infos         = data.get("imprint_infos") if isinstance(data.get("imprint_infos"), dict) else {}
         entire        = bool(data.get("entire_batch", True))
         b_index       = int(data.get("batch_index", 0) or 0)
-        jpg_quality   = min(100, max(1, int(data.get("jpg_quality", 95) or 95)))
-        webp_quality  = min(100, max(1, int(data.get("webp_quality", 95) or 95)))
+        jpg_quality   = _clamp_int(data.get("jpg_quality"),   1, 100, 95)
+        webp_quality  = _clamp_int(data.get("webp_quality"),  1, 100, 95)
         webp_lossless = bool(data.get("webp_lossless", False))
         save_workflow = bool(data.get("save_workflow", False))
-        counter_digits= min(8, max(1, int(data.get("counter_digits", 4) or 4)))
+        counter_digits= _clamp_int(data.get("counter_digits"), 1, 8, 4)
         workflow_json = data.get("workflow_json") if isinstance(data.get("workflow_json"), str) else None
 
         if channel not in ("rgb", "rgba", "alpha"):

@@ -668,7 +668,26 @@ app.registerExtension({
         }
         // Set default widget values (name: keep any value restored from the workflow)
         const getW = name => node.widgets?.find(w => w.name === name);
-        const nm = getW("name");           if (nm && (nm.value === undefined || nm.value === null)) nm.value = "";
+        // "Name": keep the value restored from the workflow; if empty (fresh
+        // node), restore the last name used (persisted server-side).
+        const nmW = getW("name");
+        const nmVal = String(nmW?.value ?? "").trim();
+        if (nmVal) {
+          node._cwkValues.name = nmVal;
+        } else if (nmW) {
+          nmW.value = "";
+          fetch("/cwk/pipe/last_name")
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+              const last = String(d?.name ?? "").trim();
+              if (last) {
+                nmW.value = last;
+                node._cwkValues.name = last;
+                app.canvas.setDirty(true, false);
+              }
+            })
+            .catch(() => {});
+        }
         const sv = getW("sampler_name");   if (sv) sv.value = "euler";
         const sc = getW("scheduler");      if (sc) sc.value = "normal";
         const cv = getW("cfg");            if (cv) cv.value = 7.0;
@@ -740,6 +759,26 @@ app.registerExtension({
         return false;
       };
 
+       function applyRowValue(node, rowIdx, val) {
+  const row = PIPE_ROWS[rowIdx];
+  if (!node._cwkValues) node._cwkValues = {};
+  node._cwkValues[row.key] = val;
+  const w = node.widgets?.find(w => w.name === row.widget);
+  if (w) { w.value = val; w.callback?.(val); }
+  // persist the last "Name" used (fire-and-forget)
+  if (row.key === "name") {
+    const n = String(val ?? "").trim();
+    if (n) {
+      fetch("/cwk/pipe/last_name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: n }),
+      }).catch(() => {});
+    }
+  }
+  app.canvas.setDirty(true, false);
+}  
+      
       node.onMouseMove = function (e, pos) {
         const btnKey = hitTestButton(this, pos[0], pos[1]);
         if (btnKey) {

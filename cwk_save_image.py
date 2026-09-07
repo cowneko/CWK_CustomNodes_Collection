@@ -9,14 +9,19 @@ CWK Save Image — manual image saver node (CWK Custom Nodes Collection).
 There is NO autosave: execute() only writes temp preview files; real files are
 written exclusively through the REST route when the user clicks Save.
 
-Delivery: execute() returns BOTH
-  - the standard "images" ui key (all channels, identifiable by temp-filename
-    prefixes cwkA_/cwkN_ + _rgb/_rgba/_alpha) so every frontend build receives
-    the previews, and
-  - a custom "cwk" dict (per-channel entries + infos + batch info) used by the
-    frontend when available.
-The frontend suppresses ComfyUI's built-in node-image rendering (node.imgs /
-setSizeForImage) so previews only appear inside the custom preview frame.
+Delivery: execute() returns ONLY the custom "cwk" ui payload (per-channel
+entries + infos + batch info). It reaches the frontend through exactly the same
+channel a standard "images" key would (same `executed` event, same
+node.onExecuted(message) call), but the stock frontend's node-image machinery
+(node.imgs drawing, click-to-cycle image previews, ctrl-click viewer /
+mask-editor hooks, setSizeForImage) never engages, because that machinery keys
+on the standard "images" ui field. That machinery also CONSUMES pointer events
+across the whole node body — which is why the custom buttons became
+unclickable while the standard key was still being sent.
+
+Temp filenames still carry channel/mask prefixes (cwkA_/cwkN_ + rgb/rgba/
+alpha) so the JS fallback parser can rebuild the channels from a standard
+"images" payload in case of a Python/JS version mismatch.
 
 Settings live as (JS-hidden) widgets so they persist inside the workflow:
 filename_template, imprint_infos, output_format, save_folder, subfolder_tag,
@@ -47,7 +52,8 @@ _IMPRINT_KEYS = [
 ]
 _KNOWN_KEYS = set(_IMPRINT_KEYS)
 
-# Temp filename tags: A = masks connected, N = no masks
+# Temp filename tags: A = masks connected, N = no masks (used by the JS
+# fallback parser — see module docstring).
 _MASK_TAG = {"A": "cwkA", "N": "cwkN"}
 
 # ─── Small helpers ────────────────────────────────────────────────────────────
@@ -147,8 +153,8 @@ def _save_temp(img: Image.Image, prefix: str) -> Dict[str, str]:
     """Save a PIL image into ComfyUI's temp folder; return a /view entry.
 
     The prefix encodes mask state + channel (cwkA_/cwkN_ + rgb/rgba/alpha) so
-    the frontend can classify entries delivered via the standard "images"
-    ui key, even when the custom "cwk" payload is not forwarded.
+    the frontend's fallback parser can classify entries if a standard
+    "images" payload ever appears (version mismatch).
     """
     temp_dir = folder_paths.get_temp_directory()
     fname = f"{prefix}_{time.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
@@ -349,8 +355,6 @@ class CWK_SaveImage:
                 infos_dict = {}
 
         # ── Build & save the three preview channels per batch item ──
-        # temp filename prefix encodes mask state + channel so the frontend
-        # can rebuild the channels from the standard "images" ui key alone.
         tag = _MASK_TAG["A" if m is not None else "N"]
         rgb_entries, rgba_entries, alpha_entries = [], [], []
         for i in range(batch):
@@ -362,18 +366,18 @@ class CWK_SaveImage:
             rgba_entries.append(_save_temp(rgba, f"{tag}_rgba"))
             alpha_entries.append(_save_temp(alpha_img, f"{tag}_alpha"))
 
-        # Standard "images" key → guaranteed delivery through the same path
-        # stock PreviewImage uses (also shows the previews in the queue
-        # history). The custom "cwk" dict carries the structured payload.
-        all_entries = rgb_entries + rgba_entries + alpha_entries
-
         print(f"[CWK SaveImage] node {unique_id}: {batch} image(s) ready | "
               f"masks={'yes' if m is not None else 'no'} | "
               f"infos tags={list(infos_dict.keys())}")
 
+        # ONLY the custom "cwk" key — deliberately NO standard "images" key:
+        # the stock frontend's image machinery keys on "images" and would
+        # install click-to-cycle / viewer handling that consumes pointer
+        # events over the whole node body (breaking the custom buttons).
+        # The "cwk" payload reaches the frontend through the very same
+        # executed event / onExecuted call.
         return {
             "ui": {
-                "images": all_entries,
                 "cwk": {
                     "rgb":   rgb_entries,
                     "rgba":  rgba_entries,

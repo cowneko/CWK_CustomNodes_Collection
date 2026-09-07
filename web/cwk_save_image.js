@@ -16,20 +16,23 @@
  *   └─────────────────────────────────────────────────┘
  *   status line
  *
- * Payload delivery is redundant on purpose:
- *   1) node.onExecuted(message)          — message may be the ui dict
- *      {images, cwk} or a full event detail {node, output}.
- *   2) api "executed" listener           — receives the raw event detail.
- * The structured "cwk" payload is used when present; otherwise the channels
- * are rebuilt from the standard "images" entries by their temp-filename
- * prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha).
+ * Delivery: the backend sends ONLY the custom "cwk" ui payload (no standard
+ * "images" key), so ComfyUI's stock node-image machinery never classifies this
+ * node as an image node — that machinery installs click-to-cycle / viewer
+ * handling which CONSUMES pointer events over the whole node body and would
+ * kill all custom buttons. As a second layer, node.imgs / node.images are
+ * permanently blackholed (reads → null, writes swallowed): our previews keep
+ * everything in node._cwkEntries and never touch those properties.
  *
- * Preview loading is hardened: the /view URL is built as
- * api.apiURL("/view?" + query) (safe under every apiURL signature), with a
- * sanity check on the result, an automatic retry using a plain relative URL,
- * and onerror diagnostics that log the URL + HTTP status to the console.
- * ComfyUI's built-in node-image rendering (node.imgs + setSizeForImage) is
- * suppressed so previews only ever appear inside the preview frame.
+ * Redundant reception: node.onExecuted(message) (ui dict or full event
+ * detail) AND an api "executed" listener; results are deduped. A fallback
+ * parser rebuilds the channels from a standard "images" payload by temp
+ * filename prefixes (cwkA_/cwkN_ + _rgb/_rgba/_alpha) in case of a
+ * Python/JS version mismatch.
+ *
+ * Preview loading: /view URLs are built as api.apiURL("/view?" + query)
+ * (safe under every apiURL signature) with a plain-URL retry and onerror
+ * diagnostics (URL + HTTP status logged to the browser console).
  */
 
 import { app } from "../../scripts/app.js";
@@ -60,7 +63,7 @@ const UPSTREAM_TAG_KEYS = [
   "clip_skip", "rng", "model_sampling", "clip_name", "clip_type", "vae_name",
 ];
 
-// Temp filename prefixes produced by the backend
+// Temp filename prefixes produced by the backend (fallback parser only)
 const TEMP_PREFIXES = ["cwkA_", "cwkN_"];   // A = masks, N = no masks
 
 const C = {
@@ -412,16 +415,10 @@ function openDropdown(node, rect, options, current, onCommit) {
 // ─── Preview image loading (hardened /view URLs) ──────────────────────────────
 
 /**
- * Build the /view URL for a temp entry.
- *
- * CRITICAL: the query string is baked into the route argument
- * (api.apiURL("/view?" + qs)) — exactly like stock ComfyUI's app.js does.
- * This is safe under BOTH apiURL signatures found in the wild:
- *   apiURL(route)              → returns base + route
- *   apiURL(route, params)      → params omitted → returns base + route
- * The previous 2-argument call api.apiURL("/view", paramsObject) silently
- * dropped the query on frontends with the 1-arg signature, producing a bare
- * "/view" request that 404s and leaves the preview stuck on "loading…" forever.
+ * Build the /view URL for a temp entry. The query string is baked into the
+ * route argument (api.apiURL("/view?" + qs)) — exactly like stock ComfyUI —
+ * which is safe under every apiURL signature. A 2-argument call would
+ * silently drop the query on frontends with a 1-arg signature.
  */
 function viewUrl(entry, mode) {
   const qs = new URLSearchParams({
@@ -433,7 +430,6 @@ function viewUrl(entry, mode) {
   if (mode === "plain" || typeof api?.apiURL !== "function") return plain;
   try {
     const u = api.apiURL("/view?" + qs);
-    // sanity check: the query must have survived apiURL()
     if (typeof u === "string" && u.includes("filename=")) return u;
     console.warn("[CWK SaveImage] api.apiURL mangled the /view URL, using plain form:", u);
   } catch (e) {
@@ -449,14 +445,12 @@ function _makeImg(node, key, entry, mode) {
   img.onerror = () => {
     if (mode === "api") {
       // retry once with the plain relative URL (covers base-path/proxy cases)
-      const retry = _makeImg(node, key, entry, "plain");
-      node._cwkImgCache[key] = retry;
+      node._cwkImgCache[key] = _makeImg(node, key, entry, "plain");
       app.canvas?.setDirty?.(true, true);
       return;
     }
     node._cwkImgErrors.add(key);
     console.warn("[CWK SaveImage] preview load failed:", url, JSON.stringify(entry));
-    // probe the URL so the console shows the actual HTTP status
     fetch(url).then(r => {
       console.warn(`[CWK SaveImage]   → /view returned HTTP ${r.status}`);
       app.canvas?.setDirty?.(true, true);
@@ -547,7 +541,7 @@ async function handleSave(node) {
   }
 }
 
-// ─── Execution output → node state (redundant delivery) ──────────────────────
+// ─── Execution output → node state (redundant reception) ─────────────────────
 
 /** Accepts the ui dict {images, cwk} OR a full event detail {node, output}. */
 function normalizePayload(message) {
@@ -565,8 +559,9 @@ function normalizePayload(message) {
   return out;
 }
 
-/** Rebuild the three channels from the standard "images" entries
- *  using the temp-filename prefixes written by the backend. */
+/** Rebuild the three channels from a standard "images" payload using the
+ *  temp-filename prefixes (fallback for version mismatches only — the
+ *  backend no longer sends a standard "images" key). */
 function _entriesFromImages(entries) {
   const rgb = [], rgba = [], alpha = [];
   let hasMasks = false;
@@ -596,6 +591,7 @@ function applyOutput(node, message) {
   const sig = cwk ? "cwk:" + JSON.stringify(cwk) : "img:" + JSON.stringify(entries);
   if (sig === node._cwkLastSig) return;   // dedupe (onExecuted + event listener)
   node._cwkLastSig = sig;
+  console.log("[CWK SaveImage] payload received via", cwk ? "'cwk' (structured)" : "'images' fallback");
 
   if (cwk) {
     node._cwkExecInfos = (cwk.infos && typeof cwk.infos === "object") ? cwk.infos : {};
@@ -607,8 +603,6 @@ function applyOutput(node, message) {
     node._cwkHasMasks  = !!cwk.has_masks;
     node._cwkBatchSize = cwk.batch_size ?? node._cwkEntries.rgb.length ?? 1;
   } else {
-    // Fallback path: structured payload not forwarded by this frontend build —
-    // rebuild from the standard "images" entries.
     const cls = _entriesFromImages(entries);
     node._cwkEntries  = { rgb: cls.rgb, rgba: cls.rgba, alpha: cls.alpha };
     node._cwkHasMasks = cls.hasMasks;
@@ -620,8 +614,6 @@ function applyOutput(node, message) {
   node._cwkImgCache   = {};
   node._cwkImgErrors  = new Set();
   _refreshInfos(node);
-
-  // Suppress ComfyUI's built-in node-image rendering (node.imgs / node.images)
   _clearStockImages(node);
 
   const n = node._cwkBatchSize;
@@ -629,10 +621,8 @@ function applyOutput(node, message) {
   app.canvas.setDirty(true, true);
 }
 
-/** Kill the stock preview machinery: images, imgs array, image index. */
+/** Kill leftover stock preview state (imageIndex; imgs/images are blackholed). */
 function _clearStockImages(node) {
-  node.imgs = null;
-  node.images = null;
   node.imageIndex = null;
 }
 
@@ -909,10 +899,6 @@ function drawStatus(node, ctx) {
 }
 
 function drawNode(node, ctx) {
-  // last-resort suppression of stock image rendering: if anything re-set
-  // node.imgs after our handlers ran, wipe it before drawing this frame.
-  if (node.imgs?.length) _clearStockImages(node);
-
   const w = node.size[0], h = node.size[1];
   const cornerR = LiteGraph.NODE_BORDER_RADIUS ?? 8;
   ctx.save();
@@ -978,6 +964,24 @@ app.registerExtension({
       node.color = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
 
+      // ── Stock image machinery: permanent neutralization ──────────────────
+      // Any node the frontend considers an "image node" (node.imgs /
+      // node.images set from an "images" ui payload) gets built-in click
+      // handling (click-to-cycle previews, ctrl-click viewer / mask editor)
+      // that CONSUMES pointer events over the whole node body BEFORE
+      // node.onMouseDown runs — which killed all our custom buttons. Clearing
+      // the properties after execution races with the frontend's asynchronous
+      // assignments, so we neutralize them permanently instead: reads always
+      // see null, writes are swallowed. Our previews never use node.imgs /
+      // node.images (everything lives in node._cwkEntries).
+      try {
+        const blackhole = { get: () => null, set: () => {}, configurable: true, enumerable: false };
+        Object.defineProperty(node, "imgs", blackhole);
+        Object.defineProperty(node, "images", blackhole);
+      } catch (e) {
+        console.warn("[CWK SaveImage] could not install property blackholes:", e);
+      }
+
       node._cwkHover = null;
       node._cwkStatus = null;
       node._cwkFlash = false; node._cwkFlashLabel = null; node._cwkFlashColor = null;
@@ -993,8 +997,8 @@ app.registerExtension({
       node._cwkHasMasks = false;
       node._cwkSaving = false;
 
-      // Prevent the stock image machinery from resizing the node when
-      // the standard "images" ui key is delivered.
+      // Prevent the stock image machinery from resizing the node, should it
+      // ever be fed (e.g. Python/JS version mismatch).
       node.setSizeForImage = function () {};
 
       setTimeout(() => {
@@ -1026,18 +1030,16 @@ app.registerExtension({
       };
       node._cwkInfoSyncInterval = setInterval(() => _refreshInfos(node), 500);
 
-      // ── Delivery path 1: node.onExecuted (message = ui dict or full detail) ──
+      // ── Reception path 1: node.onExecuted (message = ui dict or full detail) ──
       node.onExecuted = function (message) {
         try {
           applyOutput(node, message);
         } catch (e) {
           console.warn("[CWK SaveImage] onExecuted:", e);
         }
-        // Suppress stock image rendering, whatever the payload shape was.
-        _clearStockImages(this);
       };
 
-      // ── Delivery path 2: raw "executed" api event ──
+      // ── Reception path 2: raw "executed" api event ──
       node._cwkApiExec = ev => {
         try {
           const d = ev?.detail;

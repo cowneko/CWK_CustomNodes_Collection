@@ -2,12 +2,14 @@
 CWK Save Image — manual image saver node (CWK Custom Nodes Collection).
 
     CWK_ModelLoaderPipe "infos" ──┐
-    IMAGE (batch) ────────────────┤→ CWK_Save_Image ──→ RGB / RGBA / ALPHA previews
+    IMAGE (batch) ────────────────┤→ CWK_Save_Image  (sink node, no outputs)
     MASK  (batch, optional) ──────┘        │
                                            └─ Save button → POST /cwk_save_image/save
 
 There is NO autosave: execute() only writes temp preview files; real files are
 written exclusively through the REST route when the user clicks Save.
+Only the custom "cwk" ui payload is sent — NO standard "images" field, so
+ComfyUI's built-in node-preview never draws over the custom UI.
 
 Settings live as (JS-hidden) widgets so they persist inside the workflow:
 filename_template, imprint_infos, output_format, save_folder, subfolder_tag,
@@ -266,11 +268,13 @@ def _save_channel_image(img: Image.Image, fmt: str, path: str) -> None:
 
 class CWK_SaveImage:
     """
-    CWK Save Image — manual image saver.
+    CWK Save Image — manual image saver (sink node, no outputs).
 
     execute() prepares RGB / RGBA / ALPHA previews (temp files) for the
-    frontend and passes the batch through. Files are written only when the
-    user presses the Save button (POST /cwk_save_image/save).
+    frontend. Files are written only when the user presses the Save button
+    (POST /cwk_save_image/save). Only the custom "cwk" ui payload is sent —
+    no standard "images" field, so ComfyUI's built-in node preview never
+    draws over the custom UI.
     """
 
     @classmethod
@@ -298,8 +302,8 @@ class CWK_SaveImage:
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING")
-    RETURN_NAMES = ("images", "masks", "infos")
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
     FUNCTION     = "execute"
     CATEGORY     = "CWK/Save"
     OUTPUT_NODE  = True
@@ -346,11 +350,10 @@ class CWK_SaveImage:
               f"masks={'yes' if m is not None else 'no'} | "
               f"infos tags={list(infos_dict.keys())}")
 
-        infos_out = infos if isinstance(infos, str) else json.dumps(infos_dict)
+        # NOTE: only the custom "cwk" key — no standard "images" field, so
+        # stock ComfyUI never renders its own node preview over our UI.
         return {
             "ui": {
-                # standard field → RGB previews also appear in the queue history
-                "images": rgb_entries,
                 "cwk": {
                     "rgb":   rgb_entries,
                     "rgba":  rgba_entries,
@@ -360,7 +363,6 @@ class CWK_SaveImage:
                     "has_masks":  m is not None,
                 },
             },
-            "result": (images, masks, infos_out),
         }
 
 # ─── REST route (manual save — no autosave) ───────────────────────────────────

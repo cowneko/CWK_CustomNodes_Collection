@@ -6,25 +6,23 @@ CWK Save Image — manual image saver node (CWK Custom Nodes Collection).
     MASK  (batch, optional) ──────┘        │
                                            └─ Save button → POST /cwk_save_image/save
 
-There is NO autosave: execute() only writes temp preview files; real files are
-written exclusively through the REST route when the user clicks Save.
+No autosave: execute() only writes temp preview files; real files are written
+exclusively through the REST route when the user clicks Save.
 
-Delivery (primary): a dedicated WebSocket event "cwk_save_image_data", pushed
-with server.send_sync() exactly like the collection's CWKLivePreview node does
-with "cwk_live_preview". Custom ui keys are filtered out by some frontends
-before reaching the JS, and the standard "images" ui key engages the stock
-node-image machinery (which draws over the UI, resizes the node and CONSUMES
-pointer events across the whole body). A dedicated ws event avoids both
-problems and is proven to work in this collection. Secondary (redundant,
-deduped): the custom "cwk" ui key, received via onExecuted / the "executed"
-event on frontends that forward it.
+Delivery: dedicated WebSocket event "cwk_save_image_data" (server.send_sync,
+same pattern as CWKLivePreview) + custom "cwk" ui key as secondary channel.
+NO standard "images" ui key (engages the stock node-image machinery, which
+draws over the UI and consumes pointer events).
 
-Temp filenames carry channel/mask prefixes (cwkA_/cwkN_ + rgb/rgba/alpha) so
-the JS fallback parser can rebuild the channels from a standard "images"
-payload in case of a Python/JS version mismatch.
+Imprint: the frontend resolves the imprint_template ({tag} tokens) into a
+text string and sends it as imprint_text; the backend burns it into a black
+footer (white text, word-wrapped, max 3 lines). Fallback: infos dict.
 
-Settings live as (JS-hidden) widgets so they persist inside the workflow:
-filename_template, imprint_infos, output_format, save_folder, subfolder_tag,
+File naming: base_<channel>[_<counter>] — e.g. name_rgb_0001.png.
+
+Settings (JS-hidden widgets): filename_template, imprint_template,
+imprint_infos, output_format, jpg_quality, webp_quality, webp_lossless,
+save_workflow, counter_digits, save_folder, subfolder_tag,
 save_entire_batch, channel, settings_folded.
 """
 
@@ -33,7 +31,7 @@ import os
 import re
 import time
 import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -49,19 +47,16 @@ CHANNELS       = ["RGB", "RGBA", "ALPHA"]
 _WS_EVENT = "cwk_save_image_data"
 
 _IMPRINT_KEYS = [
-    "model_name", "sampler_name", "scheduler", "cfg", "steps", "seed",
+    "name", "model_name", "sampler_name", "scheduler", "cfg", "steps", "seed",
     "clip_skip", "rng", "model_sampling", "clip_name", "vae_name", "clip_type",
 ]
 _KNOWN_KEYS = set(_IMPRINT_KEYS)
 
-# Temp filename tags: A = masks connected, N = no masks (used by the JS
-# fallback parser — see module docstring).
 _MASK_TAG = {"A": "cwkA", "N": "cwkN"}
 
 # ─── Small helpers ────────────────────────────────────────────────────────────
 
 def _sanitize_component(name) -> str:
-    """Make a string safe as a single path component."""
     s = str(name or "").strip()
     s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", s)
     s = re.sub(r"\s+", "_", s)
@@ -98,7 +93,7 @@ def _load_font(size: int):
             pass
     if font is None:
         try:
-            font = ImageFont.load_default(size=size)   # Pillow >= 10.1
+            font = ImageFont.load_default(size=size)
         except TypeError:
             font = ImageFont.load_default()
     _font_cache[size] = font
@@ -106,7 +101,6 @@ def _load_font(size: int):
 
 
 def _masks_to_numpy(masks, batch: int) -> Optional[np.ndarray]:
-    """Normalise a MASK input to a float array [B, H, W, 1] in 0..1."""
     if masks is None:
         return None
     if torch.is_tensor(masks):
@@ -114,11 +108,11 @@ def _masks_to_numpy(masks, batch: int) -> Optional[np.ndarray]:
     else:
         m = np.asarray(masks, dtype=np.float32)
     m = np.clip(m, 0.0, 1.0)
-    if m.ndim == 2:                       # [H,W]
+    if m.ndim == 2:
         m = m[None, ..., None]
-    elif m.ndim == 3:                     # [B,H,W]
+    elif m.ndim == 3:
         m = m[..., None]
-    elif m.ndim == 4:                     # [B,H,W,1] / [B,1,H,W] / [B,H,W,C]
+    elif m.ndim == 4:
         if m.shape[-1] == 1:
             pass
         elif m.shape[1] == 1:
@@ -135,7 +129,6 @@ def _masks_to_numpy(masks, batch: int) -> Optional[np.ndarray]:
 
 
 def _build_item_images(img_t, alpha_u8: Optional[np.ndarray]) -> Tuple[Image.Image, Image.Image, Image.Image]:
-    """Build the (RGB, RGBA, ALPHA) PIL images for one batch item."""
     a = np.clip(img_t.float().cpu().numpy() * 255.0, 0, 255).astype(np.uint8)
     if a.ndim == 2:
         a = a[..., None]
@@ -143,7 +136,6 @@ def _build_item_images(img_t, alpha_u8: Optional[np.ndarray]) -> Tuple[Image.Ima
         a = np.repeat(a, 3, axis=-1)
     rgb_arr = a[..., :3]
     if alpha_u8 is None:
-        # no mask → use image's own alpha (if any) or fully opaque
         alpha_u8 = a[..., 3] if a.shape[-1] > 3 else np.full(rgb_arr.shape[:2], 255, dtype=np.uint8)
     rgb       = Image.fromarray(rgb_arr, mode="RGB")
     rgba      = Image.merge("RGBA", (*rgb.split(), Image.fromarray(alpha_u8, mode="L")))
@@ -152,12 +144,6 @@ def _build_item_images(img_t, alpha_u8: Optional[np.ndarray]) -> Tuple[Image.Ima
 
 
 def _save_temp(img: Image.Image, prefix: str) -> Dict[str, str]:
-    """Save a PIL image into ComfyUI's temp folder; return a /view entry.
-
-    The prefix encodes mask state + channel (cwkA_/cwkN_ + rgb/rgba/alpha) so
-    the frontend's fallback parser can classify entries if a standard
-    "images" payload ever appears (version mismatch).
-    """
     temp_dir = folder_paths.get_temp_directory()
     fname = f"{prefix}_{time.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
     img.save(os.path.join(temp_dir, fname))
@@ -165,14 +151,6 @@ def _save_temp(img: Image.Image, prefix: str) -> Dict[str, str]:
 
 
 def _send_node_payload(unique_id, cwk_payload: Dict[str, Any]) -> None:
-    """Push the preview payload to the frontend over a dedicated WebSocket event.
-
-    Same pattern as the collection's CWKLivePreview node: server.send_sync()
-    is safe to call from the execution worker thread and arrives at the
-    frontend as an api event ("cwk_save_image_data") that the JS routes by
-    node id. This bypasses ui-payload filtering entirely and never touches
-    node.imgs / node.images, so the stock image machinery cannot engage.
-    """
     try:
         from server import PromptServer
         server = PromptServer.instance
@@ -188,12 +166,16 @@ def _send_node_payload(unique_id, cwk_payload: Dict[str, Any]) -> None:
 # ─── Imprint (black footer / white text) ──────────────────────────────────────
 
 def _format_infos_lines(infos: Dict[str, Any]) -> Tuple[str, str]:
+    """Fallback imprint lines (used when no imprint_text is provided)."""
     def g(k):
         v = infos.get(k)
         return "" if v is None else str(v).strip()
 
     l1 = []
+    name = g("name")
     model = _strip_model_ext(g("model_name"))
+    if name:
+        l1.append(name)
     if model:
         l1.append(model)
     gen = " / ".join(p for p in (g("sampler_name"), g("scheduler")) if p)
@@ -211,24 +193,51 @@ def _format_infos_lines(infos: Dict[str, Any]) -> Tuple[str, str]:
             if key.endswith("_name"):
                 v = _strip_model_ext(v)
             l2.append(f"{key}: {v}")
-    for k, v in infos.items():          # any extra tags present in infos
+    for k, v in infos.items():
         if k not in _KNOWN_KEYS and v is not None and str(v).strip():
             l2.append(f"{k}: {str(v).strip()}")
     line2 = "  |  ".join(l2)
     return line1, line2
 
 
-def _apply_imprint(img: Image.Image, infos: Dict[str, Any]) -> Image.Image:
-    """Add a black footer with the generation infos in white text."""
-    line1, line2 = _format_infos_lines(infos)
-    lines = [l for l in (line1, line2) if l]
-    if not lines:
-        return img
+def _wrap_text(d, text: str, font, max_w: int) -> List[str]:
+    """Word-wrap a text line to max_w px; overlong single words get ellipsised."""
+    out: List[str] = []
+    for para in str(text).split("\n"):
+        cur = ""
+        for word in para.split():
+            t = (cur + " " + word).strip() if cur else word
+            if not cur or d.textlength(t, font=font) <= max_w:
+                cur = t
+            else:
+                out.append(cur)
+                cur = word
+        out.append(cur)
+    final = []
+    for ln in out:
+        while len(ln) > 4 and d.textlength(ln, font=font) > max_w:
+            ln = ln[:-2].rstrip() + "…"
+        final.append(ln)
+    return [l for l in final if l]
 
+
+def _apply_imprint(img: Image.Image, texts: List[str], max_lines: int = 3) -> Image.Image:
+    """Add a black footer with the given texts (white, word-wrapped, capped)."""
     w, h = img.size
     fs = max(13, min(30, w // 46))
     font = _load_font(fs)
-    line_h = fs + 10
+
+    d_probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    lines: List[str] = []
+    for t in texts:
+        lines.extend(_wrap_text(d_probe, t, font, w - 24))
+    if not lines:
+        return img
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = (lines[-1][:-1] if len(lines[-1]) > 1 else "") + "…"
+
+    line_h  = fs + 10
     footer_h = len(lines) * line_h + 12
 
     mode = img.mode
@@ -248,26 +257,13 @@ def _apply_imprint(img: Image.Image, infos: Dict[str, Any]) -> Image.Image:
     d = ImageDraw.Draw(canvas)
     y = h + 6
     for text in lines:
-        txt = text
-        try:
-            while len(txt) > 4 and d.textlength(txt, font=font) > w - 24:
-                txt = txt[:-2].rstrip() + "…"
-        except Exception:
-            pass
-        d.text((12, y), txt, fill=fill, font=font)
+        d.text((12, y), text, fill=fill, font=font)
         y += line_h
     return canvas
 
 # ─── Save utilities ───────────────────────────────────────────────────────────
 
 def _resolve_target_dir(folder: str, subfolder: str) -> str:
-    """Resolve the final save directory.
-
-    folder:    ""       → ComfyUI output dir (default)
-               "sub"    → <output>/sub
-               absolute → used as-is
-    subfolder: sanitized ("a/b" allowed), usually one resolved tag value.
-    """
     out_root = folder_paths.get_output_directory()
     base = out_root
     folder = (folder or "").strip()
@@ -293,9 +289,25 @@ def _unique_path(directory: str, filename: str) -> str:
         i += 1
 
 
-def _save_channel_image(img: Image.Image, fmt: str, path: str) -> None:
+def _png_meta_for(workflow_json: Optional[str]):
+    """Build a PngInfo carrying the serialized workflow (PNG only)."""
+    if not workflow_json:
+        return None
+    try:
+        from PIL import PngImagePlugin
+        meta = PngImagePlugin.PngInfo()
+        meta.add_text("workflow", workflow_json)
+        return meta
+    except Exception as e:
+        print(f"[CWK SaveImage] workflow embed failed: {e}")
+        return None
+
+
+def _save_channel_image(img: Image.Image, fmt: str, path: str,
+                        jpg_quality: int = 95, webp_quality: int = 95,
+                        webp_lossless: bool = False, pnginfo=None) -> None:
     if fmt == "PNG":
-        img.save(path, compress_level=4)
+        img.save(path, compress_level=4, pnginfo=pnginfo)
     elif fmt == "JPG":
         if img.mode == "RGBA":
             bg = Image.new("RGB", img.size, (255, 255, 255))   # flatten on white
@@ -303,9 +315,12 @@ def _save_channel_image(img: Image.Image, fmt: str, path: str) -> None:
             img = bg
         elif img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
-        img.save(path, quality=95)
+        img.save(path, quality=jpg_quality)
     elif fmt == "WebP":
-        img.save(path, quality=95, method=4)
+        if webp_lossless:
+            img.save(path, lossless=True, method=4)
+        else:
+            img.save(path, quality=webp_quality, method=4)
     else:
         raise ValueError(f"unknown format {fmt}")
 
@@ -315,11 +330,9 @@ class CWK_SaveImage:
     """
     CWK Save Image — manual image saver (sink node, no outputs).
 
-    execute() prepares RGB / RGBA / ALPHA previews (temp files), pushes them
-    to the frontend over the "cwk_save_image_data" WebSocket event, and also
-    returns them under the custom "cwk" ui key (secondary channel).
-    Files are written only when the user presses the Save button
-    (POST /cwk_save_image/save).
+    execute() prepares RGB / RGBA / ALPHA previews (temp files) and pushes them
+    to the frontend over the "cwk_save_image_data" WebSocket event (+ custom
+    "cwk" ui key). Files are written only when the user presses Save.
     """
 
     @classmethod
@@ -332,8 +345,17 @@ class CWK_SaveImage:
                     "default": "{model_name}_{sampler_name}_cfg{cfg}_steps{steps}",
                     "multiline": False,
                 }),
+                "imprint_template": ("STRING", {
+                    "default": "{name} | {model_name} | {sampler_name}/{scheduler} | cfg {cfg} steps {steps} seed {seed}",
+                    "multiline": False,
+                }),
                 "imprint_infos":     ("BOOLEAN", {"default": False}),
                 "output_format":     (OUTPUT_FORMATS, {"default": "PNG"}),
+                "jpg_quality":       ("INT",   {"default": 95, "min": 1, "max": 100, "step": 1}),
+                "webp_quality":      ("INT",   {"default": 95, "min": 1, "max": 100, "step": 1}),
+                "webp_lossless":     ("BOOLEAN", {"default": False}),
+                "save_workflow":     ("BOOLEAN", {"default": True}),
+                "counter_digits":    ("INT",   {"default": 4, "min": 1, "max": 8, "step": 1}),
                 "save_folder":       ("STRING", {"default": "", "multiline": False}),
                 "subfolder_tag":     ("STRING", {"default": "", "multiline": False}),
                 "save_entire_batch": ("BOOLEAN", {"default": True}),
@@ -353,12 +375,17 @@ class CWK_SaveImage:
     CATEGORY     = "CWK/Save"
     OUTPUT_NODE  = True
     DESCRIPTION  = ("Manual image saver: preview RGB / RGBA (mask→alpha) / ALPHA, "
-                    "tag-based filenames from the pipe infos, optional info imprint. "
+                    "tag-based filenames from the pipe infos, configurable imprint, "
+                    "channel suffix, JPG/WebP quality, workflow embedding. "
                     "Files are only written when you press Save — no autosave.")
 
-    def execute(self, images, filename_template, imprint_infos, output_format,
-                save_folder, subfolder_tag, save_entire_batch, channel,
-                settings_folded, masks=None, infos="", unique_id=0):
+    def execute(self, images, filename_template, imprint_template, imprint_infos,
+                output_format, jpg_quality, webp_quality, webp_lossless,
+                save_workflow, counter_digits, save_folder, subfolder_tag,
+                save_entire_batch, channel, settings_folded,
+                masks=None, infos="", unique_id=0):
+        # (filename/quality/counter settings are read by the JS frontend and the
+        #  save route; they are widget-only from execute()'s point of view.)
 
         if images is None:
             raise ValueError("[CWK SaveImage] no images received")
@@ -401,17 +428,12 @@ class CWK_SaveImage:
             "has_masks":  m is not None,
         }
 
-        # PRIMARY transport: dedicated WebSocket event (like CWKLivePreview).
         _send_node_payload(unique_id, cwk_payload)
 
         print(f"[CWK SaveImage] node {unique_id}: {batch} image(s) ready | "
               f"masks={'yes' if m is not None else 'no'} | "
               f"infos tags={list(infos_dict.keys())}")
 
-        # SECONDARY transport: custom "cwk" ui key (used automatically on
-        # frontends that forward unknown ui keys; deduped with the ws event).
-        # Deliberately NO standard "images" key — that's what engages the
-        # stock node-image machinery (overlay drawing + click interception).
         return {
             "ui": {"cwk": cwk_payload},
             "result": (),
@@ -432,16 +454,23 @@ try:
         except Exception:
             return web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
 
-        channel    = str(data.get("channel", "rgb")).lower()
-        entries    = data.get("images") or []
-        base_name  = _sanitize_component(data.get("base_name")) or "ComfyUI"
-        subfolder  = str(data.get("subfolder") or "")
-        folder     = str(data.get("folder") or "").strip()
-        fmt        = str(data.get("format") or "PNG").upper()
-        imprint    = bool(data.get("imprint", False))
-        infos      = data.get("imprint_infos") if isinstance(data.get("imprint_infos"), dict) else {}
-        entire     = bool(data.get("entire_batch", True))
-        b_index    = int(data.get("batch_index", 0) or 0)
+        channel       = str(data.get("channel", "rgb")).lower()
+        entries       = data.get("images") or []
+        base_name     = _sanitize_component(data.get("base_name")) or "ComfyUI"
+        subfolder     = str(data.get("subfolder") or "")
+        folder        = str(data.get("folder") or "").strip()
+        fmt           = str(data.get("format") or "PNG").upper()
+        imprint       = bool(data.get("imprint", False))
+        imprint_text  = data.get("imprint_text") if isinstance(data.get("imprint_text"), str) else ""
+        infos         = data.get("imprint_infos") if isinstance(data.get("imprint_infos"), dict) else {}
+        entire        = bool(data.get("entire_batch", True))
+        b_index       = int(data.get("batch_index", 0) or 0)
+        jpg_quality   = min(100, max(1, int(data.get("jpg_quality", 95) or 95)))
+        webp_quality  = min(100, max(1, int(data.get("webp_quality", 95) or 95)))
+        webp_lossless = bool(data.get("webp_lossless", False))
+        save_workflow = bool(data.get("save_workflow", False))
+        counter_digits= min(8, max(1, int(data.get("counter_digits", 4) or 4)))
+        workflow_json = data.get("workflow_json") if isinstance(data.get("workflow_json"), str) else None
 
         if channel not in ("rgb", "rgba", "alpha"):
             return web.json_response({"ok": False, "error": f"unknown channel: {channel}"}, status=400)
@@ -481,6 +510,8 @@ try:
 
         ext      = {"PNG": ".png", "JPG": ".jpg", "WebP": ".webp"}[fmt]
         multiple = len(sources) > 1
+        base_name = base_name.rstrip("_")
+        pnginfo  = _png_meta_for(workflow_json) if (save_workflow and fmt == "PNG") else None
         saved    = []
         try:
             for i, src in sources:
@@ -497,13 +528,25 @@ try:
                     if img.mode not in ("RGB", "L"):
                         img = img.convert("RGB")
 
-                # imprint = black footer + white infos text (not on pure masks)
+                # imprint = black footer + white text (not on pure masks)
                 if imprint and channel in ("rgb", "rgba"):
-                    img = _apply_imprint(img, infos)
+                    texts = None
+                    if imprint_text.strip():
+                        texts = [imprint_text.strip()]
+                    elif isinstance(infos, dict) and infos:
+                        l1, l2 = _format_infos_lines(infos)
+                        texts = [l for l in (l1, l2) if l]
+                    if texts:
+                        img = _apply_imprint(img, texts)
 
-                name  = base_name + (f"_{i:03d}" if multiple else "") + ext
-                final = _unique_path(out_dir, name)
-                _save_channel_image(img, fmt, final)
+                # name_<channel>[_<counter>].ext
+                name  = base_name + "_" + channel
+                if multiple:
+                    name += f"_{i:0{counter_digits}d}"
+                final = _unique_path(out_dir, name + ext)
+                _save_channel_image(img, fmt, final,
+                                    jpg_quality=jpg_quality, webp_quality=webp_quality,
+                                    webp_lossless=webp_lossless, pnginfo=pnginfo)
                 saved.append(final)
                 print(f"[CWK SaveImage] saved {final}")
         except Exception as e:

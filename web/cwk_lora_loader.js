@@ -467,8 +467,8 @@ function _setupLoraNode(node) {
         ctx.lineWidth = 1;
         ctx.stroke();
         // CWK accent line separating title bar and body
-        ctx.fillStyle = COLORS.accent;
-        ctx.fillRect(0, titleH, this.size[0], 2);
+        //ctx.fillStyle = COLORS.accent;
+        //ctx.fillRect(0, titleH, this.size[0], 2);
         ctx.restore();
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);

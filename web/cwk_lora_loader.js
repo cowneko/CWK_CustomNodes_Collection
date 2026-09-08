@@ -1,15 +1,31 @@
 /**
  * CWK LoRA Loader — frontend node extension.
  *
- * The node body is painted on the canvas (CWK palette) via onDrawBackground,
- * and the interactive list is a DOM overlay positioned from the exact canvas
- * transform captured while drawing the node.
+ * Theming:
+ * - Title bar and node background come from node.color / node.bgcolor — the
+ *   same mechanism ComfyUI's right-click "Colors" menu uses. No grey remains,
+ *   including the collapsed title strip and zoom levels where the DOM overlay
+ *   is hidden.
+ * - The body is additionally painted in onDrawBackground (CWK border + accent
+ *   line under the title), and the interactive list is a DOM overlay
+ *   positioned from the exact canvas transform captured while drawing.
  *
- * The native "lora_config" widget is intentionally kept in a NORMAL (never
- * hidden) state: hidden widgets can be excluded from the queue prompt by
- * newer frontends, which would stop the LoRA list from reaching Python.
- * It reserves ~160px below the connection dots — the exact area covered by
- * the DOM overlay — so it is functional for serialisation but invisible.
+ * The native "lora_config" widget stays a fully serialisable, *normal* widget
+ * (never hidden — hidden widgets can be dropped from the queue prompt by
+ * newer frontends) but renders nothing and takes no layout space:
+ *   - canvas side:  draw = noop, computeSize = [0, -4]
+ *   - DOM side:     multiline STRING widgets are real elements positioned over
+ *                   the canvas; the element is hidden via a
+ *                   .cwk-lora-dom-hidden { display:none !important } class
+ *                   (!important beats the inline styles the frontend
+ *                   re-applies to DOM widgets every frame)
+ * The DOM overlay *is* the widget's UI.
+ *
+ * Minimum node size (MIN_W wide, dots + MIN_H_EXTRA tall) is enforced at
+ * every layer: onResize (fires while the user drags the resize handle, so the
+ * canvas never draws a frame below the minimum and ComfyUI's own selection
+ * outline always hugs the full node), computeSize (auto-fit paths),
+ * onDrawBackground and the rAF positioning loop.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -27,15 +43,18 @@ const COLORS = {
   border: "#2a2f45",
   accent: "#89b4fa",
 };
-const ZOOM_HIDE = 0.35;              // hide overlay below this zoom level
-const DETACH_GRACE_FRAMES = 600;     // ~10 s detached → assume node was deleted
-const WIDGET_SLOT_H = 160;           // canvas space reserved for the covered widget
+
+const ZOOM_HIDE           = 0.35;   // hide overlay below this zoom level
+const DETACH_GRACE_FRAMES = 600;    // ~10 s detached → assume node was deleted
+const MIN_W               = 440;    // minimum node width (canvas space)
+const MIN_H_EXTRA         = 180;    // minimum body height below the dots
+const ROUND_R             = 8;      // body corner radius (matches ComfyUI's)
 
 function _fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
 // ─── Installed-LoRA name list (for the row dropdowns) ────────────────────────
 
-let _loraNames = null;
+let _loraNames   = null;
 let _loraNamesAt = 0;
 
 async function ensureLoraNames(force = false) {
@@ -56,6 +75,16 @@ async function ensureLoraNames(force = false) {
   return _loraNames ?? [];
 }
 
+// ─── Hides the native multiline widget's DOM element ─────────────────────────
+
+function _ensureDomWidgetHiddenStyle() {
+  if (document.getElementById("cwk-lora-dom-hidden-style")) return;
+  const s = document.createElement("style");
+  s.id = "cwk-lora-dom-hidden-style";
+  s.textContent = ".cwk-lora-dom-hidden { display: none !important; }";
+  document.head.appendChild(s);
+}
+
 // ─── Extension ───────────────────────────────────────────────────────────────
 
 app.registerExtension({
@@ -64,6 +93,7 @@ app.registerExtension({
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (!LORA_NODES.includes(nodeData?.name)) return;
     injectLoraStyles();
+    _ensureDomWidgetHiddenStyle();
 
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -115,9 +145,12 @@ function _setupLoraNode(node) {
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
-    // ── CWK theme on the canvas node itself ──────────────────────────────────
-  node.color   = COLORS.title;   // ComfyUI paints the title bar from this
-  node.bgcolor = COLORS.body;    // …and the node background from this
+  // ── CWK theme on the canvas node itself ───────────────────────────────────
+  // ComfyUI paints the title bar from node.color and the node background from
+  // node.bgcolor. This covers the collapsed state and any zoom level, even
+  // where the canvas paint / DOM overlay are not visible.
+  node.color   = COLORS.title;
+  node.bgcolor = COLORS.body;
   try { node.setDirtyCanvas(true, true); } catch {}
 
   // ── Layout metrics: DOM starts below all connection dots ──────────────────
@@ -129,16 +162,59 @@ function _setupLoraNode(node) {
     return { titleH, domY: titleH + rows * slotH + 6 };   // 6px gap below the dots
   };
 
-    function _prepareJsonWidget() {
+  // ── Size clamps (single source of truth for the minimum) ──────────────────
+  function _clampSize() {
+    const { domY } = metrics();
+    if (node.size[0] < MIN_W)              node.size[0] = MIN_W;
+    if (node.size[1] < domY + MIN_H_EXTRA) node.size[1] = domY + MIN_H_EXTRA;
+  }
+  node.__cwkClampSize = _clampSize;
+
+  // Called by litegraph *while the user drags the resize handle* (and by
+  // setSize paths) — clamping here means the canvas never renders a frame
+  // below the minimum, so ComfyUI's own (white, selected) node outline always
+  // hugs the full node instead of a smaller rect inside it.
+  const prevOnResize = node.onResize;
+  node.onResize = function () {
+    try { _clampSize(); } catch {}
+    return prevOnResize?.apply(this, arguments);
+  };
+
+  // Auto-fit / "size to content" paths: with lora_config at zero height,
+  // computeSize() would report a tiny node — report our minimum instead.
+  const prevComputeSize = node.computeSize?.bind(node);
+  node.computeSize = function (...args) {
+    const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
+    const { domY } = metrics();
+    s[0] = Math.max(s[0] ?? 0, MIN_W);
+    s[1] = Math.max(s[1] ?? 0, domY + MIN_H_EXTRA);
+    return s;
+  };
+
+  // ── Native widget: fully serialisable, but invisible ──────────────────────
+  function _hideNativeWidgetElement() {
+    // Multiline STRING widgets are DOM widgets: a real element positioned over
+    // the canvas. draw/computeSize can't hide it — hide the element itself.
+    const el = cfgWidget?.element;
+    if (el && !el.classList.contains("cwk-lora-dom-hidden")) {
+      el.classList.add("cwk-lora-dom-hidden");
+      el.style.display = "none";
+    }
+  }
+
+  function _prepareJsonWidget() {
     cfgWidget = cfgWidget || node.widgets?.find(w => w.name === "lora_config") || null;
     if (!cfgWidget) return;
+    // Stash originals so the failure path can restore a usable raw widget.
+    cfgWidget.origComputeSize ??= cfgWidget.computeSize;
+    cfgWidget.origDraw        ??= cfgWidget.draw;
     // NOT hidden and type stays "STRING": it remains a fully serialisable
-    // widget in every queue prompt. But it renders nothing and takes no
-    // layout space — the DOM overlay *is* its UI.
-    cfgWidget.computeSize    = () => [0, -4];   // zero canvas footprint
-    cfgWidget.draw           = () => {};        // no box / label / arrows
-    cfgWidget.label          = "";              // display-only, belt & braces
+    // widget in every queue prompt. It renders nothing and takes no space —
+    // the DOM overlay is its UI.
+    cfgWidget.computeSize    = () => [0, -4];
+    cfgWidget.draw           = () => {};
     cfgWidget.serializeValue = () => JSON.stringify(state.list);
+    _hideNativeWidgetElement();
   }
 
   function _markDirty() {
@@ -365,7 +441,7 @@ function _setupLoraNode(node) {
       }, 150);
     }
 
-    // ── Canvas body: CWK palette + size clamps + transform capture ──────────
+    // ── Canvas body: CWK palette + transform capture ────────────────────────
     const prevOnDrawBackground = node.onDrawBackground;
     node.onDrawBackground = function (ctx) {
       try {
@@ -376,24 +452,24 @@ function _setupLoraNode(node) {
         if (ctx.getTransform) ctxTransform = ctx.getTransform();
 
         if (this.flags?.collapsed) return;
-        const { titleH, domY } = metrics();
-        const minW = 440, minH = domY + 180;
-        if (this.size[0] < minW) this.size[0] = minW;
-        if (this.size[1] < minH) this.size[1] = minH;
+        this.__cwkClampSize?.();   // backstop (onResize/_tick normally handle it)
 
+        const { titleH } = metrics();
         ctx.save();
         ctx.fillStyle = COLORS.body;
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2, 10);
-        else               ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
+        if (ctx.roundRect)
+          ctx.roundRect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2, ROUND_R);
+        else
+          ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
         ctx.fill();
         ctx.strokeStyle = COLORS.border;
         ctx.lineWidth = 1;
         ctx.stroke();
-        ctx.restore();
         // CWK accent line separating title bar and body
         ctx.fillStyle = COLORS.accent;
         ctx.fillRect(0, titleH, this.size[0], 2);
+        ctx.restore();
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);
       }
@@ -405,6 +481,9 @@ function _setupLoraNode(node) {
       if (state.destroyed) return;
       rafId = requestAnimationFrame(_tick);
       try {
+        _clampSize();                 // enforce min size even when not drawn
+        _hideNativeWidgetElement();   // element can be (re)created late
+
         if (node.graph == null) {
           detachFrames++;
           if (detachFrames > DETACH_GRACE_FRAMES) {
@@ -474,6 +553,7 @@ function _setupLoraNode(node) {
     };
 
     node.size = [Math.max(node.size?.[0] ?? 0, 470), Math.max(node.size?.[1] ?? 0, 380)];
+    _clampSize();
     _prepareJsonWidget();
     _applyJson(String(cfgWidget?.value ?? "[]"));
     // Some frontends build widgets slightly after onNodeCreated — apply once
@@ -482,6 +562,12 @@ function _setupLoraNode(node) {
 
   } catch (e) {
     console.error("[CWK LoRA] Node UI setup failed — keeping the raw JSON widget visible:", e);
-    try { overlay?.remove(); } catch {}
+    try {
+      overlay?.remove();
+      const el = cfgWidget?.element;
+      if (el) { el.classList.remove("cwk-lora-dom-hidden"); el.style.display = ""; }
+      if (cfgWidget?.origDraw)        cfgWidget.draw        = cfgWidget.origDraw;
+      if (cfgWidget?.origComputeSize) cfgWidget.computeSize = cfgWidget.origComputeSize;
+    } catch {}
   }
 }

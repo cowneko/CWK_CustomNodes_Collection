@@ -1,19 +1,22 @@
 """
-CWK LoRA Prompt Loader — node + CivitAI metadata routes.
+CWK LoRA Loader — node + CivitAI metadata routes.
 
 Node:
-- CWK_LoraPromptLoader: applies a stack of LoRAs (per-LoRA weight + enable
-  toggle; the global activate/deactivate toggle lives in the JS frontend)
-  to a MODEL/CLIP pair and outputs the combined trigger words.
+- CWK_LoraLoader: applies a stack of LoRAs (per-LoRA weight + enable toggle;
+  the global activate/deactivate toggle lives in the JS frontend) to a
+  MODEL/CLIP pair and outputs the combined trigger words.
 
 Server routes (registered on PromptServer, same pattern as nodes.py):
 - GET    /cwk/loras                → installed LoRAs + cached CivitAI metadata
 - GET    /cwk/lora/trigger_words   → resolved trigger words for one LoRA
-- POST   /cwk/lora/meta            → save custom description / trigger words
+- POST   /cwk/lora/meta            → custom description / triggers / base model /
+                                      version / nsfw flag / clear thumbnail
 - POST   /cwk/lora/favorite        → toggle favorite
 - POST   /cwk/loras/refresh        → re-fetch one LoRA from CivitAI
 - POST   /cwk/loras/fetch/stream   → SSE bulk fetch (SHA-256 hash lookup)
-- DELETE /cwk/loras/cache          → wipe the LoRA metadata cache
+- POST   /cwk/lora/thumbnail       → upload a custom thumbnail (multipart)
+- GET    /cwk/loras/thumb/{file}   → serve custom thumbnails
+- DELETE /cwk/loras/cache          → wipe the LoRA metadata cache + thumbnails
 """
 
 import asyncio
@@ -27,9 +30,17 @@ import folder_paths
 
 _NODE_DIR    = os.path.dirname(__file__)
 _LORA_CACHE  = os.path.join(_NODE_DIR, "lora_cache.json")
+_THUMB_DIR   = os.path.join(_NODE_DIR, "lora_thumbs")
 _CIVITAI_API = "https://civitai.com/api/v1"
 
 NSFW_R = 2  # thumbnails at/above this level are blurred until revealed
+
+# User-defined values that must survive a CivitAI re-fetch
+_KEEP_FIELDS = (
+    "favorite", "nsfw_manual",
+    "custom_description", "custom_triggers",
+    "custom_base_model", "custom_version", "custom_thumbnail",
+)
 
 
 # ─── Cache handling ──────────────────────────────────────────────────────────
@@ -88,7 +99,7 @@ def _file_hash(path: str, entry: dict) -> str:
     return sha
 
 
-# ─── Metadata resolution ─────────────────────────────────────────────────────
+# ─── Metadata resolution (custom override → CivitAI → empty) ────────────────
 
 def _html_to_text(html: str) -> str:
     import html as _html
@@ -112,19 +123,29 @@ def _split_triggers(text: str) -> List[str]:
 
 
 def _resolve_description(civ: Dict[str, Any]) -> str:
-    """Custom description wins; empty custom falls back to CivitAI."""
     custom = (civ.get("custom_description") or "").strip()
-    if custom:
-        return custom
-    return (civ.get("description") or "").strip()
+    return custom or (civ.get("description") or "").strip()
 
 
 def _resolve_triggers(civ: Dict[str, Any]) -> List[str]:
-    """Custom trigger words win; empty custom falls back to CivitAI."""
     custom = (civ.get("custom_triggers") or "").strip()
     if custom:
         return _split_triggers(custom)
     return [str(t).strip() for t in civ.get("trigger_words", []) if str(t).strip()]
+
+
+def _resolve_base(civ: Dict[str, Any]) -> str:
+    custom = (civ.get("custom_base_model") or "").strip()
+    return custom or (civ.get("base_model") or "")
+
+
+def _resolve_version(civ: Dict[str, Any]) -> str:
+    custom = (civ.get("custom_version") or "").strip()
+    return custom or (civ.get("version_name") or "")
+
+
+def _resolve_thumbnail(civ: Dict[str, Any]) -> str:
+    return civ.get("custom_thumbnail") or civ.get("thumbnail") or ""
 
 
 def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
@@ -171,27 +192,30 @@ def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
 def _public_civitai(civ: Dict[str, Any]) -> Dict[str, Any]:
     """Shape returned to the frontend (mirrors the model browser's civitai dict)."""
     return {
-        "fetched":              bool(civ.get("fetched")),
-        "thumbnail":            civ.get("thumbnail"),
-        "images":               civ.get("images", []),
-        "civitai_name":         civ.get("civitai_name"),
-        "version_name":         civ.get("version_name"),
-        "base_model":           civ.get("base_model"),
-        "model_id":             civ.get("model_id"),
-        "version_id":           civ.get("version_id"),
+        "fetched":            bool(civ.get("fetched")),
         # resolved values (custom override → CivitAI → empty)
-        "description":          _resolve_description(civ),
-        "trigger_words":        _resolve_triggers(civ),
+        "thumbnail":          _resolve_thumbnail(civ),
+        "version_name":       _resolve_version(civ),
+        "base_model":         _resolve_base(civ),
+        "description":        _resolve_description(civ),
+        "trigger_words":      _resolve_triggers(civ),
+        "thumbnail_custom":   bool(civ.get("custom_thumbnail")),
         # raw values (for edit-mode pre-fill / source badges)
-        "civitai_description":   (civ.get("description") or ""),
+        "images":             civ.get("images", []),
+        "civitai_name":       civ.get("civitai_name"),
+        "model_id":           civ.get("model_id"),
+        "version_id":         civ.get("version_id"),
+        "civitai_description":  (civ.get("description") or ""),
         "civitai_trigger_words": [str(t) for t in civ.get("trigger_words", [])],
-        "custom_description":    (civ.get("custom_description") or ""),
-        "custom_triggers":       (civ.get("custom_triggers") or ""),
-        "favorite":             bool(civ.get("favorite")),
-        "nsfw_level":           civ.get("nsfw_level", 0),
-        "nsfw_manual":          civ.get("nsfw_manual"),
-        "not_on_civitai":       bool(civ.get("not_on_civitai")),
-        "error":                civ.get("error"),
+        "custom_description":   (civ.get("custom_description") or ""),
+        "custom_triggers":      (civ.get("custom_triggers") or ""),
+        "custom_base_model":    (civ.get("custom_base_model") or ""),
+        "custom_version":       (civ.get("custom_version") or ""),
+        "favorite":           bool(civ.get("favorite")),
+        "nsfw_level":         civ.get("nsfw_level", 0),
+        "nsfw_manual":        civ.get("nsfw_manual"),
+        "not_on_civitai":     bool(civ.get("not_on_civitai")),
+        "error":              civ.get("error"),
     }
 
 
@@ -235,6 +259,17 @@ async def _civitai_lookup(session, sha: str, api_key: str) -> Tuple[bool, Any]:
         return False, f"parse error: {e}"
 
 
+def _apply_keep(civ: Dict[str, Any], fresh: Dict[str, Any]) -> None:
+    """Replace civ with fresh CivitAI data but preserve user-defined values."""
+    keep = {k: civ[k] for k in _KEEP_FIELDS if k in civ}
+    civ.clear()
+    civ.update(fresh)
+    civ.update(keep)
+    civ["fetched"] = True
+    civ.pop("error", None)
+    civ.pop("not_on_civitai", None)
+
+
 # ─── Server routes ───────────────────────────────────────────────────────────
 
 try:
@@ -268,6 +303,14 @@ try:
             civ["custom_description"] = str(data.get("description") or "")
         if "triggers" in data:
             civ["custom_triggers"]    = str(data.get("triggers") or "")
+        if "base_model" in data:
+            civ["custom_base_model"]  = str(data.get("base_model") or "").strip()
+        if "version" in data:
+            civ["custom_version"]     = str(data.get("version") or "").strip()
+        if "nsfw" in data:
+            civ["nsfw_manual"]        = bool(data.get("nsfw"))
+        if data.get("clear_thumbnail"):
+            civ.pop("custom_thumbnail", None)
         _save_lora_cache(cache)
         return web.json_response({"ok": True, "civitai": _public_civitai(civ)})
 
@@ -286,11 +329,60 @@ try:
         _save_lora_cache(cache)
         return web.json_response({"ok": True, "favorite": civ["favorite"]})
 
+    @_lora_routes.post("/cwk/lora/thumbnail")
+    async def cwk_lora_set_thumbnail(request):
+        """Upload a custom thumbnail: multipart fields 'lora' + 'file'."""
+        lora_name, data, ext = None, None, ""
+        try:
+            reader = await request.multipart()
+            async for part in reader:
+                if part.name == "lora":
+                    lora_name = (await part.text()).strip()
+                elif part.name == "file":
+                    ext  = os.path.splitext(part.filename or "")[1].lower()
+                    data = await part.read()
+        except Exception as e:
+            return web.json_response({"ok": False, "error": f"bad multipart: {e}"}, status=400)
+
+        if not lora_name:
+            return web.json_response({"ok": False, "error": "missing 'lora'"}, status=400)
+        if not data:
+            return web.json_response({"ok": False, "error": "missing file"}, status=400)
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
+            return web.json_response({"ok": False, "error": f"unsupported image type: {ext}"}, status=400)
+        if len(data) > 16 * 1024 * 1024:
+            return web.json_response({"ok": False, "error": "file too large (max 16 MB)"}, status=400)
+
+        try:
+            os.makedirs(_THUMB_DIR, exist_ok=True)
+            fname = hashlib.md5(lora_name.encode("utf-8")).hexdigest()[:12] + ext
+            with open(os.path.join(_THUMB_DIR, fname), "wb") as f:
+                f.write(data)
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+        cache = _load_lora_cache()
+        civ   = cache["loras"].setdefault(lora_name, {"civitai": {}})["civitai"]
+        civ["custom_thumbnail"] = f"/cwk/loras/thumb/{fname}"
+        _save_lora_cache(cache)
+        print(f"[CWK LoRA] Custom thumbnail set for {lora_name}")
+        return web.json_response({"ok": True, "civitai": _public_civitai(civ)})
+
+    @_lora_routes.get("/cwk/loras/thumb/{fname}")
+    async def cwk_lora_thumb(request):
+        fname = os.path.basename(request.match_info.get("fname", ""))
+        path  = os.path.join(_THUMB_DIR, fname)
+        if not fname or not os.path.isfile(path):
+            return web.json_response({"error": "not found"}, status=404)
+        return web.FileResponse(path)
+
     @_lora_routes.delete("/cwk/loras/cache")
     async def cwk_lora_clear_cache(request):
         try:
+            import shutil
             if os.path.exists(_LORA_CACHE):
                 os.remove(_LORA_CACHE)
+            shutil.rmtree(_THUMB_DIR, ignore_errors=True)
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)}, status=500)
         return web.json_response({"ok": True})
@@ -301,8 +393,8 @@ try:
             data = await request.json()
         except Exception:
             return web.json_response({"ok": False, "error": "bad JSON"}, status=400)
-        name     = str(data.get("lora", ""))
-        api_key  = str(data.get("api_key") or "")
+        name    = str(data.get("lora", ""))
+        api_key = str(data.get("api_key") or "")
         if not name:
             return web.json_response({"ok": False, "error": "missing 'lora'"}, status=400)
         path = folder_paths.get_full_path("loras", name)
@@ -324,14 +416,7 @@ try:
             _save_lora_cache(cache)
             return web.json_response({"ok": False, "error": str(payload)})
 
-        keep = {k: civ[k] for k in
-                ("favorite", "custom_description", "custom_triggers", "nsfw_manual") if k in civ}
-        civ.clear()
-        civ.update(payload)
-        civ.update(keep)
-        civ["fetched"] = True
-        civ.pop("error", None)
-        civ.pop("not_on_civitai", None)
+        _apply_keep(civ, payload)
         _save_lora_cache(cache)
         return web.json_response({"ok": True, "info": _public_civitai(civ)})
 
@@ -368,8 +453,8 @@ try:
         await resp.prepare(request)
         await _sse_write(resp, {"total": len(todo), "skipped": len(targets) - len(todo)})
 
-        loop   = asyncio.get_running_loop()
-        found  = 0
+        loop  = asyncio.get_running_loop()
+        found = 0
         try:
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -402,13 +487,7 @@ try:
                         return resp
 
                     if ok:
-                        keep = {k: civ[k] for k in
-                                ("favorite", "custom_description", "custom_triggers", "nsfw_manual")
-                                if k in civ}
-                        civ.clear()
-                        civ.update(payload)
-                        civ.update(keep)
-                        civ["fetched"] = True
+                        _apply_keep(civ, payload)
                         found += 1
                         await _sse_write(resp, {"lora": name, "ok": True,
                                                 "info": _public_civitai(civ)})
@@ -503,14 +582,14 @@ def _apply_gguf_lora(model, clip, lora_name: str, strength_model: float, strengt
         raise RuntimeError(f"[CWK LoRA] ComfyUI-GGUF failed to load '{lora_name}': {e}") from e
 
 
-# ─── Node: CWK_LoraPromptLoader ──────────────────────────────────────────────
+# ─── Node: CWK_LoraLoader ────────────────────────────────────────────────────
 
-class CWK_LoraPromptLoader:
+class CWK_LoraLoader:
     """
-    CWK LoRA Prompt Loader — stackable LoRA applier with trigger-word output.
+    CWK LoRA Loader — stackable LoRA applier with trigger-word output.
 
-    The "lora_config" widget is fully managed by the JS frontend (list of
-    LoRAs with per-LoRA weight + enable toggle, master activate/deactivate
+    The "lora_config" widget is fully managed by the JS frontend (rows with a
+    LoRA dropdown, per-LoRA weight + enable toggle, master activate/deactivate
     toggle, LoRA browser panel). It serialises to a JSON array:
 
         [{"name": "my_lora.safetensors", "weight": 1.0, "enabled": true}, ...]
@@ -552,7 +631,7 @@ class CWK_LoraPromptLoader:
                 continue
             name = str(it.get("name", "")).strip()
             if not name:
-                continue
+                continue   # empty slot row from the dropdown UI
             try:
                 mw = float(it.get("weight", it.get("model_weight", 1.0)))
             except (TypeError, ValueError):
@@ -597,9 +676,12 @@ class CWK_LoraPromptLoader:
 
 
 NODE_CLASS_MAPPINGS_LORA = {
-    "CWK_LorA_Prompt_Loader": CWK_LoraPromptLoader,
+    "CWK_LorA_Loader": CWK_LoraLoader,
+    # legacy alias so workflows saved with the old name keep loading
+    "CWK_LorA_Prompt_Loader": CWK_LoraLoader,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS_LORA = {
-    "CWK_LorA_Prompt_Loader": "CWK LoRA Prompt Loader",
+    "CWK_LorA_Loader": "CWK LoRA Loader",
+    "CWK_LorA_Prompt_Loader": "CWK LoRA Loader",
 }

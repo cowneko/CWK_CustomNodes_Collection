@@ -530,7 +530,15 @@ except Exception as e:
 
 def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):
     """Apply one LoRA via ComfyUI's built-in LoraLoader. GGUF LoRAs go through
-    ComfyUI-GGUF's LoraLoaderGGUF when it is installed."""
+    ComfyUI-GGUF's LoraLoaderGGUF when it is installed.
+
+    NOTE: load_lora() is deliberately called with KEYWORD arguments — ComfyUI
+    has changed the *order* of these parameters between releases (recent
+    builds put `model` first, matching the core node's new input order), and
+    a positional call then silently maps the weight onto `lora_name`
+    (→ "join() argument must be str, bytes, or os.PathLike object, not
+    'float'"). Keyword arguments are immune to reordering.
+    """
     lora_path = folder_paths.get_full_path("loras", lora_name)
     if not lora_path or not os.path.exists(lora_path):
         raise FileNotFoundError(f"LoRA file not found: {lora_name}")
@@ -539,8 +547,23 @@ def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_cli
         return _apply_gguf_lora(model, clip, lora_name, strength_model, strength_clip)
 
     from nodes import LoraLoader
-    # Newer ComfyUI returns (model, clip, vae) — handle both shapes.
-    res = LoraLoader().load_lora(lora_name, strength_model, strength_clip, model, clip)
+    try:
+        # Newer ComfyUI returns (model, clip, vae) — handle both shapes.
+        res = LoraLoader().load_lora(
+            lora_name=lora_name,
+            strength_model=strength_model,
+            strength_clip=strength_clip,
+            model=model,
+            clip=clip,
+        )
+    except TypeError:
+        # Parameter names changed in some (future) version — fall back to the
+        # low-level API, whose positional signature has been stable for years.
+        import comfy.sd
+        lora = comfy.sd.load_lora(lora_path, strength_model, strength_clip)
+        return comfy.sd.load_lora_for_models(model, clip, lora,
+                                             strength_model, strength_clip)
+
     if isinstance(res, (list, tuple)):
         if len(res) >= 2:
             return res[0], res[1]
@@ -574,7 +597,14 @@ def _apply_gguf_lora(model, clip, lora_name: str, strength_model: float, strengt
         )
 
     try:
-        res = LoraLoaderGGUF().load_lora(lora_name, strength_model, strength_clip, model, clip)
+        # Keywords, same reason as _apply_lora (order-proof).
+        res = LoraLoaderGGUF().load_lora(
+            lora_name=lora_name,
+            strength_model=strength_model,
+            strength_clip=strength_clip,
+            model=model,
+            clip=clip,
+        )
         if isinstance(res, (list, tuple)) and len(res) >= 2:
             return res[0], res[1]
         return model, clip

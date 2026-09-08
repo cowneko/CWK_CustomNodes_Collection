@@ -1,15 +1,12 @@
 /**
- * CWK LoRA Prompt Loader — LoraBrowserPanel.
+ * CWK LoRA Loader — LoraBrowserPanel.
  *
- * Mirrors the ModelBrowserPanel structure (drag/resize shell, search bar,
- * thumbnail grid with size slider, base-model + favorites filters, CivitAI
- * fetch with SSE progress, footer with API-key controls) but specialised for
- * LoRAs: the sidebar shows the description and trigger words (CivitAI data,
- * or user-defined values saved server-side), and the "Load LorA" button
- * hands the selected LoRA back to the calling node.
- *
- * Also exports a shared trigger-word cache + helper used by the
- * CWK_LorA_Prompt_Loader node widget to preview its STRING output.
+ * Mirrors the ModelBrowserPanel structure (drag/resize shell, thumbnail grid
+ * with size slider, CivitAI fetch with SSE progress, footer with API-key
+ * controls). Filters + favorites live in the top bar; the sidebar shows the
+ * description, trigger words, editable Version / Base model, and custom
+ * thumbnail + NSFW controls. "Load LorA" hands the selected LoRA back to the
+ * calling node.
  */
 
 import { injectStyles } from "./cwk_styles.js";
@@ -133,9 +130,14 @@ export function injectLoraStyles() {
     }
     #${LORA_PANEL_ID}.visible { display:flex; }
 
-    /* ── Sidebar description / trigger words ──────────────────────── */
+    /* ── Top bar: filter + favorites ─────────────────────────────── */
+    .cwk-search-bar .cwk-custom-select { width:170px; flex-shrink:0; }
+    .cwk-search-bar .cwk-favorite-filter { flex-shrink:0; margin:0; }
+    .cwk-search-bar .cwk-favorite-filter span { font-size:14px; }
+
+    /* ── Sidebar description / trigger words ─────────────────────── */
     .cwk-lora-desc {
-      max-height:220px; overflow-y:auto;
+      max-height:200px; overflow-y:auto;
       font-size:12px; color:#cdd6f4; line-height:1.45;
       white-space:pre-wrap; word-break:break-word;
       background:#1e2335; border:1px solid #313552; border-radius:6px;
@@ -166,14 +168,32 @@ export function injectLoraStyles() {
     }
     textarea.cwk-lora-edit:focus { border-color:#89b4fa; }
 
+    /* ── Thumbnail & NSFW section ────────────────────────────────── */
+    .cwk-thumb-row { display:flex; gap:8px; align-items:flex-start; }
+    .cwk-thumb-preview {
+      width:72px; height:108px; object-fit:cover; border-radius:6px;
+      border:1px solid #313552; background:#181d2e; flex-shrink:0;
+    }
+    .cwk-thumb-btns { display:flex; flex-direction:column; gap:5px; flex:1; min-width:0; }
+    .cwk-thumb-btns .cwk-btn { font-size:11px; padding:4px 8px; }
+    .cwk-nsfw-tick {
+      display:flex; align-items:center; gap:6px; cursor:pointer;
+      font-size:11px; color:#cdd6f4; user-select:none;
+    }
+    .cwk-nsfw-tick input { accent-color:#f38ba8; cursor:pointer; }
+
     .cwk-card-custom-badge {
       background:rgba(20,24,36,.8); border:1px solid #3f5a45; border-radius:4px;
       padding:1px 5px; font-size:10px; color:#a6e3a1; font-weight:700;
     }
 
-    /* ── Node widget (CWK_LorA_Prompt_Loader) ────────────────────── */
+    /* ── Node widget overlay (CWK LoRA Loader) ──────────────────── */
+    .cwk-lora-overlay {
+      position:fixed; left:0; top:0; z-index:100;
+      transform-origin:0 0; display:none; pointer-events:auto;
+    }
     .cwk-lora-widget {
-      width:100%; height:244px; box-sizing:border-box;
+      width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
       background:#141824; border:1px solid #2a2f45; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
@@ -187,30 +207,37 @@ export function injectLoraStyles() {
     .cwkl-w-header input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#89b4fa; }
     .cwkl-w-title { font-size:12px; font-weight:700; color:#89b4fa; white-space:nowrap; }
     .cwkl-w-spacer { flex:1; }
-    .cwkl-w-add {
+    .cwkl-w-add, .cwkl-w-browser {
       background:#313552; color:#cdd6f4; border:none; border-radius:5px;
       padding:3px 10px; font:600 11px Inter,system-ui,sans-serif;
       cursor:pointer; transition:filter .15s; white-space:nowrap;
     }
-    .cwkl-w-add:hover { filter:brightness(1.25); }
+    .cwkl-w-add:hover, .cwkl-w-browser:hover { filter:brightness(1.25); }
     .cwkl-w-rows { flex:1; overflow-y:auto; }
     .cwkl-w-rows::-webkit-scrollbar { width:5px; }
     .cwkl-w-rows::-webkit-scrollbar-thumb { background:#313552; border-radius:3px; }
     .cwkl-w-row {
-      display:flex; align-items:center; gap:7px;
-      padding:4px 9px; border-bottom:1px solid #20263a;
+      display:flex; align-items:center; gap:6px;
+      padding:4px 8px; border-bottom:1px solid #20263a;
     }
     .cwkl-w-row:hover { background:#1a2035; }
-    .cwkl-w-row.disabled .cwkl-w-name,
-    .cwkl-w-row.disabled .cwkl-w-wval { color:#6c7086; }
+    .cwkl-w-row.disabled .cwkl-w-select,
+    .cwkl-w-row.disabled .cwkl-w-wval { opacity:.5; }
     .cwkl-w-row input[type=checkbox] { width:13px; height:13px; cursor:pointer; accent-color:#89b4fa; flex-shrink:0; }
-    .cwkl-w-name {
-      flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-      font-size:12px; color:#cdd6f4; cursor:pointer;
+    .cwkl-w-select {
+      flex:1; min-width:50px; box-sizing:border-box;
+      background:#1e2335; border:1px solid #313552; border-radius:5px;
+      color:#cdd6f4; padding:2px 4px; font:12px Inter,system-ui,sans-serif;
+      outline:none; cursor:pointer;
     }
-    .cwkl-w-name:hover { color:#89b4fa; }
-    .cwkl-w-weight { width:86px; flex-shrink:0; accent-color:#89b4fa; cursor:pointer; }
-    .cwkl-w-wval { min-width:34px; text-align:right; font-size:11px; color:#89b4fa; flex-shrink:0; }
+    .cwkl-w-select:focus { border-color:#89b4fa; }
+    .cwkl-w-info {
+      background:none; border:none; cursor:pointer; padding:0 3px;
+      color:#89b4fa; font-size:13px; line-height:1; flex-shrink:0; transition:color .15s;
+    }
+    .cwkl-w-info:hover { color:#cba6f7; }
+    .cwkl-w-weight { width:70px; flex-shrink:0; accent-color:#89b4fa; cursor:pointer; }
+    .cwkl-w-wval { min-width:32px; text-align:right; font-size:11px; color:#89b4fa; flex-shrink:0; }
     .cwkl-w-del {
       background:none; border:none; cursor:pointer; padding:0 3px;
       color:#6c7086; font-size:12px; line-height:1; flex-shrink:0; transition:color .15s;
@@ -236,15 +263,15 @@ export function injectLoraStyles() {
 
 export class LoraBrowserPanel {
   constructor() {
-    this._loras         = [];
-    this._filtered      = [];
-    this._selected      = null;
-    this._editMode      = false;
+    this._loras          = [];
+    this._filtered       = [];
+    this._selected       = null;
+    this._editMode       = false;
     this._onLoadCallback = null;
-    this._civitaiKey    = localStorage.getItem("cwk_civitai_key") || "";
-    this._fetchAbort    = null;
-    this._revealed      = JSON.parse(localStorage.getItem("cwk_lora_revealed") || "{}");
-    this._filterMatch   = null;
+    this._civitaiKey     = localStorage.getItem("cwk_civitai_key") || "";
+    this._fetchAbort     = null;
+    this._revealed       = JSON.parse(localStorage.getItem("cwk_lora_revealed") || "{}");
+    this._filterMatch    = null;
     this._filterFavorite = false;
     this._thumbTarget = (() => {
       const v = Number(localStorage.getItem(THUMB_KEY));
@@ -279,6 +306,19 @@ export class LoraBrowserPanel {
       <div class="cwk-search-bar">
         <label for="cwkl-search">Search:</label>
         <input id="cwkl-search" type="text" placeholder="Filter by name…" autocomplete="off"/>
+        <div class="cwk-custom-select">
+          <button class="cwk-select-btn" id="cwkl-filter-type-btn">
+            <span id="cwkl-filter-type-label">All Types</span>
+            <span class="cwk-select-arrow">▾</span>
+          </button>
+          <div class="cwk-select-dropdown" id="cwkl-filter-type-menu">
+            <div class="cwk-select-option active" data-idx="0">All Types</div>
+          </div>
+        </div>
+        <label class="cwk-favorite-filter" title="Favorites only">
+          <input type="checkbox" id="cwkl-filter-favorite"/>
+          <span>⭐</span>
+        </label>
         <span class="cwk-shown-count" id="cwkl-shown-count">0 shown</span>
       </div>
 
@@ -290,10 +330,20 @@ export class LoraBrowserPanel {
             <div class="cwk-sidebar-title">LoRA name:</div>
             <div id="cwkl-lora-name" style="font-size:12px;color:#cdd6f4;word-break:break-all">—</div>
           </div>
-          <div class="cwk-sidebar-section">
-            <div class="cwk-sidebar-title">Version / Base:</div>
-            <div id="cwkl-lora-meta" style="font-size:11px;color:#89b4fa;word-break:break-all">—</div>
+
+          <div class="cwk-sidebar-row">
+            <div class="cwk-sidebar-col">
+              <div class="cwk-sidebar-title">Version:</div>
+              <input class="cwk-sidebar-input" id="cwkl-version-edit"
+                     placeholder="e.g. v1.0" title="Custom version (leave empty to use Civitai)"/>
+            </div>
+            <div class="cwk-sidebar-col">
+              <div class="cwk-sidebar-title">Base Model:</div>
+              <input class="cwk-sidebar-input" id="cwkl-base-edit" list="cwkl-base-list"
+                     placeholder="e.g. SDXL 1.0" title="Custom base model (leave empty to use Civitai)"/>
+            </div>
           </div>
+          <datalist id="cwkl-base-list"></datalist>
 
           <hr class="cwk-sidebar-divider"/>
 
@@ -317,22 +367,19 @@ export class LoraBrowserPanel {
           <hr class="cwk-sidebar-divider"/>
 
           <div class="cwk-sidebar-section">
-            <div class="cwk-sidebar-title">Filter</div>
-            <div class="cwk-custom-select">
-              <button class="cwk-select-btn" id="cwkl-filter-type-btn">
-                <span id="cwkl-filter-type-label">All Types</span>
-                <span class="cwk-select-arrow">▾</span>
-              </button>
-              <div class="cwk-select-dropdown" id="cwkl-filter-type-menu">
-                <div class="cwk-select-option active" data-idx="0">All Types</div>
+            <div class="cwk-sidebar-title">Thumbnail & NSFW:</div>
+            <div class="cwk-thumb-row">
+              <img id="cwkl-thumb-preview" class="cwk-thumb-preview" style="display:none" alt=""/>
+              <div class="cwk-thumb-btns">
+                <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-set"
+                  title="Upload a local image as custom thumbnail">🖼 Set…</button>
+                <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-reset"
+                  title="Remove the custom thumbnail (falls back to Civitai)">✕ Reset</button>
+                <label class="cwk-nsfw-tick" title="Blur this LoRA's thumbnail until revealed">
+                  <input type="checkbox" id="cwkl-nsfw-toggle"/> NSFW
+                </label>
               </div>
             </div>
-          </div>
-          <div class="cwk-sidebar-section">
-            <label class="cwk-favorite-filter">
-              <input type="checkbox" id="cwkl-filter-favorite"/>
-              <span>⭐ Favorites only</span>
-            </label>
           </div>
 
           <hr class="cwk-sidebar-divider"/>
@@ -390,18 +437,31 @@ export class LoraBrowserPanel {
     this._shownEl      = document.getElementById("cwkl-shown-count");
     this._totalEl      = document.getElementById("cwkl-total-count");
     this._nameEl       = document.getElementById("cwkl-lora-name");
-    this._metaEl       = document.getElementById("cwkl-lora-meta");
+    this._versionEdit  = document.getElementById("cwkl-version-edit");
+    this._baseEdit     = document.getElementById("cwkl-base-edit");
     this._descEl       = document.getElementById("cwkl-desc");
     this._descEdit     = document.getElementById("cwkl-desc-edit");
     this._tagsEl       = document.getElementById("cwkl-triggers");
     this._trigEdit     = document.getElementById("cwkl-triggers-edit");
     this._descSrcEl    = document.getElementById("cwkl-desc-source");
     this._trigSrcEl    = document.getElementById("cwkl-trig-source");
+    this._thumbImg     = document.getElementById("cwkl-thumb-preview");
+    this._thumbSet     = document.getElementById("cwkl-thumb-set");
+    this._thumbReset   = document.getElementById("cwkl-thumb-reset");
+    this._nsfwToggle   = document.getElementById("cwkl-nsfw-toggle");
     this._statusEl     = document.getElementById("cwkl-status");
     this._progressWrap = document.getElementById("cwkl-progress-wrap");
     this._progressBar  = document.getElementById("cwkl-progress-bar");
     this._editBtn      = document.getElementById("cwkl-edit-btn");
     this._keyLabel     = document.getElementById("cwkl-api-key-label");
+
+    // datalist with the known base-model names
+    getBaseModelMatchers().then(list => {
+      const dl = document.getElementById("cwkl-base-list");
+      if (dl) dl.innerHTML = (list || [])
+        .filter(f => Array.isArray(f.match))
+        .map(f => `<option value="${f.label}"></option>`).join("");
+    }).catch(() => {});
 
     // ── Resize handle (same design as the model browser) ──
     const resizeHandle = document.createElement("div");
@@ -462,7 +522,7 @@ export class LoraBrowserPanel {
       if (!opt) return;
       menu.querySelectorAll(".cwk-select-option").forEach(o => o.classList.remove("active"));
       opt.classList.add("active");
-      const idx  = parseInt(opt.dataset.idx, 10);
+      const idx   = parseInt(opt.dataset.idx, 10);
       const entry = this._baseModelFilters[idx];
       lbl.textContent = entry?.label ?? "All Types";
       this._filterMatch = entry?.match ?? null;
@@ -474,7 +534,7 @@ export class LoraBrowserPanel {
     getBaseModelMatchers().then(list => {
       this._baseModelMatchers = list;
       this._rebuildFilterDropdown();
-    }).catch(() => { /* keep static bookends on failure */ });
+    }).catch(() => {});
   }
 
   _rebuildFilterDropdown() {
@@ -645,7 +705,7 @@ export class LoraBrowserPanel {
     });
 
     document.getElementById("cwkl-clear-cache-btn").addEventListener("click", async () => {
-      if (!confirm("Clear all cached LoRA metadata?")) return;
+      if (!confirm("Clear all cached LoRA metadata, custom info and custom thumbnails?")) return;
       try { await fetch("/cwk/loras/cache", { method: "DELETE" }); }
       catch (e) { this._setStatus(`✗ ${e.message}`, true); return; }
       await this._reloadLoras();
@@ -657,7 +717,7 @@ export class LoraBrowserPanel {
 
     document.getElementById("cwkl-rebuild-btn").addEventListener("click", () => {
       if (!confirm(
-        "Re-fetch ALL LoRA metadata from CivitAI?\n\nCustom descriptions and trigger words are preserved."
+        "Re-fetch ALL LoRA metadata from CivitAI?\n\nCustom descriptions, trigger words, base models and thumbnails are preserved."
       )) return;
       this._fetchCivitAI(true);
     });
@@ -681,11 +741,27 @@ export class LoraBrowserPanel {
     });
     document.getElementById("cwkl-save-btn").addEventListener("click", () => this._saveInfo());
     document.getElementById("cwkl-load-btn").addEventListener("click", () => this._loadLora());
+
+    // ── Editable Version / Base / NSFW ──
+    this._versionEdit.addEventListener("change", () =>
+      this._saveField({ version: this._versionEdit.value }));
+    this._baseEdit.addEventListener("change", () =>
+      this._saveField({ base_model: this._baseEdit.value }));
+    this._nsfwToggle.addEventListener("change", () =>
+      this._saveField({ nsfw: this._nsfwToggle.checked }));
+
+    // ── Custom thumbnail ──
+    this._thumbSet.addEventListener("click", () => this._pickThumbnail());
+    this._thumbReset.addEventListener("click", () => {
+      if (this._current()?.civitai?.thumbnail_custom) {
+        this._saveField({ clear_thumbnail: true });
+      }
+    });
   }
 
   // ── Open / close ───────────────────────────────────────────────────────────
 
-  async open(onLoadCallback, hint = "") {
+  async open(onLoadCallback, hint = "", selectName = null) {
     this._onLoadCallback = onLoadCallback || null;
 
     try {
@@ -720,14 +796,17 @@ export class LoraBrowserPanel {
       this._applyFilter("");
       this._totalEl.textContent =
         `${this._loras.length} lora${this._loras.length !== 1 ? "s" : ""}`;
-      const pending   = this._loras.filter(l => !l.civitai?.fetched).length;
+      if (selectName) this._revealLora(selectName);
+      const pending    = this._loras.filter(l => !l.civitai?.fetched).length;
       const withThumbs = this._loras.filter(l => l.civitai?.thumbnail).length;
       let status;
-      if (!this._loras.length)            status = "No LoRAs found in models/loras";
-      else if (pending)                   status = `${pending} LoRA(s) without metadata — click 'Fetch Thumbnails/Infos'`;
-      else if (withThumbs)                status = `${withThumbs} / ${this._loras.length} with cached thumbnails`;
-      else                                status = "Click 'Fetch Thumbnails/Infos' to load LoRA images.";
-      this._setStatus((hint ? `ⓘ ${hint} — ` : "") + status, !this._loras.length);
+      if (!this._loras.length)          status = "No LoRAs found in models/loras";
+      else if (pending)                 status = `${pending} LoRA(s) without metadata — click 'Fetch Thumbnails/Infos'`;
+      else if (withThumbs)              status = `${withThumbs} / ${this._loras.length} with cached thumbnails`;
+      else                              status = "Click 'Fetch Thumbnails/Infos' to load LoRA images.";
+      if (!selectName || !this._loras.some(l => l.name === selectName)) {
+        this._setStatus((hint ? `ⓘ ${hint} — ` : "") + status, !this._loras.length);
+      }
     } catch (e) {
       this._setStatus(`Error: ${e.message}`, true);
     }
@@ -742,6 +821,25 @@ export class LoraBrowserPanel {
     this._fetchAbort = null;
     this._setProgress(0, 0);
     document.getElementById("cwkl-filter-type-menu")?.classList.remove("open");
+  }
+
+  /** Reset filters, select `name` and scroll its card into view. */
+  _revealLora(name) {
+    this._filterMatch    = null;
+    this._filterFavorite = false;
+    const fav = document.getElementById("cwkl-filter-favorite");
+    if (fav) fav.checked = false;
+    if (this._searchEl) this._searchEl.value = "";
+    const lbl  = document.getElementById("cwkl-filter-type-label");
+    const menu = document.getElementById("cwkl-filter-type-menu");
+    const idx  = this._baseModelFilters.findIndex(f => f.match === null);
+    if (lbl)  lbl.textContent = this._baseModelFilters[idx]?.label ?? "All Types";
+    if (menu) menu.querySelectorAll(".cwk-select-option").forEach((o, i) =>
+      o.classList.toggle("active", i === idx));
+    this._applyFilter("");
+    this._selectLora(name);
+    const card = this._grid?.querySelector(`.cwk-card[data-name="${CSS.escape(name)}"]`);
+    card?.scrollIntoView({ block: "center" });
   }
 
   // ── List reload ────────────────────────────────────────────────────────────
@@ -878,7 +976,7 @@ export class LoraBrowserPanel {
         l.civitai = res.info;
         triggerCache.set(l.name, res.info?.trigger_words || []);
         this._updateCard(l);
-        this._selectLora(l.name);
+        this._updateSidebarStatic();
         this._setStatus(`✓ Refreshed: ${l.name}`);
       } else {
         if (res.error === "api_key_invalid") {
@@ -925,8 +1023,8 @@ export class LoraBrowserPanel {
   }
 
   _buildCard(l) {
-    const nsfw     = isNsfwLora(l);
-    const revealed = nsfw ? !!this._revealed[l.name] : true;
+    const nsfw       = isNsfwLora(l);
+    const revealed   = nsfw ? !!this._revealed[l.name] : true;
     const shouldBlur = nsfw && !revealed;
 
     const card      = document.createElement("div");
@@ -944,7 +1042,10 @@ export class LoraBrowserPanel {
     const versionName = civ.version_name ?? "";
     const isFavorite  = !!civ.favorite;
     const hasCustom   = !!(civ.custom_description || "").trim()
-                     || !!(civ.custom_triggers || "").trim();
+                     || !!(civ.custom_triggers || "").trim()
+                     || !!(civ.custom_base_model || "").trim()
+                     || !!(civ.custom_version || "").trim()
+                     || !!civ.thumbnail_custom;
 
     let mediaHtml = `<div class="cwk-card-placeholder">🧩</div>`;
     if (thumb) mediaHtml = `<img src="${thumb}" alt="${displayName}" loading="lazy"/>`;
@@ -955,7 +1056,7 @@ export class LoraBrowserPanel {
     const starHtml = `<button class="cwk-star-btn${isFavorite ? " active" : ""}"
       title="${isFavorite ? "Remove from favorites" : "Add to favorites"}">★</button>`;
     const customHtml = hasCustom
-      ? `<div class="cwk-card-custom-badge" title="Custom description / trigger words">✎</div>`
+      ? `<div class="cwk-card-custom-badge" title="Custom info (description / triggers / base / thumbnail)">✎</div>`
       : "";
 
     card.innerHTML = `
@@ -1022,15 +1123,19 @@ export class LoraBrowserPanel {
       this._grid.querySelectorAll(".cwk-card").forEach(c =>
         c.classList.toggle("selected", c.dataset.name === name));
     }
+    this._updateSidebarStatic();
+  }
+
+  /** Fill the non-edit-mode sidebar controls (does not touch edit textareas). */
+  _updateSidebarStatic() {
     const l = this._current();
     if (!l) return;
     const civ = l.civitai || {};
 
-    this._nameEl.textContent = name;
-    this._metaEl.textContent =
-      [civ.version_name, civ.base_model].filter(Boolean).join(" · ") || "—";
+    this._nameEl.textContent      = l.name;
+    this._versionEdit.value       = civ.version_name || "";
+    this._baseEdit.value          = civ.base_model   || "";
 
-    // ── Description ──
     const desc = (civ.description || "").trim();
     this._descEl.textContent = desc || "No description — click “Edit Info” to write one.";
     this._descEl.classList.toggle("empty", !desc);
@@ -1039,7 +1144,6 @@ export class LoraBrowserPanel {
     this._descSrcEl.className   = "cwk-source-badge " + (dCustom ? "custom" : dCiv ? "civitai" : "none");
     this._descSrcEl.textContent = dCustom ? "custom" : dCiv ? "Civitai" : "no data";
 
-    // ── Trigger words ──
     const words   = civ.trigger_words || [];
     const tCustom = !!(civ.custom_triggers || "").trim();
     this._tagsEl.innerHTML = "";
@@ -1060,7 +1164,13 @@ export class LoraBrowserPanel {
     this._trigSrcEl.className   = "cwk-source-badge " + (tCustom ? "custom" : tCiv ? "civitai" : "none");
     this._trigSrcEl.textContent = tCustom ? "custom" : tCiv ? "Civitai" : "no data";
 
-    this._setStatus(name);
+    const thumb = civ.thumbnail || "";
+    this._thumbImg.src          = thumb;
+    this._thumbImg.style.display = thumb ? "" : "none";
+    this._thumbReset.disabled   = !civ.thumbnail_custom;
+    this._nsfwToggle.checked    = isNsfwLora(l);
+
+    this._setStatus(l.name);
   }
 
   _setEditMode(on) {
@@ -1096,12 +1206,64 @@ export class LoraBrowserPanel {
         triggerCache.set(l.name, l.civitai.trigger_words || []);
         this._setEditMode(false);
         this._updateCard(l);
-        this._selectLora(l.name);
+        this._updateSidebarStatic();
         this._setStatus(`✓ Custom info saved for ${l.name}`);
       } else {
         this._setStatus(`✗ ${res.error}`, true);
       }
     } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
+  }
+
+  /** Save a single field (version / base model / nsfw / clear thumbnail). */
+  async _saveField(partial) {
+    const l = this._current();
+    if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
+    try {
+      const res = await apiFetch("/cwk/lora/meta", {
+        method: "POST",
+        body:   JSON.stringify({ lora: l.name, ...partial }),
+      });
+      if (res.ok) {
+        l.civitai = res.civitai || {};
+        triggerCache.set(l.name, l.civitai.trigger_words || []);
+        this._updateCard(l);
+        this._updateSidebarStatic();
+        this._rebuildFilterDropdown();   // custom base models feed the filter
+        this._applyFilter(this._searchEl?.value ?? "");
+        this._setStatus(`✓ Saved for ${l.name}`);
+      } else {
+        this._setStatus(`✗ ${res.error}`, true);
+      }
+    } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
+  }
+
+  _pickThumbnail() {
+    const l = this._current();
+    if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
+    const input = document.createElement("input");
+    input.type   = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("lora", l.name);
+      fd.append("file", file, file.name);
+      try {
+        this._setStatus("Uploading thumbnail…");
+        const res  = await fetch("/cwk/lora/thumbnail", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          l.civitai = data.civitai;
+          this._updateCard(l);
+          this._updateSidebarStatic();
+          this._setStatus("✓ Custom thumbnail set");
+        } else {
+          this._setStatus(`✗ ${data.error}`, true);
+        }
+      } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
+    };
+    input.click();
   }
 
   _loadLora() {

@@ -21,7 +21,12 @@ import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
 
 const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 
-const COLORS = { body: "#141824", border: "#2a2f45" };
+const COLORS = {
+  title:  "#1a2035",   // title bar (node.color) — matches the overlay header
+  body:   "#141824",   // node background (node.bgcolor + canvas paint)
+  border: "#2a2f45",
+  accent: "#89b4fa",
+};
 const ZOOM_HIDE = 0.35;              // hide overlay below this zoom level
 const DETACH_GRACE_FRAMES = 600;     // ~10 s detached → assume node was deleted
 const WIDGET_SLOT_H = 160;           // canvas space reserved for the covered widget
@@ -110,23 +115,29 @@ function _setupLoraNode(node) {
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
+    // ── CWK theme on the canvas node itself ──────────────────────────────────
+  node.color   = COLORS.title;   // ComfyUI paints the title bar from this
+  node.bgcolor = COLORS.body;    // …and the node background from this
+  try { node.setDirtyCanvas(true, true); } catch {}
+
   // ── Layout metrics: DOM starts below all connection dots ──────────────────
   const metrics = () => {
     const LG = window.LiteGraph || {};
     const titleH = LG.NODE_TITLE_HEIGHT || 30;
     const slotH  = LG.NODE_SLOT_HEIGHT  || 20;
     const rows   = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0, 1);
-    // +4 aligns the overlay with the native widget row start (which it covers)
-    return { titleH, domY: titleH + rows * slotH + 4 };
+    return { titleH, domY: titleH + rows * slotH + 6 };   // 6px gap below the dots
   };
 
-  function _prepareJsonWidget() {
+    function _prepareJsonWidget() {
     cfgWidget = cfgWidget || node.widgets?.find(w => w.name === "lora_config") || null;
     if (!cfgWidget) return;
-    // NOT hidden: hidden widgets can be dropped from the queue prompt by
-    // newer frontends. It stays a plain serialisable widget, and the DOM
-    // overlay covers its 160px slot so it is never seen or clicked.
-    cfgWidget.computeSize = (w) => [w || 0, WIDGET_SLOT_H];
+    // NOT hidden and type stays "STRING": it remains a fully serialisable
+    // widget in every queue prompt. But it renders nothing and takes no
+    // layout space — the DOM overlay *is* its UI.
+    cfgWidget.computeSize    = () => [0, -4];   // zero canvas footprint
+    cfgWidget.draw           = () => {};        // no box / label / arrows
+    cfgWidget.label          = "";              // display-only, belt & braces
     cfgWidget.serializeValue = () => JSON.stringify(state.list);
   }
 
@@ -380,6 +391,9 @@ function _setupLoraNode(node) {
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
+        // CWK accent line separating title bar and body
+        ctx.fillStyle = COLORS.accent;
+        ctx.fillRect(0, titleH, this.size[0], 2);
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);
       }

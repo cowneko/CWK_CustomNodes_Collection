@@ -1125,3 +1125,12 @@ from .cwk_save_image import (
 # Merge Save Image node with existing mappings
 NODE_CLASS_MAPPINGS.update(NODE_CLASS_MAPPINGS_SAVE_IMAGE)
 NODE_DISPLAY_NAME_MAPPINGS.update(NODE_DISPLAY_NAME_MAPPINGS_SAVE_IMAGE)
+
+from .cwk_lora import (
+    NODE_CLASS_MAPPINGS_LORA,
+    NODE_DISPLAY_NAME_MAPPINGS_LORA,
+)
+
+# Merge LoRA Prompt Loader node with existing mappings
+NODE_CLASS_MAPPINGS.update(NODE_CLASS_MAPPINGS_LORA)
+NODE_DISPLAY_NAME_MAPPINGS.update(NODE_DISPLAY_NAME_MAPPINGS_LORA)

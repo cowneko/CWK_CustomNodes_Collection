@@ -2,9 +2,10 @@
  * CWK LoRA Loader — frontend node extension.
  *
  * The node body is painted on the canvas (CWK palette) via onDrawBackground,
- * and the interactive list is a DOM overlay positioned every animation frame
- * from the node's position/size — so it always sits below the connection
- * dots, follows pan/zoom, and resizes with the node.
+ * and the interactive list is a DOM overlay. The overlay's position/scale are
+ * derived from the exact transform ComfyUI used while drawing the node
+ * (captured via ctx.getTransform() inside onDrawBackground), so it always
+ * matches the canvas rendering — same technique as ComfyUI's own DOM widgets.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -100,6 +101,7 @@ function _setupLoraNode(node) {
   let announced    = false;
   let rafId        = 0;
   let overlay      = null;
+  let ctxTransform = null;   // exact canvas matrix captured while drawing the node
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
@@ -345,11 +347,16 @@ function _setupLoraNode(node) {
       }, 150);
     }
 
-    // ── Canvas body: CWK palette + size clamps ──────────────────────────────
+    // ── Canvas body: CWK palette + size clamps + transform capture ──────────
     const prevOnDrawBackground = node.onDrawBackground;
     node.onDrawBackground = function (ctx) {
       try {
         prevOnDrawBackground?.apply(this, arguments);
+        // Capture the matrix ComfyUI is using to draw THIS node (DPR + view
+        // pan/zoom + node position all included). The overlay is positioned
+        // from it every frame, so it can never drift from the canvas.
+        if (ctx.getTransform) ctxTransform = ctx.getTransform();
+
         if (this.flags?.collapsed) return;
         const { titleH, domY } = metrics();
         const minW = 440, minH = domY + 180;
@@ -372,14 +379,10 @@ function _setupLoraNode(node) {
     };
 
     // ── Overlay positioning loop ────────────────────────────────────────────
-    // Notes:
-    //  * always re-schedules first, so a thrown error can never kill the loop;
-    //  * never self-destructs when node.graph is still null (onNodeCreated can
-    //    fire before the node is attached to the graph) — it just waits hidden;
-    //  * cleanup happens via __cwkLoraDestroy (onNodeRemoved) or, as a safety
-    //    net, after DETACH_GRACE_FRAMES consecutive detached frames;
-    //  * shows with display:"block" — an inline value is the only thing that
-    //    beats the class rule `display:none` in the stylesheet.
+    // Uses the captured ctx matrix (buffer pixels) and converts it to CSS
+    // pixels via rect/canvas-size — that ratio is exactly the devicePixelRatio
+    // correction, whatever the frontend does internally.
+    const PAD = 6;   // horizontal inset of the widget inside the node body
     function _tick() {
       if (state.destroyed) return;
       rafId = requestAnimationFrame(_tick);
@@ -397,32 +400,42 @@ function _setupLoraNode(node) {
         }
         detachFrames = 0;
 
-        const c = app.canvas;
-        if (!c?.canvas || !c.ds) { overlay.style.display = "none"; return; }
-        if (node.flags?.collapsed) { overlay.style.display = "none"; return; }
-        const scale = c.ds.scale;
-        if (!scale || scale < ZOOM_HIDE) { overlay.style.display = "none"; return; }
+        if (node.flags?.collapsed || !ctxTransform) {
+          overlay.style.display = "none";
+          return;
+        }
+
+        const canvasEl = app.canvas?.canvas;
+        if (!canvasEl) { overlay.style.display = "none"; return; }
+        const rect = canvasEl.getBoundingClientRect();
+        if (!rect.width || !rect.height) { overlay.style.display = "none"; return; }
+
+        // buffer px → CSS px (handles devicePixelRatio / styled canvases)
+        const kx = rect.width  / (canvasEl.width  || 1);
+        const ky = rect.height / (canvasEl.height || 1);
+
+        const m    = ctxTransform;
+        const zoom = m.a * kx;
+        if (!(zoom > ZOOM_HIDE)) { overlay.style.display = "none"; return; }
 
         const { domY } = metrics();
-        const canvas = c.canvas;
-        const rect   = canvas.getBoundingClientRect();
-        const dpr    = rect.width > 0 ? canvas.width / rect.width : 1;
+        // node-local (PAD, domY) → screen coordinates
+        const x = (m.e + m.a * PAD) * kx + rect.left;
+        const y = (m.f + m.d * domY) * ky + rect.top;
 
-        let px, py;
-        if (typeof c.ds.convertOffsetToCanvas === "function") {
-          const p = c.ds.convertOffsetToCanvas([node.pos[0], node.pos[1] + domY]);
-          px = p[0]; py = p[1];
-        } else {
-          px = node.pos[0] * scale + c.ds.offset[0];
-          py = (node.pos[1] + domY) * scale + c.ds.offset[1];
+        // hide when the node is outside the canvas viewport (also covers the
+        // matrix going stale while the node is culled from drawing)
+        const w = node.size[0] * zoom, h = node.size[1] * zoom;
+        if (x + w < rect.left || x > rect.right || y + h < rect.top || y > rect.bottom) {
+          overlay.style.display = "none";
+          return;
         }
 
         overlay.style.display   = "block";
         overlay.style.transform =
-          `translate(${(px / dpr + rect.left).toFixed(2)}px, ${(py / dpr + rect.top).toFixed(2)}px)` +
-          ` scale(${(scale / dpr).toFixed(4)})`;
-        overlay.style.width  = Math.max(200, node.size[0] - 12) + "px";
-        overlay.style.height = Math.max(120, node.size[1] - domY - 14) + "px";  // keep resize corner free
+          `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${zoom.toFixed(4)})`;
+        overlay.style.width     = Math.max(200, node.size[0] - 2 * PAD) + "px";
+        overlay.style.height    = Math.max(120, node.size[1] - domY - 14) + "px"; // keep resize corner free
 
         if (!announced) {
           announced = true;

@@ -36,7 +36,7 @@ import { app } from "../../scripts/app.js";
 import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
   from "./cwk_lora_panel.js";
 
-const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
+const LORA_NODES = ["CWK_LorA_Loader"];
 
 const COLORS = {
   title:  "#141824",   // title bar (node.color) — the strip at the very top
@@ -506,6 +506,21 @@ function _setupLoraNode(node) {
           return;
         }
         detachFrames = 0;
+
+        // ── Tab / workflow switch ──────────────────────────────────────────
+        // Switching workflow tabs keeps the old graph (and its nodes) alive
+        // in the background: node.graph stays non-null, so the checks above
+        // pass and the overlay would keep sitting at its last screen position
+        // with a stale transform — the "imprint". Hide it whenever the node's
+        // graph is not the one currently shown on the canvas, and drop the
+        // transform so it only comes back after a fresh draw of the node.
+        if (node.graph !== (app.canvas?.graph ?? app.graph)) {
+          overlay.style.display = "none";
+          ctxTransform = null;
+          return;
+        }
+
+        if (node.flags?.collapsed || !ctxTransform) {
 
         if (node.flags?.collapsed || !ctxTransform) {
           overlay.style.display = "none";

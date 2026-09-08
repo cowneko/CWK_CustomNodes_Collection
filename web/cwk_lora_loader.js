@@ -39,8 +39,8 @@ import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
 const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 
 const COLORS = {
-  title:  "#141824",   // title bar (node.color) — matches the overlay header
-  body:   "#1A1F2E",   // node background (node.bgcolor + canvas paint)
+  title:  "#1A1F2E",   // title bar (node.color) — the strip at the very top
+  body:   "#141824",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
   accent: "#89b4fa",   // reference only — nothing on the canvas is drawn with it
 };
 
@@ -109,6 +109,10 @@ app.registerExtension({
     nodeType.prototype.onConfigure = function (info) {
       const r = onConfigure?.apply(this, arguments);
       try {
+        // re-assert the palette after configure() restored saved properties
+        this.color   = COLORS.title;
+        this.bgcolor = COLORS.body;
+
         let v;
         const vals = info?.widgets_values;
         if (Array.isArray(vals))                    v = vals[0];
@@ -248,6 +252,13 @@ function _setupLoraNode(node) {
       </div>
     `;
 
+    // Drive the DOM overlay from the same palette as the canvas node.
+    // Inline styles override the injected stylesheet, so this also
+    // neutralises any leftover CSS from the previous edit.
+    root.style.background                                  = COLORS.body;
+    root.querySelector(".cwkl-w-header").style.background  = COLORS.body;
+    root.querySelector(".cwkl-w-footer").style.background  = COLORS.body;
+    
     const rowsEl     = root.querySelector(".cwkl-w-rows");
     const emptyEl    = root.querySelector(".cwkl-w-empty");
     const countEl    = root.querySelector(".cwkl-w-count");

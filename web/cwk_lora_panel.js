@@ -192,22 +192,19 @@ export function injectLoraStyles() {
       position:fixed; left:0; top:0; z-index:100;
       transform-origin:0 0; display:none; pointer-events:auto;
     }
-        /* native multiline widget of the LoRA node — hidden by the extension.
+    /* native multiline widget of the LoRA node — hidden by the extension.
        !important beats the inline styles the frontend re-applies each frame. */
-    .cwk-lora-dom-hidden { 
-    display: none !important; 
-    }
+    .cwk-lora-dom-hidden { display: none !important; }
     .cwk-lora-widget {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
-      background:#141824;
-      border:1px solid #2a2f45; border-radius:8px;
+      background:#1A1F2E; border:none; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
       user-select:none;
     }
     .cwkl-w-header {
       display:flex; align-items:center; gap:7px;
-      padding:6px 9px; background:#141824;
+      padding:6px 9px; background:#1A1F2E;
       border-bottom:1px solid #2a2f45; flex-shrink:0;
     }
     .cwkl-w-header input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#89b4fa; }
@@ -254,7 +251,7 @@ export function injectLoraStyles() {
       color:#6c7086; font-style:italic; font-size:11px; padding:10px; text-align:center;
     }
     .cwkl-w-footer {
-      padding:4px 9px; background:#141824; border-top:1px solid #2a2f45;
+      padding:4px 9px; background:#1A1F2E; border-top:1px solid #2a2f45;
       flex-shrink:0; max-height:40px; overflow:hidden;
     }
     .cwkl-w-trigger {

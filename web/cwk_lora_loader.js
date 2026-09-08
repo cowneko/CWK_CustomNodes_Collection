@@ -17,6 +17,8 @@ import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
 const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 
 const COLORS = { body: "#141824", border: "#2a2f45" };
+const ZOOM_HIDE = 0.35;              // hide overlay below this zoom level
+const DETACH_GRACE_FRAMES = 600;     // ~10 s detached → assume node was deleted
 
 function _fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
@@ -94,14 +96,12 @@ app.registerExtension({
 function _setupLoraNode(node) {
   const state = { list: [], destroyed: false };
   let lastJson = null;
+  let detachFrames = 0;
+  let announced    = false;
+  let rafId        = 0;
+  let overlay      = null;
 
-  // ── Hide the native JSON widget (kept for serialisation / prompt input) ──
-  const cfgWidget = node.widgets?.find(w => w.name === "lora_config");
-  if (cfgWidget) {
-    cfgWidget.hidden = true;
-    cfgWidget.computeSize = () => [0, -4];
-    cfgWidget.serializeValue = () => JSON.stringify(state.list);
-  }
+  let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
   // ── Layout metrics: DOM starts below all connection dots ──────────────────
   const metrics = () => {
@@ -109,290 +109,351 @@ function _setupLoraNode(node) {
     const titleH = LG.NODE_TITLE_HEIGHT || 30;
     const slotH  = LG.NODE_SLOT_HEIGHT  || 20;
     const rows   = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0, 1);
-    return { titleH, domY: titleH + rows * slotH + 10 };
+    return { titleH, domY: titleH + rows * slotH + 12 };
   };
 
-  // ── DOM overlay ────────────────────────────────────────────────────────────
-  const overlay = document.createElement("div");
-  overlay.className = "cwk-lora-overlay";
-  const root = document.createElement("div");
-  root.className = "cwk-lora-widget";
-  overlay.appendChild(root);
-  document.body.appendChild(overlay);
-
-  root.innerHTML = `
-    <div class="cwkl-w-header">
-      <input type="checkbox" class="cwkl-w-all" title="Activate / deactivate all LoRAs"/>
-      <span class="cwkl-w-title">LoRAs (<span class="cwkl-w-count">0</span>)</span>
-      <span class="cwkl-w-spacer"></span>
-      <button class="cwkl-w-browser"
-        title="Open the LoRA browser (infos, trigger words, thumbnails)">🔎 Browser</button>
-      <button class="cwkl-w-add" title="Add an empty LoRA slot">＋ Add LoRA</button>
-    </div>
-    <div class="cwkl-w-rows"></div>
-    <div class="cwkl-w-empty">No LoRAs yet — click “＋ Add LoRA”.</div>
-    <div class="cwkl-w-footer">
-      <span class="cwkl-w-trigger" title="Trigger words of the active LoRAs">trigger: —</span>
-    </div>
-  `;
-
-  const rowsEl    = root.querySelector(".cwkl-w-rows");
-  const emptyEl   = root.querySelector(".cwkl-w-empty");
-  const countEl   = root.querySelector(".cwkl-w-count");
-  const allToggle = root.querySelector(".cwkl-w-all");
-  const addBtn    = root.querySelector(".cwkl-w-add");
-  const browserBtn= root.querySelector(".cwkl-w-browser");
-  const trigEl    = root.querySelector(".cwkl-w-trigger");
-
-  // clicking the widget selects the node (like ComfyUI DOM widgets do)
-  root.addEventListener("mousedown", () => {
-    try {
-      if (typeof app.canvas?.selectNode === "function") app.canvas.selectNode(node);
-      else app.canvas?.selectNodes?.([node]);
-    } catch {}
-  });
-
-  // ── Serialisation helpers ──────────────────────────────────────────────────
-  function _applyJson(json) {
-    json = String(json ?? "[]");
-    if (json === lastJson) return;
-    lastJson = json;
-    try {
-      const parsed = JSON.parse(json);
-      state.list = Array.isArray(parsed) ? parsed.map(_normalise) : [];
-    } catch { state.list = []; }
-    ensureLoraNames().then(() => _refreshRowSelects());
-    _render();
-  }
-
-  function _normalise(it) {
-    if (!it || typeof it !== "object") return null;
-    let w = Number(it.weight ?? it.model_weight ?? 1);
-    if (!Number.isFinite(w)) w = 1;
-    return { name: String(it.name ?? ""), weight: w, enabled: it.enabled !== false };
-  }
-
-  function _commit() {
-    const json = JSON.stringify(state.list);
-    if (json !== lastJson) {
-      lastJson = json;
-      if (cfgWidget) cfgWidget.value = json;
+  function _hideJsonWidget() {
+    cfgWidget = cfgWidget || node.widgets?.find(w => w.name === "lora_config") || null;
+    if (cfgWidget) {
+      cfgWidget.hidden = true;
+      cfgWidget.computeSize = () => [0, -4];
+      cfgWidget.serializeValue = () => JSON.stringify(state.list);
     }
-    node.setDirtyCanvas(true, true);
   }
 
-  // ── Rendering ──────────────────────────────────────────────────────────────
-  function _updateHeader() {
-    countEl.textContent = String(state.list.length);
-    const n = state.list.length;
-    allToggle.checked = n > 0 && state.list.every(l => l.enabled);
-    allToggle.indeterminate = n > 0 && !allToggle.checked && state.list.some(l => l.enabled);
-    allToggle.disabled = n === 0;
+  function _markDirty() {
+    try { node.setDirtyCanvas(true, true); }
+    catch { try { app.canvas?.setDirty?.(true, true); } catch {} }
   }
 
-  function _render() {
-    rowsEl.innerHTML = "";
-    if (!state.list.length) {
-      rowsEl.style.display  = "none";
-      emptyEl.style.display = "";
-    } else {
-      rowsEl.style.display  = "";
-      emptyEl.style.display = "none";
-      state.list.forEach((l, i) => rowsEl.appendChild(_buildRow(l, i)));
-    }
-    _updateHeader();
-    _commit();
-    _refreshTriggers();
-  }
+  try {
+    // ── DOM overlay ──────────────────────────────────────────────────────────
+    overlay = document.createElement("div");
+    overlay.className = "cwk-lora-overlay";
+    overlay.style.display = "none";
+    const root = document.createElement("div");
+    root.className = "cwk-lora-widget";
+    overlay.appendChild(root);
+    document.body.appendChild(overlay);
 
-  function _fillSelect(sel, selected) {
-    const names = _loraNames || [];
-    sel.innerHTML = "";
-    const ph = document.createElement("option");
-    ph.value = "";
-    ph.textContent = "— pick a LoRA —";
-    sel.appendChild(ph);
-    for (const n of names) {
-      const o = document.createElement("option");
-      o.value = n;
-      o.textContent = n;
-      sel.appendChild(o);
-    }
-    if (selected && !names.includes(selected)) {
-      // keep the entry valid even if the file list is stale / not yet loaded
-      const o = document.createElement("option");
-      o.value = selected;
-      o.textContent = selected;
-      sel.appendChild(o);
-    }
-    sel.value = selected || "";
-  }
-
-  function _refreshRowSelects() {
-    const sels = rowsEl.querySelectorAll(".cwkl-w-select");
-    state.list.forEach((l, i) => { if (sels[i]) _fillSelect(sels[i], l.name); });
-  }
-
-  function _buildRow(l, i) {
-    const row = document.createElement("div");
-    row.className = "cwkl-w-row" + (l.enabled ? "" : " disabled");
-    row.innerHTML = `
-      <input type="checkbox" class="cwkl-w-en" ${l.enabled ? "checked" : ""}
-             title="Activate / deactivate this LoRA"/>
-      <select class="cwkl-w-select" title="LoRA file"></select>
-      <button class="cwkl-w-info"
-        title="Open the LoRA browser with this LoRA selected">ℹ</button>
-      <input type="range" class="cwkl-w-weight" min="-2" max="2" step="0.05"
-             value="${l.weight}" title="LoRA weight"/>
-      <span class="cwkl-w-wval">${_fmt(l.weight)}</span>
-      <button class="cwkl-w-del" title="Remove this LoRA">✕</button>
+    root.innerHTML = `
+      <div class="cwkl-w-header">
+        <input type="checkbox" class="cwkl-w-all" title="Activate / deactivate all LoRAs"/>
+        <span class="cwkl-w-title">LoRAs (<span class="cwkl-w-count">0</span>)</span>
+        <span class="cwkl-w-spacer"></span>
+        <button class="cwkl-w-browser"
+          title="Open the LoRA browser (infos, trigger words, thumbnails)">🔎 Browser</button>
+        <button class="cwkl-w-add" title="Add an empty LoRA slot">＋ Add LoRA</button>
+      </div>
+      <div class="cwkl-w-rows"></div>
+      <div class="cwkl-w-empty">No LoRAs yet — click “＋ Add LoRA”.</div>
+      <div class="cwkl-w-footer">
+        <span class="cwkl-w-trigger" title="Trigger words of the active LoRAs">trigger: —</span>
+      </div>
     `;
 
-    const sel = row.querySelector(".cwkl-w-select");
-    _fillSelect(sel, l.name);
-    sel.addEventListener("change", () => {
-      l.name = sel.value;
-      _commit();
-      _refreshTriggers();
+    const rowsEl     = root.querySelector(".cwkl-w-rows");
+    const emptyEl    = root.querySelector(".cwkl-w-empty");
+    const countEl    = root.querySelector(".cwkl-w-count");
+    const allToggle  = root.querySelector(".cwkl-w-all");
+    const addBtn     = root.querySelector(".cwkl-w-add");
+    const browserBtn = root.querySelector(".cwkl-w-browser");
+    const trigEl     = root.querySelector(".cwkl-w-trigger");
+
+    // clicking the widget selects the node (like ComfyUI DOM widgets do)
+    root.addEventListener("mousedown", () => {
+      try {
+        if (typeof app.canvas?.selectNode === "function") app.canvas.selectNode(node);
+        else app.canvas?.selectNodes?.([node]);
+      } catch {}
     });
 
-    row.querySelector(".cwkl-w-info").addEventListener("click", () => {
-      if (!l.name) return;
-      _openBrowser(`Slot ${i + 1}`, l.name);
-    });
+    // ── Serialisation helpers ────────────────────────────────────────────────
+    function _applyJson(json) {
+      json = String(json ?? "[]");
+      if (json === lastJson) return;
+      lastJson = json;
+      try {
+        const parsed = JSON.parse(json);
+        state.list = Array.isArray(parsed) ? parsed.map(_normalise) : [];
+      } catch { state.list = []; }
+      ensureLoraNames().then(() => _refreshRowSelects());
+      _render();
+    }
 
-    row.querySelector(".cwkl-w-en").addEventListener("change", e => {
-      l.enabled = e.target.checked;
-      row.classList.toggle("disabled", !l.enabled);
+    function _normalise(it) {
+      if (!it || typeof it !== "object") return null;
+      let w = Number(it.weight ?? it.model_weight ?? 1);
+      if (!Number.isFinite(w)) w = 1;
+      return { name: String(it.name ?? ""), weight: w, enabled: it.enabled !== false };
+    }
+
+    function _commit() {
+      const json = JSON.stringify(state.list);
+      if (json !== lastJson) {
+        lastJson = json;
+        if (cfgWidget) cfgWidget.value = json;
+      }
+      _markDirty();
+    }
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+    function _updateHeader() {
+      countEl.textContent = String(state.list.length);
+      const n = state.list.length;
+      allToggle.checked = n > 0 && state.list.every(l => l.enabled);
+      allToggle.indeterminate = n > 0 && !allToggle.checked && state.list.some(l => l.enabled);
+      allToggle.disabled = n === 0;
+    }
+
+    function _render() {
+      rowsEl.innerHTML = "";
+      if (!state.list.length) {
+        rowsEl.style.display  = "none";
+        emptyEl.style.display = "";
+      } else {
+        rowsEl.style.display  = "";
+        emptyEl.style.display = "none";
+        state.list.forEach((l, i) => rowsEl.appendChild(_buildRow(l, i)));
+      }
       _updateHeader();
       _commit();
       _refreshTriggers();
+    }
+
+    function _fillSelect(sel, selected) {
+      const names = _loraNames || [];
+      sel.innerHTML = "";
+      const ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = "— pick a LoRA —";
+      sel.appendChild(ph);
+      for (const n of names) {
+        const o = document.createElement("option");
+        o.value = n;
+        o.textContent = n;
+        sel.appendChild(o);
+      }
+      if (selected && !names.includes(selected)) {
+        // keep the entry valid even if the file list is stale / not yet loaded
+        const o = document.createElement("option");
+        o.value = selected;
+        o.textContent = selected;
+        sel.appendChild(o);
+      }
+      sel.value = selected || "";
+    }
+
+    function _refreshRowSelects() {
+      const sels = rowsEl.querySelectorAll(".cwkl-w-select");
+      state.list.forEach((l, i) => { if (sels[i]) _fillSelect(sels[i], l.name); });
+    }
+
+    function _buildRow(l, i) {
+      const row = document.createElement("div");
+      row.className = "cwkl-w-row" + (l.enabled ? "" : " disabled");
+      row.innerHTML = `
+        <input type="checkbox" class="cwkl-w-en" ${l.enabled ? "checked" : ""}
+               title="Activate / deactivate this LoRA"/>
+        <select class="cwkl-w-select" title="LoRA file"></select>
+        <button class="cwkl-w-info"
+          title="Open the LoRA browser with this LoRA selected">ℹ</button>
+        <input type="range" class="cwkl-w-weight" min="-2" max="2" step="0.05"
+               value="${l.weight}" title="LoRA weight"/>
+        <span class="cwkl-w-wval">${_fmt(l.weight)}</span>
+        <button class="cwkl-w-del" title="Remove this LoRA">✕</button>
+      `;
+
+      const sel = row.querySelector(".cwkl-w-select");
+      _fillSelect(sel, l.name);
+      sel.addEventListener("change", () => {
+        l.name = sel.value;
+        _commit();
+        _refreshTriggers();
+      });
+
+      row.querySelector(".cwkl-w-info").addEventListener("click", () => {
+        if (!l.name) return;
+        _openBrowser(`Slot ${i + 1}`, l.name);
+      });
+
+      row.querySelector(".cwkl-w-en").addEventListener("change", e => {
+        l.enabled = e.target.checked;
+        row.classList.toggle("disabled", !l.enabled);
+        _updateHeader();
+        _commit();
+        _refreshTriggers();
+      });
+
+      const slider = row.querySelector(".cwkl-w-weight");
+      slider.addEventListener("input", () => {
+        l.weight = Number(slider.value);
+        row.querySelector(".cwkl-w-wval").textContent = _fmt(l.weight);
+        _commit();
+      });
+
+      row.querySelector(".cwkl-w-del").addEventListener("click", () => {
+        state.list.splice(i, 1);
+        _render();
+      });
+
+      return row;
+    }
+
+    // ── Browser interaction ──────────────────────────────────────────────────
+    function _addLora(name) {
+      const exists = state.list.findIndex(l => l.name === name);
+      if (exists >= 0) state.list[exists].enabled = true;
+      else             state.list.push({ name, weight: 1, enabled: true });
+      _render();
+    }
+
+    function _openBrowser(hint, selectName) {
+      const browser = getLoraBrowser();
+      ensureLoraNames(true).then(() => _refreshRowSelects());
+      browser.open(lora => {
+        if (lora?.name) _addLora(lora.name);
+      }, hint, selectName || null);
+    }
+
+    addBtn.addEventListener("click", async () => {
+      await ensureLoraNames();
+      state.list.push({ name: "", weight: 1, enabled: true });
+      _render();
+      const sels = rowsEl.querySelectorAll(".cwkl-w-select");
+      sels[sels.length - 1]?.focus();
     });
 
-    const slider = row.querySelector(".cwkl-w-weight");
-    slider.addEventListener("input", () => {
-      l.weight = Number(slider.value);
-      row.querySelector(".cwkl-w-wval").textContent = _fmt(l.weight);
-      _commit();
-    });
+    browserBtn.addEventListener("click", () => _openBrowser());
 
-    row.querySelector(".cwkl-w-del").addEventListener("click", () => {
-      state.list.splice(i, 1);
+    allToggle.addEventListener("change", e => {
+      const on = e.target.checked;
+      state.list.forEach(l => { l.enabled = on; });
       _render();
     });
 
-    return row;
-  }
-
-  // ── Browser interaction ────────────────────────────────────────────────────
-  function _addLora(name) {
-    const exists = state.list.findIndex(l => l.name === name);
-    if (exists >= 0) state.list[exists].enabled = true;
-    else             state.list.push({ name, weight: 1, enabled: true });
-    _render();
-  }
-
-  function _openBrowser(hint, selectName) {
-    const browser = getLoraBrowser();
-    ensureLoraNames(true).then(() => _refreshRowSelects());
-    browser.open(lora => {
-      if (lora?.name) _addLora(lora.name);
-    }, hint, selectName || null);
-  }
-
-  addBtn.addEventListener("click", async () => {
-    await ensureLoraNames();
-    state.list.push({ name: "", weight: 1, enabled: true });
-    _render();
-    const sels = rowsEl.querySelectorAll(".cwkl-w-select");
-    sels[sels.length - 1]?.focus();
-  });
-
-  browserBtn.addEventListener("click", () => _openBrowser());
-
-  allToggle.addEventListener("change", e => {
-    const on = e.target.checked;
-    state.list.forEach(l => { l.enabled = on; });
-    _render();
-  });
-
-  // ── Trigger-word preview (mirrors the node's STRING output) ───────────────
-  let trigTimer = null;
-  function _refreshTriggers() {
-    clearTimeout(trigTimer);
-    trigTimer = setTimeout(async () => {
-      const names = [...new Set(state.list.filter(l => l.enabled && l.name).map(l => l.name))];
-      const lists = await Promise.all(names.map(getTriggersFor));
-      const words = [...new Set(lists.flat())];
-      trigEl.textContent = words.length ? `trigger: ${words.join(", ")}` : "trigger: —";
-      trigEl.title = words.join(", ") || "No trigger words";
-    }, 150);
-  }
-
-  // ── Canvas body: CWK palette + size clamps ────────────────────────────────
-  const prevOnDrawBackground = node.onDrawBackground;
-  node.onDrawBackground = function (ctx) {
-    prevOnDrawBackground?.apply(this, arguments);
-    if (this.flags.collapsed) return;
-    const { titleH, domY } = metrics();
-    const w = this.size[0], h = this.size[1];
-    const minW = 440, minH = domY + 180;
-    if (w < minW) this.size[0] = minW;
-    if (h < minH) this.size[1] = minH;
-
-    ctx.save();
-    ctx.fillStyle = COLORS.body;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2, 10);
-    else               ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
-    ctx.fill();
-    ctx.strokeStyle = COLORS.border;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-  };
-
-  // ── Overlay positioning loop (survives resize / pan / zoom / culling) ─────
-  let rafId = 0;
-  function _tick() {
-    if (state.destroyed || node.graph == null) { overlay.remove(); return; }
-    rafId = requestAnimationFrame(_tick);
-
-    const c = app.canvas;
-    if (!c?.canvas || !c.ds) return;
-    if (node.flags.collapsed) { overlay.style.display = "none"; return; }
-    const scale = c.ds.scale;
-    if (!scale || scale < 0.35) { overlay.style.display = "none"; return; }
-
-    const { domY } = metrics();
-    const canvas = c.canvas;
-    const rect   = canvas.getBoundingClientRect();
-    const dpr    = rect.width > 0 ? canvas.width / rect.width : 1;
-
-    let px, py;
-    if (typeof c.ds.convertOffsetToCanvas === "function") {
-      const p = c.ds.convertOffsetToCanvas([node.pos[0], node.pos[1] + domY]);
-      px = p[0]; py = p[1];
-    } else {
-      px = node.pos[0] * scale + c.ds.offset[0];
-      py = (node.pos[1] + domY) * scale + c.ds.offset[1];
+    // ── Trigger-word preview (mirrors the node's STRING output) ─────────────
+    let trigTimer = null;
+    function _refreshTriggers() {
+      clearTimeout(trigTimer);
+      trigTimer = setTimeout(async () => {
+        const names = [...new Set(state.list.filter(l => l.enabled && l.name).map(l => l.name))];
+        const lists = await Promise.all(names.map(getTriggersFor));
+        const words = [...new Set(lists.flat())];
+        trigEl.textContent = words.length ? `trigger: ${words.join(", ")}` : "trigger: —";
+        trigEl.title = words.join(", ") || "No trigger words";
+      }, 150);
     }
 
-    overlay.style.display   = "";
-    overlay.style.transform = `translate(${px / dpr + rect.left}px, ${py / dpr + rect.top}px) scale(${scale / dpr})`;
-    overlay.style.width     = Math.max(200, node.size[0] - 12) + "px";
-    overlay.style.height    = Math.max(120, node.size[1] - domY - 14) + "px";  // keep resize corner free
+    // ── Canvas body: CWK palette + size clamps ──────────────────────────────
+    const prevOnDrawBackground = node.onDrawBackground;
+    node.onDrawBackground = function (ctx) {
+      try {
+        prevOnDrawBackground?.apply(this, arguments);
+        if (this.flags?.collapsed) return;
+        const { titleH, domY } = metrics();
+        const minW = 440, minH = domY + 180;
+        if (this.size[0] < minW) this.size[0] = minW;
+        if (this.size[1] < minH) this.size[1] = minH;
+
+        ctx.save();
+        ctx.fillStyle = COLORS.body;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2, 10);
+        else               ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
+        ctx.fill();
+        ctx.strokeStyle = COLORS.border;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      } catch (e) {
+        console.error("[CWK LoRA] draw error:", e);
+      }
+    };
+
+    // ── Overlay positioning loop ────────────────────────────────────────────
+    // Notes:
+    //  * always re-schedules first, so a thrown error can never kill the loop;
+    //  * never self-destructs when node.graph is still null (onNodeCreated can
+    //    fire before the node is attached to the graph) — it just waits hidden;
+    //  * cleanup happens via __cwkLoraDestroy (onNodeRemoved) or, as a safety
+    //    net, after DETACH_GRACE_FRAMES consecutive detached frames;
+    //  * shows with display:"block" — an inline value is the only thing that
+    //    beats the class rule `display:none` in the stylesheet.
+    function _tick() {
+      if (state.destroyed) return;
+      rafId = requestAnimationFrame(_tick);
+      try {
+        if (node.graph == null) {
+          detachFrames++;
+          if (detachFrames > DETACH_GRACE_FRAMES) {
+            state.destroyed = true;
+            cancelAnimationFrame(rafId);
+            overlay.remove();
+            return;
+          }
+          overlay.style.display = "none";
+          return;
+        }
+        detachFrames = 0;
+
+        const c = app.canvas;
+        if (!c?.canvas || !c.ds) { overlay.style.display = "none"; return; }
+        if (node.flags?.collapsed) { overlay.style.display = "none"; return; }
+        const scale = c.ds.scale;
+        if (!scale || scale < ZOOM_HIDE) { overlay.style.display = "none"; return; }
+
+        const { domY } = metrics();
+        const canvas = c.canvas;
+        const rect   = canvas.getBoundingClientRect();
+        const dpr    = rect.width > 0 ? canvas.width / rect.width : 1;
+
+        let px, py;
+        if (typeof c.ds.convertOffsetToCanvas === "function") {
+          const p = c.ds.convertOffsetToCanvas([node.pos[0], node.pos[1] + domY]);
+          px = p[0]; py = p[1];
+        } else {
+          px = node.pos[0] * scale + c.ds.offset[0];
+          py = (node.pos[1] + domY) * scale + c.ds.offset[1];
+        }
+
+        overlay.style.display   = "block";
+        overlay.style.transform =
+          `translate(${(px / dpr + rect.left).toFixed(2)}px, ${(py / dpr + rect.top).toFixed(2)}px)` +
+          ` scale(${(scale / dpr).toFixed(4)})`;
+        overlay.style.width  = Math.max(200, node.size[0] - 12) + "px";
+        overlay.style.height = Math.max(120, node.size[1] - domY - 14) + "px";  // keep resize corner free
+
+        if (!announced) {
+          announced = true;
+          console.log("[CWK LoRA] Node UI active — overlay is tracking the node.");
+        }
+      } catch (e) {
+        overlay.style.display = "none";
+      }
+    }
+    rafId = requestAnimationFrame(_tick);
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    node.__cwkLoraApplyJson = _applyJson;
+    node.__cwkLoraDestroy   = () => {
+      state.destroyed = true;
+      cancelAnimationFrame(rafId);
+      overlay?.remove();
+    };
+
+    node.size = [Math.max(node.size?.[0] ?? 0, 470), Math.max(node.size?.[1] ?? 0, 380)];
+    _applyJson(String(cfgWidget?.value ?? "[]"));
+
+    // Hide the raw JSON widget LAST: if anything above had thrown, the widget
+    // would still be visible and the node usable (see the catch below).
+    _hideJsonWidget();
+    // Some frontends build widgets slightly after onNodeCreated — hide again
+    // once, idempotently:
+    setTimeout(_hideJsonWidget, 800);
+
+  } catch (e) {
+    console.error("[CWK LoRA] Node UI setup failed — keeping the raw JSON widget visible:", e);
+    try { overlay?.remove(); } catch {}
   }
-  rafId = requestAnimationFrame(_tick);
-
-  // ── Init ───────────────────────────────────────────────────────────────────
-  node.__cwkLoraApplyJson = _applyJson;
-  node.__cwkLoraDestroy   = () => {
-    state.destroyed = true;
-    cancelAnimationFrame(rafId);
-    overlay.remove();
-  };
-
-  node.size = [Math.max(node.size?.[0] ?? 0, 470), Math.max(node.size?.[1] ?? 0, 380)];
-  _applyJson(String(cfgWidget?.value ?? "[]"));
 }

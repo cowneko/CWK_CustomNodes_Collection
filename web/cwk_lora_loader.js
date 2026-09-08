@@ -2,10 +2,14 @@
  * CWK LoRA Loader — frontend node extension.
  *
  * The node body is painted on the canvas (CWK palette) via onDrawBackground,
- * and the interactive list is a DOM overlay. The overlay's position/scale are
- * derived from the exact transform ComfyUI used while drawing the node
- * (captured via ctx.getTransform() inside onDrawBackground), so it always
- * matches the canvas rendering — same technique as ComfyUI's own DOM widgets.
+ * and the interactive list is a DOM overlay positioned from the exact canvas
+ * transform captured while drawing the node.
+ *
+ * The native "lora_config" widget is intentionally kept in a NORMAL (never
+ * hidden) state: hidden widgets can be excluded from the queue prompt by
+ * newer frontends, which would stop the LoRA list from reaching Python.
+ * It reserves ~160px below the connection dots — the exact area covered by
+ * the DOM overlay — so it is functional for serialisation but invisible.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -20,6 +24,7 @@ const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 const COLORS = { body: "#141824", border: "#2a2f45" };
 const ZOOM_HIDE = 0.35;              // hide overlay below this zoom level
 const DETACH_GRACE_FRAMES = 600;     // ~10 s detached → assume node was deleted
+const WIDGET_SLOT_H = 160;           // canvas space reserved for the covered widget
 
 function _fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
@@ -111,16 +116,18 @@ function _setupLoraNode(node) {
     const titleH = LG.NODE_TITLE_HEIGHT || 30;
     const slotH  = LG.NODE_SLOT_HEIGHT  || 20;
     const rows   = Math.max(node.inputs?.length ?? 0, node.outputs?.length ?? 0, 1);
-    return { titleH, domY: titleH + rows * slotH + 12 };
+    // +4 aligns the overlay with the native widget row start (which it covers)
+    return { titleH, domY: titleH + rows * slotH + 4 };
   };
 
-  function _hideJsonWidget() {
+  function _prepareJsonWidget() {
     cfgWidget = cfgWidget || node.widgets?.find(w => w.name === "lora_config") || null;
-    if (cfgWidget) {
-      cfgWidget.hidden = true;
-      cfgWidget.computeSize = () => [0, -4];
-      cfgWidget.serializeValue = () => JSON.stringify(state.list);
-    }
+    if (!cfgWidget) return;
+    // NOT hidden: hidden widgets can be dropped from the queue prompt by
+    // newer frontends. It stays a plain serialisable widget, and the DOM
+    // overlay covers its 160px slot so it is never seen or clicked.
+    cfgWidget.computeSize = (w) => [w || 0, WIDGET_SLOT_H];
+    cfgWidget.serializeValue = () => JSON.stringify(state.list);
   }
 
   function _markDirty() {
@@ -379,9 +386,6 @@ function _setupLoraNode(node) {
     };
 
     // ── Overlay positioning loop ────────────────────────────────────────────
-    // Uses the captured ctx matrix (buffer pixels) and converts it to CSS
-    // pixels via rect/canvas-size — that ratio is exactly the devicePixelRatio
-    // correction, whatever the frontend does internally.
     const PAD = 6;   // horizontal inset of the widget inside the node body
     function _tick() {
       if (state.destroyed) return;
@@ -456,14 +460,11 @@ function _setupLoraNode(node) {
     };
 
     node.size = [Math.max(node.size?.[0] ?? 0, 470), Math.max(node.size?.[1] ?? 0, 380)];
+    _prepareJsonWidget();
     _applyJson(String(cfgWidget?.value ?? "[]"));
-
-    // Hide the raw JSON widget LAST: if anything above had thrown, the widget
-    // would still be visible and the node usable (see the catch below).
-    _hideJsonWidget();
-    // Some frontends build widgets slightly after onNodeCreated — hide again
-    // once, idempotently:
-    setTimeout(_hideJsonWidget, 800);
+    // Some frontends build widgets slightly after onNodeCreated — apply once
+    // more, idempotently:
+    setTimeout(_prepareJsonWidget, 800);
 
   } catch (e) {
     console.error("[CWK LoRA] Node UI setup failed — keeping the raw JSON widget visible:", e);

@@ -36,7 +36,9 @@ import { app } from "../../scripts/app.js";
 import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
   from "./cwk_lora_panel.js";
 
-const LORA_NODES = ["CWK_LorA_Loader"];
+const LORA_NODES  = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
+const LEGACY_NAME = "CWK_LorA_Prompt_Loader";   // old saved workflows
+const CANON_NAME  = "CWK_LorA_Loader";          // the one registered node
 
 const COLORS = {
   title:  "#141824",   // title bar (node.color) — the strip at the very top
@@ -89,6 +91,32 @@ function _ensureDomWidgetHiddenStyle() {
 
 app.registerExtension({
   name: "CWK.LoraLoader",
+
+  app.registerExtension({
+  name: "CWK.LoraLoader",
+
+  init() {
+    // Legacy compat without a duplicate menu entry: the alias is no longer a
+    // registered node; workflows saved with the old name are rewritten to the
+    // canonical name right before the graph is configured.
+    const orig = app.loadGraphData;
+    if (typeof orig !== "function") return;
+    app.loadGraphData = function (data, ...rest) {
+      try {
+        if (Array.isArray(data?.nodes)) {
+          for (const n of data.nodes) {
+            if (n?.type === LEGACY_NAME) n.type = CANON_NAME;
+          }
+        }
+      } catch {}
+      return orig.apply(this, [data, ...rest]);
+    };
+  },
+
+  async beforeRegisterNodeDef(nodeType, nodeData) {
+    // …unchanged…
+  },
+});
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (!LORA_NODES.includes(nodeData?.name)) return;

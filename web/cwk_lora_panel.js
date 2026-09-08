@@ -201,7 +201,7 @@ export function injectLoraStyles() {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
       background:#141824;
-      border:none; border-radius:8px;
+      border:1px solid #2a2f45; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
       user-select:none;
     }

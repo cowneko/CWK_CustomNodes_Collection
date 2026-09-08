@@ -713,10 +713,8 @@ class CWK_LoraLoader:
 NODE_CLASS_MAPPINGS_LORA = {
     "CWK_LorA_Loader": CWK_LoraLoader,
     # legacy alias so workflows saved with the old name keep loading
-    "CWK_LorA_Prompt_Loader": CWK_LoraLoader,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS_LORA = {
     "CWK_LorA_Loader": "CWK LoRA Loader",
-    "CWK_LorA_Prompt_Loader": "CWK LoRA Loader",
 }

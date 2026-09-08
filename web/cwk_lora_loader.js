@@ -39,8 +39,8 @@ import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
 const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 
 const COLORS = {
-  title:  "#1A1F2E",   // title bar (node.color) — the strip at the very top
-  body:   "#141824",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
+  title:  "#141824",   // title bar (node.color) — the strip at the very top
+  body:   "#1A1F2E",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
   accent: "#89b4fa",   // reference only — nothing on the canvas is drawn with it
 };
 

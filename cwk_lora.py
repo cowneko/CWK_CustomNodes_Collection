@@ -653,6 +653,11 @@ class CWK_LoraLoader:
         triggers: List[str] = []
         applied:  List[str] = []
 
+        if not entries:
+            raw = lora_config if isinstance(lora_config, str) else json.dumps(lora_config)
+            print(f"[CWK LoRA] ⚠ lora_config is empty — model/clip pass through "
+                  f"(received: {raw[:200]!r})")
+      
         for e in entries:
             if not e["enabled"]:
                 continue

@@ -7,25 +7,28 @@
  *   onConfigure so old workflows can't restore grey defaults.
  * - The body is painted flat in onDrawBackground (fill only — no stroke, no
  *   accent line) and the interactive list is a DOM overlay positioned from
- *   the exact canvas transform captured while drawing the node. The overlay
- *   CSS (cwk_lora_panel.js → injectLoraStyles) uses the same background
- *   color and no border, so overlay and canvas merge seamlessly.
+ *   the exact canvas transform captured while drawing the node.
  *
  * The native "lora_config" widget stays a fully serialisable, *normal* widget
  * (never hidden — hidden widgets can be dropped from the queue prompt by
- * newer frontends) but renders nothing and takes no layout space:
+ *   newer frontends) but renders nothing and takes no layout space:
  *   - canvas side:  draw = noop, computeSize = [0, -4]
  *   - DOM side:     multiline STRING widgets are real elements positioned over
  *                   the canvas; the element is hidden via the
  *                   .cwk-lora-dom-hidden { display:none !important } rule
- *                   from injectLoraStyles (!important beats the inline styles
- *                   the frontend re-applies to DOM widgets every frame).
+ *                   from injectLoraStyles.
+ *
+ * Ghost / imprint prevention: a node's own "graph" reference can go stale
+ * (ComfyUI abandons node instances when switching workflow tabs or loading
+ * workflows, sometimes without clearing node.graph). Visibility therefore
+ * depends on the *graph's* node list: the overlay shows only while the node
+ * is actually contained in the graph the canvas is currently drawing.
+ * Hidden overlays park their rAF loop after a grace period (onDrawBackground
+ * re-arms it), and fully detached nodes are destroyed after the same grace.
  *
  * Minimum node size (MIN_W × dots + MIN_H_EXTRA) is enforced at every layer:
- * onResize (fires while the user drags the resize handle), computeSize
- * (auto-fit paths), onDrawBackground and the rAF positioning loop. The rAF
- * loop also hides the overlay when the node's graph is not the one on the
- * canvas (workflow-tab switch) and when the node is detached.
+ * onResize (resize drags), computeSize (auto-fit paths), onDrawBackground and
+ * the rAF positioning loop.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -45,7 +48,7 @@ const COLORS = {
 };
 
 const ZOOM_HIDE           = 0.35;   // hide overlay below this zoom level
-const DETACH_GRACE_FRAMES = 600;    // ~10 s detached → assume node was deleted
+const PARK_FRAMES         = 600;    // ~10 s hidden → park the loop / destroy if detached
 const MIN_W               = 440;    // minimum node width (canvas space)
 const MIN_H_EXTRA         = 180;    // minimum body height below the dots
 const ROUND_R             = 8;      // body corner radius (matches ComfyUI's)
@@ -81,10 +84,9 @@ app.registerExtension({
   name: "CWK.LoraLoader",
 
   init() {
-    // OPTIONAL legacy compat: the alias node is no longer registered, so
-    // workflows saved with the old name are rewritten to the canonical one
-    // right before the graph is configured. Delete this whole init() block
-    // if you no longer have workflows saved as "CWK_LorA_Prompt_Loader".
+    // OPTIONAL legacy compat: workflows saved with the old node name are
+    // rewritten to the canonical one before the graph is configured. Delete
+    // this whole init() block if you no longer have such workflows.
     const orig = app.loadGraphData;
     if (typeof orig !== "function") return;
     app.loadGraphData = function (data, ...rest) {
@@ -135,9 +137,19 @@ app.registerExtension({
       return r;
     };
 
+    // ComfyUI's removal hook…
     const onNodeRemoved = nodeType.prototype.onNodeRemoved;
     nodeType.prototype.onNodeRemoved = function () {
       const r = onNodeRemoved?.apply(this, arguments);
+      try { this.__cwkLoraDestroy?.(); } catch {}
+      return r;
+    };
+
+    // …and litegraph's native one (graph.remove / graph.clear) — so nodes
+    // dropped during workflow loads clean up immediately.
+    const onRemoved = nodeType.prototype.onRemoved;
+    nodeType.prototype.onRemoved = function () {
+      const r = onRemoved?.apply(this, arguments);
       try { this.__cwkLoraDestroy?.(); } catch {}
       return r;
     };
@@ -148,12 +160,10 @@ app.registerExtension({
 
 function _setupLoraNode(node) {
   const state = { list: [], destroyed: false };
-  let lastJson      = null;
-  let detachFrames  = 0;
-  let announced     = false;
-  let rafId         = 0;
-  let overlay       = null;
-  let ctxTransform  = null;   // exact canvas matrix captured while drawing the node
+  let lastJson     = null;
+  let announced    = false;
+  let overlay      = null;
+  let ctxTransform = null;   // exact canvas matrix captured while drawing the node
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
@@ -180,8 +190,7 @@ function _setupLoraNode(node) {
   node.__cwkClampSize = _clampSize;
 
   // Called by litegraph *while the user drags the resize handle* — clamping
-  // here means the canvas never renders a frame below the minimum, so
-  // ComfyUI's own selection outline always hugs the full node.
+  // here means the canvas never renders a frame below the minimum.
   const prevOnResize = node.onResize;
   node.onResize = function () {
     try { _clampSize(); } catch {}
@@ -451,6 +460,112 @@ function _setupLoraNode(node) {
       }, 150);
     }
 
+    // ── Overlay positioning loop ────────────────────────────────────────────
+    const PAD = 6;                 // horizontal inset of the widget inside the node body
+    let hiddenFrames = 0;          // consecutive frames the overlay stayed hidden
+    let rafActive   = false;
+
+    function _startLoop() {
+      if (state.destroyed || rafActive) return;
+      rafActive = true;
+      rafId     = requestAnimationFrame(_tick);
+    }
+    let rafId = 0;
+    function _stopLoop() {
+      rafActive = false;
+      cancelAnimationFrame(rafId);
+    }
+
+    function _hide() {
+      overlay.style.display = "none";
+      hiddenFrames++;
+    }
+
+    function _tick() {
+      if (state.destroyed) { _stopLoop(); return; }
+      rafId = requestAnimationFrame(_tick);
+      try {
+        _clampSize();
+        _hideNativeWidgetElement();
+
+        // Node not in any graph → it was deleted (possibly transiently during
+        // a workflow load). Hide now, destroy after the grace period.
+        if (node.graph == null) {
+          _hide();
+          if (hiddenFrames > PARK_FRAMES) {
+            state.destroyed = true;
+            _stopLoop();
+            overlay.remove();
+          }
+          return;
+        }
+
+        // ── Ghost detection ────────────────────────────────────────────────
+        // node.graph can go STALE: when ComfyUI switches tabs / loads a
+        // workflow, abandoned node instances sometimes keep a reference that
+        // still equals the canvas's graph object, so "node.graph != null"
+        // and identity checks alone let their overlays through (the
+        // "imprints"). The graph's own node list is the source of truth: if
+        // this node is not in it, it is not on the canvas → hide.
+        // Inactive tabs keep their graphs alive in the background — the
+        // overlay is re-armed automatically if the node is drawn again later.
+        const activeGraph = app.canvas?.graph ?? app.graph;
+        const inGraph = !!activeGraph
+          && (activeGraph._nodes_in_order?.includes(node)
+           || activeGraph._nodes?.includes(node));
+        if (node.graph !== activeGraph || !inGraph) {
+          _hide();
+          ctxTransform = null;                       // require a fresh draw
+          if (hiddenFrames > PARK_FRAMES) _stopLoop(); // park; re-armed on draw
+          return;
+        }
+
+        if (node.flags?.collapsed || !ctxTransform) {
+          _hide();
+          return;
+        }
+
+        const canvasEl = app.canvas?.canvas;
+        if (!canvasEl) { _hide(); return; }
+        const rect = canvasEl.getBoundingClientRect();
+        if (!rect.width || !rect.height) { _hide(); return; }
+
+        // buffer px → CSS px (handles devicePixelRatio / styled canvases)
+        const kx = rect.width  / (canvasEl.width  || 1);
+        const ky = rect.height / (canvasEl.height || 1);
+
+        const m    = ctxTransform;
+        const zoom = m.a * kx;
+        if (!(zoom > ZOOM_HIDE)) { _hide(); return; }
+
+        const { domY } = metrics();
+        // node-local (PAD, domY) → screen coordinates
+        const x = (m.e + m.a * PAD) * kx + rect.left;
+        const y = (m.f + m.d * domY) * ky + rect.top;
+
+        // hide when the node is outside the canvas viewport
+        const w = node.size[0] * zoom, h = node.size[1] * zoom;
+        if (x + w < rect.left || x > rect.right || y + h < rect.top || y > rect.bottom) {
+          _hide();
+          return;
+        }
+
+        hiddenFrames = 0;
+        overlay.style.display   = "block";
+        overlay.style.transform =
+          `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${zoom.toFixed(4)})`;
+        overlay.style.width     = Math.max(200, node.size[0] - 2 * PAD) + "px";
+        overlay.style.height    = Math.max(120, node.size[1] - domY - 14) + "px"; // keep resize corner free
+
+        if (!announced) {
+          announced = true;
+          console.log("[CWK LoRA] Node UI active — overlay is tracking the node.");
+        }
+      } catch (e) {
+        _hide();
+      }
+    }
+
     // ── Canvas body: flat CWK paint + transform capture ──────────────────────
     const prevOnDrawBackground = node.onDrawBackground;
     node.onDrawBackground = function (ctx) {
@@ -460,6 +575,10 @@ function _setupLoraNode(node) {
         // pan/zoom + node position all included). The overlay is positioned
         // from it every frame, so it can never drift from the canvas.
         if (ctx.getTransform) ctxTransform = ctx.getTransform();
+
+        // The node is being drawn right now → (re-)arm the positioning loop
+        // (it parks itself while the overlay stays hidden for a long time).
+        _startLoop();
 
         if (this.flags?.collapsed) return;
         this.__cwkClampSize?.();   // backstop (onResize/_tick normally handle it)
@@ -474,98 +593,20 @@ function _setupLoraNode(node) {
           ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
         ctx.fill();
         // Intentionally NO stroke / accent line — the node outline is
-        // ComfyUI's own border, and a stray stroke re-uses the last context
-        // color if the strokeStyle assignment is ever invalid.
+        // ComfyUI's own border.
         ctx.restore();
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);
       }
     };
 
-    // ── Overlay positioning loop ────────────────────────────────────────────
-    const PAD = 6;   // horizontal inset of the widget inside the node body
-    function _tick() {
-      if (state.destroyed) return;
-      rafId = requestAnimationFrame(_tick);
-      try {
-        _clampSize();                 // enforce min size even when not drawn
-        _hideNativeWidgetElement();   // element can be (re)created late
-
-        if (node.graph == null) {
-          detachFrames++;
-          if (detachFrames > DETACH_GRACE_FRAMES) {
-            state.destroyed = true;
-            cancelAnimationFrame(rafId);
-            overlay.remove();
-            return;
-          }
-          overlay.style.display = "none";
-          return;
-        }
-        detachFrames = 0;
-
-        // Workflow-tab switch: the old tab's graph (and its nodes) stay alive
-        // in the background, so node.graph stays non-null. Without this check
-        // the overlay would sit frozen at its last screen position with a
-        // stale transform. Hide it and drop the transform so it only comes
-        // back after a fresh draw of the node (i.e. when its tab is active).
-        if (node.graph !== (app.canvas?.graph ?? app.graph)) {
-          overlay.style.display = "none";
-          ctxTransform = null;
-          return;
-        }
-
-        if (node.flags?.collapsed || !ctxTransform) {
-          overlay.style.display = "none";
-          return;
-        }
-
-        const canvasEl = app.canvas?.canvas;
-        if (!canvasEl) { overlay.style.display = "none"; return; }
-        const rect = canvasEl.getBoundingClientRect();
-        if (!rect.width || !rect.height) { overlay.style.display = "none"; return; }
-
-        // buffer px → CSS px (handles devicePixelRatio / styled canvases)
-        const kx = rect.width  / (canvasEl.width  || 1);
-        const ky = rect.height / (canvasEl.height || 1);
-
-        const m    = ctxTransform;
-        const zoom = m.a * kx;
-        if (!(zoom > ZOOM_HIDE)) { overlay.style.display = "none"; return; }
-
-        const { domY } = metrics();
-        // node-local (PAD, domY) → screen coordinates
-        const x = (m.e + m.a * PAD) * kx + rect.left;
-        const y = (m.f + m.d * domY) * ky + rect.top;
-
-        // hide when the node is outside the canvas viewport
-        const w = node.size[0] * zoom, h = node.size[1] * zoom;
-        if (x + w < rect.left || x > rect.right || y + h < rect.top || y > rect.bottom) {
-          overlay.style.display = "none";
-          return;
-        }
-
-        overlay.style.display   = "block";
-        overlay.style.transform =
-          `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${zoom.toFixed(4)})`;
-        overlay.style.width     = Math.max(200, node.size[0] - 2 * PAD) + "px";
-        overlay.style.height    = Math.max(120, node.size[1] - domY - 14) + "px"; // keep resize corner free
-
-        if (!announced) {
-          announced = true;
-          console.log("[CWK LoRA] Node UI active — overlay is tracking the node.");
-        }
-      } catch (e) {
-        overlay.style.display = "none";
-      }
-    }
-    rafId = requestAnimationFrame(_tick);
+    _startLoop();
 
     // ── Init ─────────────────────────────────────────────────────────────────
     node.__cwkLoraApplyJson = _applyJson;
     node.__cwkLoraDestroy   = () => {
       state.destroyed = true;
-      cancelAnimationFrame(rafId);
+      _stopLoop();
       overlay?.remove();
     };
 

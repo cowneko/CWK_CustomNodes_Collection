@@ -3,6 +3,9 @@
  * Pipeline companion for CWK_ModelLoader: sampler/scheduler/CFG/steps/clip-skip/
  * CLIP/VAE, auto-synced from the connected loader's stored preset, with
  * Reload/Edit/Update Presets buttons.
+ *
+ * NEW: "Name" row (always editable, even outside edit mode) — a free-form label
+ * cast through the infos output; CWK_Save_Image exposes it as the {name} tag.
  */
 
 import { app }          from "../../scripts/app.js";
@@ -29,28 +32,20 @@ const SLOT_H     = () => LiteGraph.NODE_SLOT_HEIGHT  ?? 20;
 const N_INPUTS   = 3;   // pipe + latent + model_override
 const N_OUTPUTS  = 10;  // pipe, model, clip, vae, latent, sampler, scheduler, cfg, steps, clip_skip, infos
 
-// ─── Colour palette (identical) ──────────────────────────────────────────────
+// ─── Colour palette ──────────────────────────────────────────────────────────
 
 const C = {
-  bg:         "#1a1f2e",
-  bgFull:     "#141824",
-  surface:    "#1e2335",
-  border:     "#313552",
-  text:       "#cdd6f4",
-  textDim:    "#6c7086",
-  textBlue:   "#89b4fa",
-  hoverBg:    "#2a2f45",
-  arrowHov:   "#89b4fa",
-  flashGreen: "#a6e3a1",
+  bg: "#1a1f2e", bgFull: "#141824", surface: "#1e2335", border: "#313552",
+  text: "#cdd6f4", textDim: "#6c7086", textBlue: "#89b4fa",
+  hoverBg: "#2a2f45", arrowHov: "#89b4fa", flashGreen: "#a6e3a1",
 };
 const NODE_COLOR   = "#141824";
 const NODE_BGCOLOR = "#1e2335";
-
 const BTN_COLOR = { border: "#313552", hoverBorder: "#a6e3a1", hoverText: "#a6e3a1" };
 
 // ─── Row definitions ──────────────────────────────────────────────────────────
 
-let SAMPLERS   = ["euler","euler_ancestral","dpmpp_2m","dpmpp_2m_sde","dpmpp_sde","ddim","uni_pc","lcm"];
+let SAMPLERS   = ["euler","euler_ancestral","dpmpp_2m","dpmpp_2m_sde","dpmpp_2_sde","ddim","uni_pc","lcm"];
 let SCHEDULERS = ["normal","karras","exponential","sgm_uniform","simple","beta"];
 let CLIPS      = ["embedded"];
 let CLIP_TYPES = ["stable_diffusion"];
@@ -59,28 +54,29 @@ let RNGS              = ["default", "cpu", "gpu", "nv"];
 let MODEL_SAMPLING_TYPES = ["default", "eps", "v_prediction", "lcm", "x0", "img_to_img"];
 const CLIP_SKIP_OPTIONS = ["Disabled", ...Array.from({ length: 24 }, (_, i) => String(-(i + 1)))];
 
-// Rows driven by the loaded preset. All are read-only unless node._cwkEditMode.
+// Rows driven by the loaded preset. Read-only unless node._cwkEditMode,
+// EXCEPT rows flagged always_edit (the Name label — user-set, not a preset).
 const PIPE_ROWS = [
-  { key: "sampler_name", label: "Sampler",   widget: "sampler_name", type: "list",  options: null },
-  { key: "scheduler",    label: "Scheduler", widget: "scheduler",    type: "list",  options: null },
-  { key: "cfg",          label: "CFG",       widget: "cfg",          type: "float", min: 0, max: 30  },
-  { key: "steps",        label: "Steps",     widget: "steps",        type: "int",   min: 1, max: 200 },
-  { key: "clip_skip",    label: "Clip skip", widget: "clip_skip",    type: "list",  options: CLIP_SKIP_OPTIONS },
-  { key: "clip_name",    label: "CLIP",      widget: "clip_name",    type: "list",  options: null },
-  { key: "clip_type",    label: "Clip Type", widget: "clip_type",    type: "list",  options: null },
-  { key: "vae_name",     label: "VAE",       widget: "vae_name",     type: "list",  options: null },
-  { key: "rng",            label: "RNG",            widget: "rng",            type: "list", options: RNGS },
-  { key: "model_sampling", label: "Model Sampling", widget: "model_sampling", type: "list", options: MODEL_SAMPLING_TYPES },
+  { key: "name",           label: "Name",           widget: "name",           type: "text",  always_edit: true },
+  { key: "sampler_name",   label: "Sampler",        widget: "sampler_name",   type: "list",  options: null },
+  { key: "scheduler",      label: "Scheduler",      widget: "scheduler",      type: "list",  options: null },
+  { key: "cfg",            label: "CFG",            widget: "cfg",            type: "float", min: 0, max: 30  },
+  { key: "steps",          label: "Steps",          widget: "steps",          type: "int",   min: 1, max: 200 },
+  { key: "clip_skip",      label: "Clip skip",      widget: "clip_skip",      type: "list",  options: CLIP_SKIP_OPTIONS },
+  { key: "clip_name",      label: "CLIP",           widget: "clip_name",      type: "list",  options: null },
+  { key: "clip_type",      label: "Clip Type",      widget: "clip_type",      type: "list",  options: null },
+  { key: "vae_name",       label: "VAE",            widget: "vae_name",       type: "list",  options: null },
+  { key: "rng",            label: "RNG",            widget: "rng",            type: "list",  options: RNGS },
+  { key: "model_sampling", label: "Model Sampling", widget: "model_sampling", type: "list",  options: MODEL_SAMPLING_TYPES },
 ];
 
-// Link options arrays (updated after async load)
 function _syncRowOptions() {
   PIPE_ROWS.find(r => r.key === "sampler_name").options = SAMPLERS;
   PIPE_ROWS.find(r => r.key === "scheduler").options    = SCHEDULERS;
   PIPE_ROWS.find(r => r.key === "clip_name").options    = CLIPS;
   PIPE_ROWS.find(r => r.key === "clip_type").options    = CLIP_TYPES;
   PIPE_ROWS.find(r => r.key === "vae_name").options     = VAES;
-  PIPE_ROWS.find(r => r.key === "rng").options            = RNGS;
+  PIPE_ROWS.find(r => r.key === "rng").options          = RNGS;
   PIPE_ROWS.find(r => r.key === "model_sampling").options = MODEL_SAMPLING_TYPES;
 }
 _syncRowOptions();
@@ -108,10 +104,7 @@ async function _loadPipeOptions() {
     console.warn("[CWK Pipe] Could not load sampler/scheduler/clip_type options:", e);
   }
   try {
-    const [clipRes, vaeRes] = await Promise.all([
-      fetch("/cwk/clips"),
-      fetch("/cwk/vaes"),
-    ]);
+    const [clipRes, vaeRes] = await Promise.all([fetch("/cwk/clips"), fetch("/cwk/vaes")]);
     if (clipRes.ok) {
       const { clips } = await clipRes.json();
       if (clips?.length) { CLIPS.length = 0; CLIPS.push(...clips); _syncRowOptions(); }
@@ -129,43 +122,32 @@ _loadPipeOptions();
 // ─── Layout helpers ───────────────────────────────────────────────────────────
 
 function getSlotsArea() {
-  // Enough vertical space for the taller of inputs vs outputs slot list
   const inputsH  = TITLE_H() + N_INPUTS  * SLOT_H() + 6;
   const outputsH = TITLE_H() + N_OUTPUTS * SLOT_H() + 6;
   return Math.max(inputsH, outputsH);
 }
-
-function getRowsStartY() {
-  return getSlotsArea() + PAD;
-}
-
+function getRowsStartY() { return getSlotsArea() + PAD; }
 function getRowY(i) {
   let y = getRowsStartY();
   for (let r = 0; r < i; r++) y += ROW_H + 3;
   return y;
 }
-
-function getStatusY(node) {
-  return node.size[1] - BTNS_AREA_H - STATUS_H / 2;
-}
-
+function getStatusY(node) { return node.size[1] - BTNS_AREA_H - STATUS_H / 2; }
 function getButtonRects(node) {
   const baseY  = node.size[1] - BTNS_AREA_H + BTN_PAD_V;
   const totalW = node.size[0] - PAD * 2;
   const btnW   = (totalW - BTN_GAP * 2) / 3;
   return [
-    { key: "reload", x: PAD,                        y: baseY, w: btnW, h: BTN_H },
-    { key: "edit",   x: PAD + (btnW + BTN_GAP),      y: baseY, w: btnW, h: BTN_H },
-    { key: "update", x: PAD + (btnW + BTN_GAP) * 2,  y: baseY, w: btnW, h: BTN_H },
+    { key: "reload", x: PAD,                       y: baseY, w: btnW, h: BTN_H },
+    { key: "edit",   x: PAD + (btnW + BTN_GAP),     y: baseY, w: btnW, h: BTN_H },
+    { key: "update", x: PAD + (btnW + BTN_GAP) * 2, y: baseY, w: btnW, h: BTN_H },
   ];
 }
-
 function getValueRect(node, i) {
   const ry = getRowY(i);
   const x  = PAD + LABEL_W;
   return { x, y: ry + 1, w: node.size[0] - x - PAD, h: ROW_H - 2 };
 }
-
 function calcNodeHeight() {
   let h = getRowsStartY();
   for (let i = 0; i < PIPE_ROWS.length; i++) h += ROW_H + 3;
@@ -182,17 +164,20 @@ function hitTestButton(node, lx, ly) {
 }
 
 function hitTestRow(node, lx, ly) {
-  if (!node._cwkEditMode) return null;
   for (let i = 0; i < PIPE_ROWS.length; i++) {
-    const ry  = getRowY(i);
-    if (ly < ry || ly > ry + ROW_H) continue;
-    const vr  = getValueRect(node, i);
     const row = PIPE_ROWS[i];
+    if (!(node._cwkEditMode || row.always_edit)) continue;   // Name is always editable
+    const ry = getRowY(i);
+    if (ly < ry || ly > ry + ROW_H) continue;
+    const vr = getValueRect(node, i);
     if (lx < PAD || lx > node.size[0] - PAD) return { rowIdx: i, part: null };
+    if (row.type === "text") {
+      return (lx >= vr.x && lx <= vr.x + vr.w) ? { rowIdx: i, part: "center" } : { rowIdx: i, part: null };
+    }
     if (row.type === "list") return { rowIdx: i, part: "center" };
     if (lx >= vr.x && lx <= vr.x + ARROW_W)               return { rowIdx: i, part: "left"   };
     if (lx >= vr.x + vr.w - ARROW_W && lx <= vr.x + vr.w) return { rowIdx: i, part: "right"  };
-    if (lx >= vr.x && lx <= vr.x + vr.w)                   return { rowIdx: i, part: "center" };
+    if (lx >= vr.x && lx <= vr.x + vr.w)                  return { rowIdx: i, part: "center" };
     return { rowIdx: i, part: null };
   }
   return null;
@@ -207,8 +192,7 @@ function _canvasToScreen(node, vr) {
   return {
     x: (node.pos[0] + vr.x) * zoom + off[0] * zoom + bbox.left,
     y: (node.pos[1] + vr.y) * zoom + off[1] * zoom + bbox.top,
-    w: vr.w * zoom,
-    h: vr.h * zoom,
+    w: vr.w * zoom, h: vr.h * zoom,
   };
 }
 
@@ -229,14 +213,14 @@ function clampValue(row, val) {
   return row.type === "float" ? parseFloat(v.toFixed(2)) : v;
 }
 
-// ─── Inline number editor ─────────────────────────────────────────────────────
+// ─── Inline editors (number + text) ───────────────────────────────────────────
 
 function closeInlineEditor() {
   document.getElementById("cwk-pipe-backdrop")?.remove();
   document.getElementById("cwk-pipe-editor")?.remove();
 }
 
-function openInlineNumberEditor(node, rowIdx, currentValue, onCommit) {
+function _openInlineInput(node, rowIdx, currentValue, onCommit, opts = {}) {
   closeInlineEditor(); closeDropdown();
   const row  = PIPE_ROWS[rowIdx];
   const vr   = getValueRect(node, rowIdx);
@@ -248,21 +232,22 @@ function openInlineNumberEditor(node, rowIdx, currentValue, onCommit) {
   Object.assign(backdrop.style, { position:"fixed", inset:"0", zIndex:"99998", background:"transparent" });
 
   const input = document.createElement("input");
-  input.id = "cwk-pipe-editor"; input.type = "text"; input.inputMode = "decimal";
+  input.id = "cwk-pipe-editor"; input.type = "text";
+  input.inputMode = opts.decimal ? "decimal" : "text";
   input.value = String(currentValue ?? "");
   Object.assign(input.style, {
     position:"fixed", left:sc.x+"px", top:sc.y+"px", width:sc.w+"px", height:sc.h+"px",
     fontSize:Math.max(11, Math.round(11*zoom))+"px", fontFamily:"Inter,system-ui,sans-serif",
     background:C.bgFull, color:C.text, border:`1px solid ${C.arrowHov}`,
     borderRadius:"3px", outline:"none", zIndex:"99999", padding:"0 6px",
-    textAlign:"center", boxSizing:"border-box",
+    textAlign: opts.decimal ? "center" : "left", boxSizing:"border-box",
   });
   _blockCanvasEvents(input); _blockCanvasEvents(backdrop);
   let committed = false;
   const commit = () => {
     if (committed) return; committed = true;
     const raw = input.value.trim(); closeInlineEditor();
-    if (raw !== "") onCommit(clampValue(row, raw));
+    if (raw !== "" || !opts.decimal) onCommit(opts.decimal ? clampValue(row, raw) : raw);
     app.canvas.setDirty(true, false);
   };
   const cancel = () => { if (committed) return; committed = true; closeInlineEditor(); app.canvas.setDirty(true, false); };
@@ -276,6 +261,13 @@ function openInlineNumberEditor(node, rowIdx, currentValue, onCommit) {
   backdrop.appendChild(input);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => { setTimeout(() => { input.focus(); input.select(); }, 0); });
+}
+
+function openInlineNumberEditor(node, rowIdx, currentValue, onCommit) {
+  _openInlineInput(node, rowIdx, currentValue, onCommit, { decimal: true });
+}
+function openInlineTextEditor(node, rowIdx, currentValue, onCommit) {
+  _openInlineInput(node, rowIdx, currentValue, onCommit, { decimal: false });
 }
 
 // ─── Dropdown ─────────────────────────────────────────────────────────────────
@@ -358,20 +350,13 @@ function applyRowValue(node, rowIdx, val) {
 function _findModelName(node, visited = new Set()) {
   if (!node || visited.has(node.id)) return null;
   visited.add(node.id);
-
-  // If this node directly carries a model name (CWK_ModelLoader), we're done
   if (node._cwkModelName) return node._cwkModelName;
-
-  // Otherwise look at its first input (slot 0 = pipe) and follow it upstream
   const pipeInput = node.inputs?.[0];
   if (!pipeInput) return null;
-
   const linkId = pipeInput.link;
   if (linkId == null) return null;
-
   const link = app.graph.links[linkId];
   if (!link) return null;
-
   const srcNode = app.graph.getNodeById(link.origin_id);
   return _findModelName(srcNode, visited);
 }
@@ -397,6 +382,7 @@ async function _fetchAndApplyPreset(node, modelName) {
     vae_name:     preset.vae_name,
     rng:            preset.rng ?? "default",
     model_sampling: preset.model_sampling ?? "default",
+    // NOTE: "name" is intentionally NOT part of presets (user-set label).
   };
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const val = map[PIPE_ROWS[i].key];
@@ -422,11 +408,11 @@ function _flashButton(node, label, color) {
   }, 1800);
 }
 
-// ─── "Reload Presets" — pull values from the upstream CWK_ModelLoader ─────────
+// ─── "Reload Presets" ─────────────────────────────────────────────────────────
 
 async function handleReloadPresets(node) {
   const modelName = _findModelName(node) ?? node._cwkLastModelName;
-  if (!modelName) { _flashButton(node, "⚠ No model found", C.red ?? "#e78284"); return; }
+  if (!modelName) { _flashButton(node, "⚠ No model found", "#e78284"); return; }
   node._cwkLastModelName = modelName;
 
   try {
@@ -445,7 +431,7 @@ async function _checkAutoSync(node) {
   const modelName = _findModelName(node);
   if (!modelName || modelName === node._cwkLastModelName) return;
   node._cwkLastModelName = modelName;
-  if (node._cwkEditMode) return; // don't clobber unsaved edits
+  if (node._cwkEditMode) return;
 
   try {
     await _fetchAndApplyPreset(node, modelName);
@@ -455,7 +441,7 @@ async function _checkAutoSync(node) {
   }
 }
 
-// ─── "Edit Presets" — toggle read-only rows on/off ────────────────────────────
+// ─── "Edit Presets" ───────────────────────────────────────────────────────────
 
 async function handleEditPresetsToggle(node) {
   if (!node._cwkEditMode) {
@@ -463,7 +449,6 @@ async function handleEditPresetsToggle(node) {
     _setStatus(node, null);
   } else {
     node._cwkEditMode = false;
-    // Cancelling edit mode discards unsaved changes: reload the stored preset.
     const modelName = _findModelName(node) ?? node._cwkLastModelName;
     if (modelName) {
       try {
@@ -477,7 +462,7 @@ async function handleEditPresetsToggle(node) {
   app.canvas.setDirty(true, false);
 }
 
-// ─── "Update Presets" — persist current row values to checkpoint_presets.json ─
+// ─── "Update Presets" ─────────────────────────────────────────────────────────
 
 async function handleUpdatePresets(node) {
   if (!node._cwkEditMode) { _flashButton(node, "⚠ Enter edit mode first", "#e5c07b"); return; }
@@ -520,9 +505,7 @@ async function handleUpdatePresets(node) {
 
 // ─── Draw ─────────────────────────────────────────────────────────────────────
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
-}
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 
 function drawNode(node, ctx) {
   const w         = node.size[0];
@@ -546,16 +529,18 @@ function drawNode(node, ctx) {
   const divY = getRowsStartY() - PAD / 2;
   ctx.moveTo(PAD, divY); ctx.lineTo(w - PAD, divY); ctx.stroke();
 
-  // ── Rows (read-only unless in edit mode) ──
+  // ── Rows ──
   for (let i = 0; i < PIPE_ROWS.length; i++) {
     const row     = PIPE_ROWS[i];
     const ry      = getRowY(i);
     const vr      = getValueRect(node, i);
-    const val     = vals[row.key] ?? (row.options ? row.options[0] : (row.type === "float" ? 7.0 : 1));
-    const isHov   = editMode && hover?.rowIdx === i;
+    const val     = vals[row.key]
+                  ?? (row.type === "text" ? "" : (row.options ? row.options[0] : (row.type === "float" ? 7.0 : 1)));
+    const rowEditable = editMode || !!row.always_edit;
+    const isHov   = rowEditable && hover?.rowIdx === i;
     const hovPart = isHov ? hover.part : null;
 
-    if (isHov) {
+    if (isHov && row.type !== "text") {
       roundRect(ctx, PAD, ry, w - PAD*2, ROW_H, 3);
       ctx.fillStyle = C.hoverBg; ctx.fill();
     }
@@ -565,11 +550,21 @@ function drawNode(node, ctx) {
     ctx.fillText(row.label, PAD + 4, ry + ROW_H/2);
     // Value box
     roundRect(ctx, vr.x, vr.y, vr.w, vr.h, 4);
-    ctx.fillStyle   = editMode ? C.surface : C.bg;
+    ctx.fillStyle   = rowEditable ? C.surface : C.bg;
     ctx.strokeStyle = isHov ? C.border : "transparent";
     ctx.lineWidth = 1; ctx.fill(); if (isHov) ctx.stroke();
-    // Value content
-    if (row.type === "list") {
+
+    if (row.type === "text") {
+      // Name row — free text, always editable
+      ctx.fillStyle = C.text;
+      ctx.font = "11px Inter,system-ui,sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(String(val), vr.x + 6, ry + ROW_H/2, vr.w - 18);
+      if (isHov) {
+        ctx.fillStyle = C.textDim; ctx.font = "10px sans-serif"; ctx.textAlign = "right";
+        ctx.fillText("✎", vr.x + vr.w - 6, ry + ROW_H/2);
+      }
+    } else if (row.type === "list") {
       if (editMode) {
         ctx.fillStyle = isHov ? C.arrowHov : C.textDim;
         ctx.font = "9px sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
@@ -593,7 +588,7 @@ function drawNode(node, ctx) {
     }
   }
 
-  // ── Status line (persistent "Model preset loaded" / transient flash) ──
+  // ── Status line ──
   const flashActive = !!node._cwkFlash;
   const statusText  = flashActive ? node._cwkFlashLabel : (node._cwkStatus?.text ?? null);
   const statusColor = flashActive ? (node._cwkFlashColor ?? C.flashGreen) : (node._cwkStatus?.color ?? C.flashGreen);
@@ -650,14 +645,15 @@ app.registerExtension({
       node._cwkStatus       = null;
       node._cwkPreset       = null;
       node._cwkValues       = {
-        sampler_name: "euler",
-        scheduler:    "normal",
-        cfg:          7.0,
-        steps:        20,
-        clip_skip:    "-2",
-        clip_name:    "embedded",
-        clip_type:    "stable_diffusion",
-        vae_name:     "embedded",
+        name:           "",
+        sampler_name:   "euler",
+        scheduler:      "normal",
+        cfg:            7.0,
+        steps:          20,
+        clip_skip:      "-2",
+        clip_name:      "embedded",
+        clip_type:      "stable_diffusion",
+        vae_name:       "embedded",
         rng:            "default",
         model_sampling: "default",
       };
@@ -670,16 +666,36 @@ app.registerExtension({
           w.type = "hidden"; w.hidden = true;
           w.computeSize = () => [0, -4];
         }
-        // Set default widget values
+        // Set default widget values (name: keep any value restored from the workflow)
         const getW = name => node.widgets?.find(w => w.name === name);
-        const sv = getW("sampler_name"); if (sv) sv.value = "euler";
-        const sc = getW("scheduler");    if (sc) sc.value = "normal";
-        const cv = getW("cfg");          if (cv) cv.value = 7.0;
-        const st = getW("steps");        if (st) st.value = 20;
-        const cs = getW("clip_skip");    if (cs) cs.value = "-2";
-        const cn = getW("clip_name");    if (cn) cn.value = "embedded";
-        const vn = getW("vae_name");     if (vn) vn.value = "embedded";
-        const ct = getW("clip_type");    if (ct) ct.value = "stable_diffusion";
+        // "Name": keep the value restored from the workflow; if empty (fresh
+        // node), restore the last name used (persisted server-side).
+        const nmW = getW("name");
+        const nmVal = String(nmW?.value ?? "").trim();
+        if (nmVal) {
+          node._cwkValues.name = nmVal;
+        } else if (nmW) {
+          nmW.value = "";
+          fetch("/cwk/pipe/last_name")
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+              const last = String(d?.name ?? "").trim();
+              if (last) {
+                nmW.value = last;
+                node._cwkValues.name = last;
+                app.canvas.setDirty(true, false);
+              }
+            })
+            .catch(() => {});
+        }
+        const sv = getW("sampler_name");   if (sv) sv.value = "euler";
+        const sc = getW("scheduler");      if (sc) sc.value = "normal";
+        const cv = getW("cfg");            if (cv) cv.value = 7.0;
+        const st = getW("steps");          if (st) st.value = 20;
+        const cs = getW("clip_skip");      if (cs) cs.value = "-2";
+        const cn = getW("clip_name");      if (cn) cn.value = "embedded";
+        const vn = getW("vae_name");       if (vn) vn.value = "embedded";
+        const ct = getW("clip_type");      if (ct) ct.value = "stable_diffusion";
         const rg = getW("rng");            if (rg) rg.value = "default";
         const ms = getW("model_sampling"); if (ms) ms.value = "default";
 
@@ -688,9 +704,6 @@ app.registerExtension({
         app.canvas.setDirty(true, true);
       }, 0);
 
-      // Poll for upstream model changes and auto-sync the preset (unless editing).
-      // Also react immediately whenever any node finishes executing (e.g. the
-      // upstream CWK_ModelLoader loading a new model).
       node._cwkAutoSyncInterval = setInterval(() => _checkAutoSync(node), 500);
       const onExecuted = () => _checkAutoSync(node);
       api.addEventListener("executed", onExecuted);
@@ -702,9 +715,9 @@ app.registerExtension({
       };
 
       node.onDrawForeground = function (ctx) {
-		if (this.flags?.collapsed) return;
-		drawNode(this, ctx);
-	  };
+        if (this.flags?.collapsed) return;
+        drawNode(this, ctx);
+      };
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
@@ -717,14 +730,17 @@ app.registerExtension({
         if (btnKey === "edit")   { handleEditPresetsToggle(node); return true; }
         if (btnKey === "update") { handleUpdatePresets(node); return true; }
 
-        if (!node._cwkEditMode) return false; // rows are read-only outside edit mode
-
+        // hitTestRow only returns rows that are editable (edit mode or always_edit)
         const hit = hitTestRow(this, pos[0], pos[1]);
         if (!hit || hit.part === null) return false;
         const { rowIdx, part } = hit;
         const row = PIPE_ROWS[rowIdx];
         const cur = node._cwkValues?.[row.key];
 
+        if (row.type === "text") {
+          openInlineTextEditor(node, rowIdx, cur, val => applyRowValue(node, rowIdx, val));
+          return true;
+        }
         if (row.type === "list") {
           openDropdown(node, rowIdx, cur, val => applyRowValue(node, rowIdx, val));
           return true;
@@ -743,6 +759,26 @@ app.registerExtension({
         return false;
       };
 
+       function applyRowValue(node, rowIdx, val) {
+  const row = PIPE_ROWS[rowIdx];
+  if (!node._cwkValues) node._cwkValues = {};
+  node._cwkValues[row.key] = val;
+  const w = node.widgets?.find(w => w.name === row.widget);
+  if (w) { w.value = val; w.callback?.(val); }
+  // persist the last "Name" used (fire-and-forget)
+  if (row.key === "name") {
+    const n = String(val ?? "").trim();
+    if (n) {
+      fetch("/cwk/pipe/last_name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: n }),
+      }).catch(() => {});
+    }
+  }
+  app.canvas.setDirty(true, false);
+}  
+      
       node.onMouseMove = function (e, pos) {
         const btnKey = hitTestButton(this, pos[0], pos[1]);
         if (btnKey) {
@@ -751,7 +787,7 @@ app.registerExtension({
           }
           return;
         }
-        const hit    = node._cwkEditMode ? hitTestRow(this, pos[0], pos[1]) : null;
+        const hit    = hitTestRow(this, pos[0], pos[1]);
         const newHov = hit ? { rowIdx: hit.rowIdx, part: hit.part } : null;
         if (JSON.stringify(node._cwkHover) !== JSON.stringify(newHov)) {
           node._cwkHover = newHov; app.canvas.setDirty(true, false);

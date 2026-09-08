@@ -2,31 +2,30 @@
  * CWK LoRA Loader — frontend node extension.
  *
  * Theming:
- * - Title bar and node background come from node.color / node.bgcolor — the
- *   same mechanism ComfyUI's right-click "Colors" menu uses. No grey remains,
- *   including the collapsed title strip and zoom levels where the DOM overlay
- *   is hidden.
- * - The body is painted flat in onDrawBackground (no border, no accent line —
- *   the removed ctx.stroke() was what drew the phantom accent outline), and
- *   the interactive list is a DOM overlay positioned from the exact canvas
- *   transform captured while drawing.
+ * - Title bar / node background come from node.color / node.bgcolor (the same
+ *   mechanism ComfyUI's "Colors" menu uses); they are re-asserted in
+ *   onConfigure so old workflows can't restore grey defaults.
+ * - The body is painted flat in onDrawBackground (fill only — no stroke, no
+ *   accent line) and the interactive list is a DOM overlay positioned from
+ *   the exact canvas transform captured while drawing the node. The overlay
+ *   CSS (cwk_lora_panel.js → injectLoraStyles) uses the same background
+ *   color and no border, so overlay and canvas merge seamlessly.
  *
  * The native "lora_config" widget stays a fully serialisable, *normal* widget
  * (never hidden — hidden widgets can be dropped from the queue prompt by
  * newer frontends) but renders nothing and takes no layout space:
  *   - canvas side:  draw = noop, computeSize = [0, -4]
  *   - DOM side:     multiline STRING widgets are real elements positioned over
- *                   the canvas; the element is hidden via a
- *                   .cwk-lora-dom-hidden { display:none !important } class
- *                   (!important beats the inline styles the frontend
- *                   re-applies to DOM widgets every frame)
- * The DOM overlay *is* the widget's UI.
+ *                   the canvas; the element is hidden via the
+ *                   .cwk-lora-dom-hidden { display:none !important } rule
+ *                   from injectLoraStyles (!important beats the inline styles
+ *                   the frontend re-applies to DOM widgets every frame).
  *
- * Minimum node size (MIN_W wide, dots + MIN_H_EXTRA tall) is enforced at
- * every layer: onResize (fires while the user drags the resize handle, so the
- * canvas never draws a frame below the minimum and ComfyUI's own selection
- * outline always hugs the full node), computeSize (auto-fit paths),
- * onDrawBackground and the rAF positioning loop.
+ * Minimum node size (MIN_W × dots + MIN_H_EXTRA) is enforced at every layer:
+ * onResize (fires while the user drags the resize handle), computeSize
+ * (auto-fit paths), onDrawBackground and the rAF positioning loop. The rAF
+ * loop also hides the overlay when the node's graph is not the one on the
+ * canvas (workflow-tab switch) and when the node is detached.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -36,14 +35,13 @@ import { app } from "../../scripts/app.js";
 import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
   from "./cwk_lora_panel.js";
 
-const LORA_NODES  = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
-const LEGACY_NAME = "CWK_LorA_Prompt_Loader";   // old saved workflows
-const CANON_NAME  = "CWK_LorA_Loader";          // the one registered node
+const CANONICAL_NAME = "CWK_LorA_Loader";
+const LEGACY_NAME    = "CWK_LorA_Prompt_Loader";   // only used by the load remap below
+const LORA_NODES     = [CANONICAL_NAME];
 
 const COLORS = {
-  title:  "#141824",   // title bar (node.color) — the strip at the very top
-  body:   "#1A1F2E",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
-  accent: "#89b4fa",   // reference only — nothing on the canvas is drawn with it
+  title: "#141824",   // title bar (node.color) — the strip at the very top
+  body:  "#1A1F2E",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
 };
 
 const ZOOM_HIDE           = 0.35;   // hide overlay below this zoom level
@@ -77,35 +75,23 @@ async function ensureLoraNames(force = false) {
   return _loraNames ?? [];
 }
 
-// ─── Hides the native multiline widget's DOM element ─────────────────────────
-
-function _ensureDomWidgetHiddenStyle() {
-  if (document.getElementById("cwk-lora-dom-hidden-style")) return;
-  const s = document.createElement("style");
-  s.id = "cwk-lora-dom-hidden-style";
-  s.textContent = ".cwk-lora-dom-hidden { display: none !important; }";
-  document.head.appendChild(s);
-}
-
 // ─── Extension ───────────────────────────────────────────────────────────────
 
 app.registerExtension({
   name: "CWK.LoraLoader",
 
-  app.registerExtension({
-  name: "CWK.LoraLoader",
-
   init() {
-    // Legacy compat without a duplicate menu entry: the alias is no longer a
-    // registered node; workflows saved with the old name are rewritten to the
-    // canonical name right before the graph is configured.
+    // OPTIONAL legacy compat: the alias node is no longer registered, so
+    // workflows saved with the old name are rewritten to the canonical one
+    // right before the graph is configured. Delete this whole init() block
+    // if you no longer have workflows saved as "CWK_LorA_Prompt_Loader".
     const orig = app.loadGraphData;
     if (typeof orig !== "function") return;
     app.loadGraphData = function (data, ...rest) {
       try {
         if (Array.isArray(data?.nodes)) {
           for (const n of data.nodes) {
-            if (n?.type === LEGACY_NAME) n.type = CANON_NAME;
+            if (n?.type === LEGACY_NAME) n.type = CANONICAL_NAME;
           }
         }
       } catch {}
@@ -114,14 +100,8 @@ app.registerExtension({
   },
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
-    // …unchanged…
-  },
-});
-
-  async beforeRegisterNodeDef(nodeType, nodeData) {
     if (!LORA_NODES.includes(nodeData?.name)) return;
-    injectLoraStyles();
-    _ensureDomWidgetHiddenStyle();
+    injectLoraStyles();   // panel + node-overlay CSS (incl. .cwk-lora-dom-hidden)
 
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -168,19 +148,16 @@ app.registerExtension({
 
 function _setupLoraNode(node) {
   const state = { list: [], destroyed: false };
-  let lastJson = null;
-  let detachFrames = 0;
-  let announced    = false;
-  let rafId        = 0;
-  let overlay      = null;
-  let ctxTransform = null;   // exact canvas matrix captured while drawing the node
+  let lastJson      = null;
+  let detachFrames  = 0;
+  let announced     = false;
+  let rafId         = 0;
+  let overlay       = null;
+  let ctxTransform  = null;   // exact canvas matrix captured while drawing the node
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
   // ── CWK theme on the canvas node itself ───────────────────────────────────
-  // ComfyUI paints the title bar from node.color and the node background from
-  // node.bgcolor. This covers the collapsed state and any zoom level, even
-  // where the canvas paint / DOM overlay are not visible.
   node.color   = COLORS.title;
   node.bgcolor = COLORS.body;
   try { node.setDirtyCanvas(true, true); } catch {}
@@ -202,10 +179,9 @@ function _setupLoraNode(node) {
   }
   node.__cwkClampSize = _clampSize;
 
-  // Called by litegraph *while the user drags the resize handle* (and by
-  // setSize paths) — clamping here means the canvas never renders a frame
-  // below the minimum, so ComfyUI's own (white, selected) node outline always
-  // hugs the full node instead of a smaller rect inside it.
+  // Called by litegraph *while the user drags the resize handle* — clamping
+  // here means the canvas never renders a frame below the minimum, so
+  // ComfyUI's own selection outline always hugs the full node.
   const prevOnResize = node.onResize;
   node.onResize = function () {
     try { _clampSize(); } catch {}
@@ -280,13 +256,6 @@ function _setupLoraNode(node) {
       </div>
     `;
 
-    // Drive the DOM overlay from the same palette as the canvas node.
-    // Inline styles override the injected stylesheet, so this also
-    // neutralises any leftover CSS from the previous edit.
-    root.style.background                                  = COLORS.body;
-    root.querySelector(".cwkl-w-header").style.background  = COLORS.body;
-    root.querySelector(".cwkl-w-footer").style.background  = COLORS.body;
-    
     const rowsEl     = root.querySelector(".cwkl-w-rows");
     const emptyEl    = root.querySelector(".cwkl-w-empty");
     const countEl    = root.querySelector(".cwkl-w-count");
@@ -310,7 +279,9 @@ function _setupLoraNode(node) {
       lastJson = json;
       try {
         const parsed = JSON.parse(json);
-        state.list = Array.isArray(parsed) ? parsed.map(_normalise) : [];
+        state.list = Array.isArray(parsed)
+          ? parsed.map(_normalise).filter(Boolean)
+          : [];
       } catch { state.list = []; }
       ensureLoraNames().then(() => _refreshRowSelects());
       _render();
@@ -480,7 +451,7 @@ function _setupLoraNode(node) {
       }, 150);
     }
 
-    // ── Canvas body: CWK palette + transform capture ────────────────────────
+    // ── Canvas body: flat CWK paint + transform capture ──────────────────────
     const prevOnDrawBackground = node.onDrawBackground;
     node.onDrawBackground = function (ctx) {
       try {
@@ -502,11 +473,9 @@ function _setupLoraNode(node) {
         else
           ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
         ctx.fill();
-        // NOTE: intentionally NO ctx.stroke() here. The old code set
-        // ctx.strokeStyle = COLORS.border (undefined once the color was
-        // commented out) — invalid assignments are silently ignored, so the
-        // stroke re-used whatever color ComfyUI last left in the context and
-        // drew the phantom "accent line" around the widget.
+        // Intentionally NO stroke / accent line — the node outline is
+        // ComfyUI's own border, and a stray stroke re-uses the last context
+        // color if the strokeStyle assignment is ever invalid.
         ctx.restore();
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);
@@ -535,20 +504,16 @@ function _setupLoraNode(node) {
         }
         detachFrames = 0;
 
-        // ── Tab / workflow switch ──────────────────────────────────────────
-        // Switching workflow tabs keeps the old graph (and its nodes) alive
-        // in the background: node.graph stays non-null, so the checks above
-        // pass and the overlay would keep sitting at its last screen position
-        // with a stale transform — the "imprint". Hide it whenever the node's
-        // graph is not the one currently shown on the canvas, and drop the
-        // transform so it only comes back after a fresh draw of the node.
+        // Workflow-tab switch: the old tab's graph (and its nodes) stay alive
+        // in the background, so node.graph stays non-null. Without this check
+        // the overlay would sit frozen at its last screen position with a
+        // stale transform. Hide it and drop the transform so it only comes
+        // back after a fresh draw of the node (i.e. when its tab is active).
         if (node.graph !== (app.canvas?.graph ?? app.graph)) {
           overlay.style.display = "none";
           ctxTransform = null;
           return;
         }
-
-        if (node.flags?.collapsed || !ctxTransform) {
 
         if (node.flags?.collapsed || !ctxTransform) {
           overlay.style.display = "none";
@@ -573,8 +538,7 @@ function _setupLoraNode(node) {
         const x = (m.e + m.a * PAD) * kx + rect.left;
         const y = (m.f + m.d * domY) * ky + rect.top;
 
-        // hide when the node is outside the canvas viewport (also covers the
-        // matrix going stale while the node is culled from drawing)
+        // hide when the node is outside the canvas viewport
         const w = node.size[0] * zoom, h = node.size[1] * zoom;
         if (x + w < rect.left || x > rect.right || y + h < rect.top || y > rect.bottom) {
           overlay.style.display = "none";

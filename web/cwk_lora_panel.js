@@ -192,6 +192,11 @@ export function injectLoraStyles() {
       position:fixed; left:0; top:0; z-index:100;
       transform-origin:0 0; display:none; pointer-events:auto;
     }
+        /* native multiline widget of the LoRA node — hidden by the extension.
+       !important beats the inline styles the frontend re-applies each frame. */
+    .cwk-lora-dom-hidden { 
+    display: none !important; 
+    }
     .cwk-lora-widget {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;

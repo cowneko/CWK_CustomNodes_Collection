@@ -2,33 +2,31 @@
  * CWK LoRA Loader — frontend node extension.
  *
  * Theming:
- * - Title bar / node background come from node.color / node.bgcolor (the same
- *   mechanism ComfyUI's "Colors" menu uses); they are re-asserted in
- *   onConfigure so old workflows can't restore grey defaults.
- * - The body is painted flat in onDrawBackground (fill only — no stroke, no
- *   accent line) and the interactive list is a DOM overlay positioned from
- *   the exact canvas transform captured while drawing the node.
+ * - Title bar / node background come from node.color / node.bgcolor; they are
+ *   re-asserted in onConfigure so old workflows can't restore grey defaults.
+ * - The body is painted flat in onDrawBackground (fill only) and the
+ *   interactive list is a DOM overlay positioned from the exact canvas
+ *   transform captured while drawing the node.
  *
  * The native "lora_config" widget stays a fully serialisable, *normal* widget
  * (never hidden — hidden widgets can be dropped from the queue prompt by
  *   newer frontends) but renders nothing and takes no layout space:
  *   - canvas side:  draw = noop, computeSize = [0, -4]
- *   - DOM side:     multiline STRING widgets are real elements positioned over
- *                   the canvas; the element is hidden via the
+ *   - DOM side:     the multiline element is hidden via the
  *                   .cwk-lora-dom-hidden { display:none !important } rule
  *                   from injectLoraStyles.
  *
- * Ghost / imprint prevention: a node's own "graph" reference can go stale
- * (ComfyUI abandons node instances when switching workflow tabs or loading
- * workflows, sometimes without clearing node.graph). Visibility therefore
- * depends on the *graph's* node list: the overlay shows only while the node
- * is actually contained in the graph the canvas is currently drawing.
- * Hidden overlays park their rAF loop after a grace period (onDrawBackground
- * re-arms it), and fully detached nodes are destroyed after the same grace.
+ * Ghost / imprint prevention (tab switches, workflow loads): a node's own
+ * "graph" reference can go stale, so visibility is decided by, in order:
+ *   1. the node was drawn within the last RECENT_MS  → on canvas (ground truth)
+ *   2. any known node container (canvas visible list / graph node array —
+ *      property names vary between litegraph builds) must contain the node
+ *   3. fallback: node.graph identity only
+ * Hidden overlays park their rAF loop after ~10 s (onDrawBackground re-arms
+ * it), fully detached nodes are destroyed after the same grace.
  *
- * Minimum node size (MIN_W × dots + MIN_H_EXTRA) is enforced at every layer:
- * onResize (resize drags), computeSize (auto-fit paths), onDrawBackground and
- * the rAF positioning loop.
+ * Minimum node size (MIN_W × dots + MIN_H_EXTRA) is enforced in onResize
+ * (resize drags), computeSize (auto-fit), onDrawBackground and the loop.
  *
  * Widget rows: [✓] [LoRA dropdown] [ℹ info] [weight slider] [✕]
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
@@ -47,13 +45,16 @@ const COLORS = {
   body:  "#1A1F2E",   // everything below it (node.bgcolor + canvas paint + DOM overlay)
 };
 
-const ZOOM_HIDE           = 0.35;   // hide overlay below this zoom level
-const PARK_FRAMES         = 600;    // ~10 s hidden → park the loop / destroy if detached
-const MIN_W               = 440;    // minimum node width (canvas space)
-const MIN_H_EXTRA         = 180;    // minimum body height below the dots
-const ROUND_R             = 8;      // body corner radius (matches ComfyUI's)
+const ZOOM_HIDE   = 0.35;   // hide overlay below this zoom level
+const RECENT_MS   = 300;    // "drawn within this window" = on canvas, ground truth
+const PARK_FRAMES = 600;    // ~10 s hidden → park the loop / destroy if detached
+const MIN_W       = 440;    // minimum node width (canvas space)
+const MIN_H_EXTRA = 180;    // minimum body height below the dots
+const ROUND_R     = 8;      // body corner radius (matches ComfyUI's)
 
 function _fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
+
+let _probeLogged = false;   // one-time environment diagnostic
 
 // ─── Installed-LoRA name list (for the row dropdowns) ────────────────────────
 
@@ -76,6 +77,20 @@ async function ensureLoraNames(force = false) {
     }
   } catch {}
   return _loraNames ?? [];
+}
+
+// ─── Node-container probes (names vary between litegraph builds) ─────────────
+
+function _canvasVisibleNodes() {
+  return app.canvas?.visible_nodes ?? app.canvas?.visibleNodes ?? null;
+}
+
+function _graphNodeList(g) {
+  return g?._nodes_in_order ?? g?._nodesInOrder ?? g?._nodes ?? g?.nodes ?? null;
+}
+
+function _activeGraph() {
+  return app.canvas?.graph ?? app.graph ?? null;
 }
 
 // ─── Extension ───────────────────────────────────────────────────────────────
@@ -145,8 +160,7 @@ app.registerExtension({
       return r;
     };
 
-    // …and litegraph's native one (graph.remove / graph.clear) — so nodes
-    // dropped during workflow loads clean up immediately.
+    // …and litegraph's native one (graph.remove / graph.clear).
     const onRemoved = nodeType.prototype.onRemoved;
     nodeType.prototype.onRemoved = function () {
       const r = onRemoved?.apply(this, arguments);
@@ -164,6 +178,7 @@ function _setupLoraNode(node) {
   let announced    = false;
   let overlay      = null;
   let ctxTransform = null;   // exact canvas matrix captured while drawing the node
+  let lastDrawnAt  = 0;      // performance.now() of the last onDrawBackground call
 
   let cfgWidget = node.widgets?.find(w => w.name === "lora_config") ?? null;
 
@@ -189,16 +204,12 @@ function _setupLoraNode(node) {
   }
   node.__cwkClampSize = _clampSize;
 
-  // Called by litegraph *while the user drags the resize handle* — clamping
-  // here means the canvas never renders a frame below the minimum.
   const prevOnResize = node.onResize;
   node.onResize = function () {
     try { _clampSize(); } catch {}
     return prevOnResize?.apply(this, arguments);
   };
 
-  // Auto-fit / "size to content" paths: with lora_config at zero height,
-  // computeSize() would report a tiny node — report our minimum instead.
   const prevComputeSize = node.computeSize?.bind(node);
   node.computeSize = function (...args) {
     const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
@@ -222,12 +233,10 @@ function _setupLoraNode(node) {
   function _prepareJsonWidget() {
     cfgWidget = cfgWidget || node.widgets?.find(w => w.name === "lora_config") || null;
     if (!cfgWidget) return;
-    // Stash originals so the failure path can restore a usable raw widget.
     cfgWidget.origComputeSize ??= cfgWidget.computeSize;
     cfgWidget.origDraw        ??= cfgWidget.draw;
-    // NOT hidden and type stays "STRING": it remains a fully serialisable
-    // widget in every queue prompt. It renders nothing and takes no space —
-    // the DOM overlay is its UI.
+    // NOT hidden and type stays "STRING": fully serialisable in every queue
+    // prompt. Renders nothing and takes no space — the DOM overlay is its UI.
     cfgWidget.computeSize    = () => [0, -4];
     cfgWidget.draw           = () => {};
     cfgWidget.serializeValue = () => JSON.stringify(state.list);
@@ -273,7 +282,6 @@ function _setupLoraNode(node) {
     const browserBtn = root.querySelector(".cwkl-w-browser");
     const trigEl     = root.querySelector(".cwkl-w-trigger");
 
-    // clicking the widget selects the node (like ComfyUI DOM widgets do)
     root.addEventListener("mousedown", () => {
       try {
         if (typeof app.canvas?.selectNode === "function") app.canvas.selectNode(node);
@@ -350,7 +358,6 @@ function _setupLoraNode(node) {
         sel.appendChild(o);
       }
       if (selected && !names.includes(selected)) {
-        // keep the entry valid even if the file list is stale / not yet loaded
         const o = document.createElement("option");
         o.value = selected;
         o.textContent = selected;
@@ -463,14 +470,15 @@ function _setupLoraNode(node) {
     // ── Overlay positioning loop ────────────────────────────────────────────
     const PAD = 6;                 // horizontal inset of the widget inside the node body
     let hiddenFrames = 0;          // consecutive frames the overlay stayed hidden
-    let rafActive   = false;
+    let rafActive    = false;
+    let rafId        = 0;
 
     function _startLoop() {
       if (state.destroyed || rafActive) return;
       rafActive = true;
       rafId     = requestAnimationFrame(_tick);
     }
-    let rafId = 0;
+
     function _stopLoop() {
       rafActive = false;
       cancelAnimationFrame(rafId);
@@ -488,8 +496,8 @@ function _setupLoraNode(node) {
         _clampSize();
         _hideNativeWidgetElement();
 
-        // Node not in any graph → it was deleted (possibly transiently during
-        // a workflow load). Hide now, destroy after the grace period.
+        // 1) Node not in any graph → it was deleted (possibly transiently
+        //    during a workflow load). Hide now, destroy after the grace.
         if (node.graph == null) {
           _hide();
           if (hiddenFrames > PARK_FRAMES) {
@@ -500,24 +508,29 @@ function _setupLoraNode(node) {
           return;
         }
 
-        // ── Ghost detection ────────────────────────────────────────────────
-        // node.graph can go STALE: when ComfyUI switches tabs / loads a
-        // workflow, abandoned node instances sometimes keep a reference that
-        // still equals the canvas's graph object, so "node.graph != null"
-        // and identity checks alone let their overlays through (the
-        // "imprints"). The graph's own node list is the source of truth: if
-        // this node is not in it, it is not on the canvas → hide.
-        // Inactive tabs keep their graphs alive in the background — the
-        // overlay is re-armed automatically if the node is drawn again later.
-        const activeGraph = app.canvas?.graph ?? app.graph;
-        const inGraph = !!activeGraph
-          && (activeGraph._nodes_in_order?.includes(node)
-           || activeGraph._nodes?.includes(node));
-        if (node.graph !== activeGraph || !inGraph) {
-          _hide();
-          ctxTransform = null;                       // require a fresh draw
-          if (hiddenFrames > PARK_FRAMES) _stopLoop(); // park; re-armed on draw
-          return;
+        // 2) Ghost detection. A node's own "graph" reference can go stale
+        //    (abandoned instances on tab switches keep a reference that still
+        //    equals the canvas graph), so we decide by, in order:
+        //      a. drawn within RECENT_MS  → the node is demonstrably being
+        //         painted right now — ground truth, show it.
+        //      b. otherwise, any node container this litegraph build exposes
+        //         (canvas visible list / graph node array) must contain it.
+        //      c. if no container exists at all, fall back to identity only —
+        //         never worse than the previous behaviour.
+        const drawnRecently = (performance.now() - lastDrawnAt) < RECENT_MS;
+        if (!drawnRecently) {
+          const activeGraph = _activeGraph();
+          const visible     = _canvasVisibleNodes();
+          const gNodes      = _graphNodeList(activeGraph);
+          const hasProbe    = Array.isArray(visible) || Array.isArray(gNodes);
+          const present     = (Array.isArray(visible) && visible.includes(node))
+                           || (Array.isArray(gNodes)  && gNodes.includes(node));
+          if (node.graph !== activeGraph || (hasProbe && !present)) {
+            _hide();
+            ctxTransform = null;                        // require a fresh draw
+            if (hiddenFrames > PARK_FRAMES) _stopLoop(); // park; re-armed on draw
+            return;
+          }
         }
 
         if (node.flags?.collapsed || !ctxTransform) {
@@ -571,17 +584,17 @@ function _setupLoraNode(node) {
     node.onDrawBackground = function (ctx) {
       try {
         prevOnDrawBackground?.apply(this, arguments);
+        // The node is being painted right now → ground-truth "on canvas".
+        lastDrawnAt = performance.now();
         // Capture the matrix ComfyUI is using to draw THIS node (DPR + view
-        // pan/zoom + node position all included). The overlay is positioned
-        // from it every frame, so it can never drift from the canvas.
+        // pan/zoom + node position all included).
         if (ctx.getTransform) ctxTransform = ctx.getTransform();
-
-        // The node is being drawn right now → (re-)arm the positioning loop
-        // (it parks itself while the overlay stays hidden for a long time).
+        // …and (re-)arm the positioning loop (it parks itself while the
+        // overlay stays hidden for a long time).
         _startLoop();
 
         if (this.flags?.collapsed) return;
-        this.__cwkClampSize?.();   // backstop (onResize/_tick normally handle it)
+        this.__cwkClampSize?.();   // backstop
 
         const { titleH } = metrics();
         ctx.save();
@@ -592,8 +605,6 @@ function _setupLoraNode(node) {
         else
           ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
         ctx.fill();
-        // Intentionally NO stroke / accent line — the node outline is
-        // ComfyUI's own border.
         ctx.restore();
       } catch (e) {
         console.error("[CWK LoRA] draw error:", e);
@@ -614,9 +625,26 @@ function _setupLoraNode(node) {
     _clampSize();
     _prepareJsonWidget();
     _applyJson(String(cfgWidget?.value ?? "[]"));
-    // Some frontends build widgets slightly after onNodeCreated — apply once
-    // more, idempotently:
     setTimeout(_prepareJsonWidget, 800);
+
+    // One-time environment diagnostic (browser console). Remove once
+    // everything works — it reports which containers this build exposes.
+    setTimeout(() => {
+      if (_probeLogged) return;
+      _probeLogged = true;
+      try {
+        const g       = _activeGraph();
+        const visible = _canvasVisibleNodes();
+        const gNodes  = _graphNodeList(g);
+        console.log("[CWK LoRA] ghost-probe:", {
+          identityOk:  node.graph === g,
+          visibleList: Array.isArray(visible),
+          graphList:   Array.isArray(gNodes),
+          inVisible:   Array.isArray(visible) && visible.includes(node),
+          inGraphList: Array.isArray(gNodes)  && gNodes.includes(node),
+        });
+      } catch {}
+    }, 1500);
 
   } catch (e) {
     console.error("[CWK LoRA] Node UI setup failed — keeping the raw JSON widget visible:", e);

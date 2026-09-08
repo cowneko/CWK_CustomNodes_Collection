@@ -200,7 +200,7 @@ export function injectLoraStyles() {
     .cwk-lora-widget {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
-      background:#1A1F2E;   /* ← was #141824 — now matches COLORS.body / node.bgcolor */
+      background:#141824;
       border:none; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
       user-select:none;
@@ -254,7 +254,7 @@ export function injectLoraStyles() {
       color:#6c7086; font-style:italic; font-size:11px; padding:10px; text-align:center;
     }
     .cwkl-w-footer {
-      padding:4px 9px; background:#1a2035; border-top:1px solid #2a2f45;
+      padding:4px 9px; background:#141824; border-top:1px solid #2a2f45;
       flex-shrink:0; max-height:40px; overflow:hidden;
     }
     .cwkl-w-trigger {

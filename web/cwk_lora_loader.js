@@ -40,7 +40,7 @@ const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 const COLORS = {
   title:  "#1a2035",   // title bar (node.color) — matches the overlay header
   body:   "#141824",   // node background (node.bgcolor + canvas paint)
-  border: "#2a2f45",
+  //border: "#2a2f45",
   accent: "#89b4fa",
 };
 
@@ -462,10 +462,16 @@ function _setupLoraNode(node) {
           ctx.roundRect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2, ROUND_R);
         else
           ctx.rect(0.5, titleH + 1, this.size[0] - 1, this.size[1] - titleH - 2);
+        const { titleH } = metrics();
+        ctx.save();
+        ctx.fillStyle = COLORS.body;
+        ctx.beginPath();
+        if (ctx.roundRect)
+          ctx.roundRect(0, titleH, this.size[0], this.size[1] - titleH, ROUND_R);
+        else
+          ctx.rect(0, titleH, this.size[0], this.size[1] - titleH);
         ctx.fill();
-        ctx.strokeStyle = COLORS.border;
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        ctx.restore();
         // CWK accent line separating title bar and body
         //ctx.fillStyle = COLORS.accent;
         //ctx.fillRect(0, titleH, this.size[0], 2);

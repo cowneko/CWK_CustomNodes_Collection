@@ -40,7 +40,7 @@ const LORA_NODES = ["CWK_LorA_Loader", "CWK_LorA_Prompt_Loader"];
 const COLORS = {
   title:  "#1a2035",   // title bar (node.color) — matches the overlay header
   body:   "#141824",   // node background (node.bgcolor + canvas paint)
-  border: "#2a2f45",
+  //border: "#2a2f45",
   accent: "#89b4fa",
 };
 

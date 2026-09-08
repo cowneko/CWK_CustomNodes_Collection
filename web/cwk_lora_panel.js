@@ -206,7 +206,7 @@ export function injectLoraStyles() {
     }
     .cwkl-w-header {
       display:flex; align-items:center; gap:7px;
-      padding:6px 9px; background:#1a2035;
+      padding:6px 9px; background:#141824;
       border-bottom:1px solid #2a2f45; flex-shrink:0;
     }
     .cwkl-w-header input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#89b4fa; }

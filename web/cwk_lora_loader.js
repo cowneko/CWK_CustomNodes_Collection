@@ -32,6 +32,7 @@
  * Header: master activate/deactivate toggle, LoRA count, 🔎 Browser, ＋ Add LoRA.
  */
 
+import { getBaseModelMatchers } from "./cwk_base_models.js";
 import { app } from "../../scripts/app.js";
 import { getLoraBrowser, injectLoraStyles, getTriggersFor, triggerCache }
   from "./cwk_lora_panel.js";
@@ -263,19 +264,46 @@ async function ensureLoraNames(force = false) {
         }
       });
     }
+    await ensureBaseMatchers();
   } catch {}
   return _loraList ?? [];
 }
 
+let _baseMatchers = null;
+
+async function ensureBaseMatchers() {
+  if (!_baseMatchers) {
+    try { _baseMatchers = await getBaseModelMatchers(); } catch {}
+    _baseMatchers = Array.isArray(_baseMatchers) ? _baseMatchers : [];
+  }
+  return _baseMatchers;
+}
+
+/** Same bucketing rule as the browser panel's filter: a LoRA belongs to the
+ * first matcher whose keywords appear in its resolved base_model string;
+ * anything else (including empty) → "Others". */
+function _bucketFor(raw) {
+  const r = String(raw ?? "").trim().toLowerCase();
+  if (!r) return "Others";
+  for (const f of _baseMatchers ?? []) {
+    if (Array.isArray(f.match)
+        && f.match.some(s => r.includes(String(s).toLowerCase()))) {
+      return f.label;
+    }
+  }
+  return "Others";
+}
+
 function _groupedLoras() {
-  const groups = new Map();
+  const groups = new Map();          // insertion order = matcher order, Others last
   for (const l of (_loraList ?? [])) {
-    const g = (l.base_model || "").trim() || "Other";
+    const raw = (l.base_model ?? l.civitai?.base_model ?? "").toLowerCase();
+    const g    = _bucketFor(base);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(l);
   }
   return [...groups.entries()]
-    .sort((a, b) => (a[0] === "Other") - (b[0] === "Other")
+    .sort((a, b) => (a[0] === "Others") - (b[0] === "Others")
                   || a[0].localeCompare(b[0]))
     .map(([g, items]) => [g, items.sort((a, b) => a.name.localeCompare(b.name))]);
 }

@@ -105,6 +105,7 @@ function _blockLoraCanvasEvents(el) {
 function closeLoraSettingsPopup() {
   _loraSetPanel?.remove(); _loraSetBackdrop?.remove();
   _loraSetPanel = null; _loraSetBackdrop = null;
+  app.canvas?.setDirty?.(true, false);   // ← add (parity with closeSaveSettingsPopup)
 }
 
 async function openLoraSettingsPopup(onChange) {

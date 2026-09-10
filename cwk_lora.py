@@ -210,38 +210,58 @@ def _resolve_thumbnail(civ: Dict[str, Any]) -> str:
     return civ.get("custom_thumbnail") or civ.get("thumbnail") or ""
 
 
-def _extract_image_entries(ver: Dict[str, Any]) -> List[Tuple[str, int]]:
-    """(url, nsfwLevel) for every still image of a version — shared by
-    _parse_version and the model-page fallback."""
-    out = []
+def _is_video_media(img: Dict[str, Any]) -> bool:
+    """CivitAI flags video entries via `type: "video"`; the URL usually (but
+    not always — some CDN/transcode URLs carry no recognisable extension)
+    also ends in .mp4/.webm. Check both so a video isn't mis-filed as a still."""
+    if str(img.get("type") or "").lower() == "video":
+        return True
+    url = (img.get("url") or "").lower()
+    return url.endswith(".mp4") or url.endswith(".webm")
+
+
+def _extract_media_entries(ver: Dict[str, Any]) -> Tuple[List[Tuple[str, int]], List[Tuple[str, int]]]:
+    """(url, nsfwLevel) lists for the still images and the videos of a version."""
+    imgs: List[Tuple[str, int]] = []
+    vids: List[Tuple[str, int]] = []
     for img in (ver.get("images") or []):
-        if (img.get("type") or "image") != "image":
-            continue
         url = img.get("url")
         if not url:
+            continue
+        t = str(img.get("type") or "").lower()
+        if t not in ("", "image", "video"):
             continue
         try:
             lvl = int(img.get("nsfwLevel") or 0)
         except (TypeError, ValueError):
             lvl = 0
-        out.append((url, lvl))
-    return out
+        (vids if _is_video_media(img) else imgs).append((url, lvl))
+    return imgs, vids
 
 
 def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
     """Extract the fields we keep from a CivitAI model-version dict."""
-    model   = ver.get("model") or {}
-    entries = _extract_image_entries(ver)
+    model = ver.get("model") or {}
+    img_entries, vid_entries = _extract_media_entries(ver)
 
-    nsfw_level = max((lvl for _, lvl in entries), default=0)
+    nsfw_level = max([lvl for _, lvl in img_entries + vid_entries], default=0)
     try:
         nsfw_level = max(nsfw_level, int(model.get("nsfwLevel") or 0))
     except (TypeError, ValueError):
         pass
 
-    images    = [u for u, _ in entries]
-    thumbnail = next((u for u, lvl in entries if lvl < NSFW_R),
-                     images[0] if images else None)
+    images = [u for u, _ in img_entries]
+    videos = [u for u, _ in vid_entries]
+
+    # still image preferred; video only when the version has no images at all
+    if images:
+        thumbnail, thumb_is_video = (
+            next((u for u, lvl in img_entries if lvl < NSFW_R), images[0]), False)
+    elif videos:
+        thumbnail, thumb_is_video = (
+            next((u for u, lvl in vid_entries if lvl < NSFW_R), videos[0]), True)
+    else:
+        thumbnail, thumb_is_video = None, False
 
     return {
         "civitai_name":  model.get("name"),
@@ -252,7 +272,9 @@ def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
         "description":   _html_to_text(ver.get("description")),
         "trigger_words": [str(t) for t in (ver.get("trainedWords") or []) if str(t).strip()],
         "images":        images,
+        "videos":        videos,
         "thumbnail":     thumbnail,
+        "thumbnail_is_video": thumb_is_video,
         "nsfw_level":    nsfw_level,
     }
 
@@ -270,6 +292,11 @@ def _public_civitai(civ: Dict[str, Any]) -> Dict[str, Any]:
         "thumbnail_custom":   bool(civ.get("custom_thumbnail")),
         # raw values (for edit-mode pre-fill / source badges)
         "images":             civ.get("images", []),
+        "videos":            civ.get("videos", []),
+        "thumbnail_is_video": ((not civ.get("custom_thumbnail")
+                                and bool(civ.get("thumbnail_is_video")))
+                               or _resolve_thumbnail(civ).lower().split("?")[0]
+                                   .endswith((".mp4", ".webm"))),
         "civitai_name":       civ.get("civitai_name"),
         "model_id":           civ.get("model_id"),
         "version_id":         civ.get("version_id"),
@@ -410,7 +437,8 @@ async def _civitai_get_json(session, url: str, params=None, tries: int = 3):
 
 async def _fill_from_model_page(session, info: Dict[str, Any], api_key: str) -> None:
     """A version can have zero images while the model page has plenty —
-    borrow them from the model's other versions (fixes 'description only')."""
+    borrow them from the model's other versions (fixes 'description only').
+    Still images are preferred; videos are used when no version has any."""
     model_id = info.get("model_id")
     if not model_id:
         return
@@ -424,23 +452,37 @@ async def _fill_from_model_page(session, info: Dict[str, Any], api_key: str) -> 
     if status != 200 or not isinstance(data, dict):
         return
     versions = [v for v in (data.get("modelVersions") or []) if isinstance(v, dict)]
-    # prefer the exact version, then the newest, that actually has images
     versions.sort(key=lambda v: (v.get("id") == info.get("version_id"),
                                  str(v.get("createdAt") or "")), reverse=True)
+
+    img_pick = None   # (entries, version)
+    vid_pick = None
     for v in versions:
-        entries = _extract_image_entries(v)
-        if not entries:
-            continue
-        images    = [u for u, _ in entries]
-        thumbnail = next((u for u, lvl in entries if lvl < NSFW_R), images[0])
-        info["images"]    = images
-        info["thumbnail"] = thumbnail
+        img_entries, vid_entries = _extract_media_entries(v)
+        if img_entries and img_pick is None:
+            img_pick = (img_entries, v)
+        if vid_entries and vid_pick is None:
+            vid_pick = (vid_entries, v)
+
+    pick = img_pick or vid_pick
+    if pick:
+        entries, v = pick
+        is_video = pick is vid_pick
+        urls = [u for u, _ in entries]
+        if is_video:
+            info["videos"] = urls
+            info["images"] = info.get("images") or []
+        else:
+            info["images"] = urls
+            info.setdefault("videos", [])
+        info["thumbnail"] = next((u for u, lvl in entries if lvl < NSFW_R), urls[0])
+        info["thumbnail_is_video"] = is_video
         info["nsfw_level"] = max(int(info.get("nsfw_level") or 0),
                                  max((lvl for _, lvl in entries), default=0))
         if not info.get("trigger_words"):
             info["trigger_words"] = [str(t) for t in (v.get("trainedWords") or [])
                                      if str(t).strip()]
-        break
+
     if not info.get("description"):
         desc = _html_to_text(data.get("description") or "")
         if desc:
@@ -584,32 +626,60 @@ async def _lookup_fallback(session, name: str, sha: str,
     return info
 
 
-_THUMB_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+_THUMB_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
+               ".mp4", ".webm")
+_VIDEO_EXTS = (".mp4", ".webm")
 
 
 async def _cache_thumbnail(session, info: Dict[str, Any], api_key: str) -> None:
-    """Download the thumbnail into _THUMB_DIR (served by the existing
-    /cwk/loras/thumb/ route) so the browser never needs civitai.com."""
+    """Download the thumbnail (image OR video) into _THUMB_DIR (served by the
+    existing /cwk/loras/thumb/ route) so the browser never needs civitai.com.
+    Videos can be large — they get a dedicated long-timeout session, a 64 MB
+    cap and a Content-Type-based extension fix for extensionless CDN URLs."""
     url = info.get("thumbnail") or ""
     if not url.startswith("http"):
         return
     ext = os.path.splitext(url.split("?")[0])[1].lower()
-    if ext not in _THUMB_EXTS:
-        ext = ".jpg"
+    ext_known = ext in _THUMB_EXTS
+    if not ext_known:
+        ext = ".mp4" if info.get("thumbnail_is_video") else ".jpg"
     fname = "c_" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ext
     dest  = os.path.join(_THUMB_DIR, fname)
     if os.path.isfile(dest):
         info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
         return
+
+    is_video = ext in _VIDEO_EXTS
+    cap = 64 * 1024 * 1024 if is_video else 16 * 1024 * 1024
+    ses = session
+    if is_video:
+        import aiohttp
+        ses = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300))
     try:
         fetch_url = url
         if api_key and "token=" not in fetch_url:
             fetch_url += ("&" if "?" in fetch_url else "?") + "token=" + api_key
-        async with session.get(fetch_url) as r:
+        async with ses.get(fetch_url) as r:
             if r.status != 200:
                 return
+            if not ext_known:
+                # extension was a guess — refine it from the real Content-Type
+                ctype = (r.headers.get("Content-Type") or "").lower()
+                for needle, e in (("webm", ".webm"), ("mp4", ".mp4"),
+                                  ("webp", ".webp"), ("png", ".png"),
+                                  ("gif", ".gif"), ("jpeg", ".jpg"), ("jpg", ".jpg")):
+                    if needle in ctype:
+                        ext = e
+                        break
+                fname = "c_" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ext
+                dest  = os.path.join(_THUMB_DIR, fname)
+                if os.path.isfile(dest):
+                    info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
+                    return
+                is_video = ext in _VIDEO_EXTS
+                cap = 64 * 1024 * 1024 if is_video else 16 * 1024 * 1024
             data = await r.read()
-        if not data or len(data) > 16 * 1024 * 1024:
+        if not data or len(data) > cap:
             return
         os.makedirs(_THUMB_DIR, exist_ok=True)
         with open(dest, "wb") as f:
@@ -617,6 +687,9 @@ async def _cache_thumbnail(session, info: Dict[str, Any], api_key: str) -> None:
         info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
     except Exception as e:
         print(f"[CWK LoRA] thumbnail cache error: {e}")
+    finally:
+        if ses is not session:
+            await ses.close()
 
 
 def _apply_keep(civ: Dict[str, Any], fresh: Dict[str, Any]) -> None:
@@ -738,11 +811,12 @@ try:
             return web.json_response({"ok": False, "error": "missing 'lora'"}, status=400)
         if not data:
             return web.json_response({"ok": False, "error": "missing file"}, status=400)
-        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
-            return web.json_response({"ok": False, "error": f"unsupported image type: {ext}"}, status=400)
-        if len(data) > 16 * 1024 * 1024:
-            return web.json_response({"ok": False, "error": "file too large (max 16 MB)"}, status=400)
-
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
+                       ".mp4", ".webm"):
+            return web.json_response({"ok": False, "error": f"unsupported media type: {ext}"}, status=400)
+        cap = 64 * 1024 * 1024 if ext in (".mp4", ".webm") else 16 * 1024 * 1024
+        if len(data) > cap:
+            return web.json_response({"ok": False, "error": f"file too large (max {cap // (1024 * 1024)} MB)"}, status=400)
         try:
             os.makedirs(_THUMB_DIR, exist_ok=True)
             fname = hashlib.md5(lora_name.encode("utf-8")).hexdigest()[:12] + ext

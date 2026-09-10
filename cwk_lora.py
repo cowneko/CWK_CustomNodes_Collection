@@ -21,13 +21,19 @@ Server routes (registered on PromptServer, same pattern as nodes.py):
                                       filename search)
 - POST   /cwk/loras/fetch/stream    → SSE bulk fetch (hash lookup with 429
                                       backoff, model-page image fallback,
-                                      local thumbnail caching)
+                                      local thumbnail/video caching)
 - POST   /cwk/lora/lookup_by_id     → manual rescue: match a LoRA to a CivitAI
                                       model by URL / id (civitai.red downloads
                                       of models deleted from civitai.com)
-- POST   /cwk/lora/thumbnail        → upload a custom thumbnail (multipart)
+- POST   /cwk/lora/thumbnail        → upload a custom thumbnail (image or
+                                      video, multipart)
 - GET    /cwk/loras/thumb/{file}   → serve custom + cached thumbnails
 - DELETE /cwk/loras/cache           → wipe the LoRA metadata cache + thumbnails
+
+Video previews: versions whose previews are all videos get a video
+thumbnail (still images are preferred whenever any version has one). Videos
+are cached locally like images and flagged via civitai.thumbnail_is_video
+so the frontend can render a <video> element.
 """
 
 import asyncio
@@ -293,6 +299,8 @@ def _public_civitai(civ: Dict[str, Any]) -> Dict[str, Any]:
         # raw values (for edit-mode pre-fill / source badges)
         "images":             civ.get("images", []),
         "videos":            civ.get("videos", []),
+        # a custom thumbnail overrides the stored flag, but a custom *video*
+        # upload is still detected via its URL extension
         "thumbnail_is_video": ((not civ.get("custom_thumbnail")
                                 and bool(civ.get("thumbnail_is_video")))
                                or _resolve_thumbnail(civ).lower().split("?")[0]
@@ -438,7 +446,8 @@ async def _civitai_get_json(session, url: str, params=None, tries: int = 3):
 async def _fill_from_model_page(session, info: Dict[str, Any], api_key: str) -> None:
     """A version can have zero images while the model page has plenty —
     borrow them from the model's other versions (fixes 'description only').
-    Still images are preferred; videos are used when no version has any."""
+    Still images are preferred; videos are used only when no version of the
+    model has any image at all."""
     model_id = info.get("model_id")
     if not model_id:
         return
@@ -452,6 +461,7 @@ async def _fill_from_model_page(session, info: Dict[str, Any], api_key: str) -> 
     if status != 200 or not isinstance(data, dict):
         return
     versions = [v for v in (data.get("modelVersions") or []) if isinstance(v, dict)]
+    # prefer the exact version, then the newest
     versions.sort(key=lambda v: (v.get("id") == info.get("version_id"),
                                  str(v.get("createdAt") or "")), reverse=True)
 
@@ -631,28 +641,38 @@ _THUMB_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
 _VIDEO_EXTS = (".mp4", ".webm")
 
 
+def _find_cached_thumb(url_hash: str) -> Optional[str]:
+    """Locate a previously cached file for this URL whatever its extension —
+    the extension can be refined from Content-Type after the first download,
+    so a rebuild must not re-download (64 MB videos!)."""
+    for e in _THUMB_EXTS:
+        p = os.path.join(_THUMB_DIR, "c_" + url_hash + e)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
 async def _cache_thumbnail(session, info: Dict[str, Any], api_key: str) -> None:
     """Download the thumbnail (image OR video) into _THUMB_DIR (served by the
     existing /cwk/loras/thumb/ route) so the browser never needs civitai.com.
-    Videos can be large — they get a dedicated long-timeout session, a 64 MB
-    cap and a Content-Type-based extension fix for extensionless CDN URLs."""
+    Videos get a dedicated long-timeout session (up to 300 s), a 64 MB cap,
+    and a Content-Type-based extension fix for extensionless CDN URLs."""
     url = info.get("thumbnail") or ""
     if not url.startswith("http"):
         return
+    url_hash = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20]
+    cached = _find_cached_thumb(url_hash)
+    if cached:
+        info["thumbnail"] = f"/cwk/loras/thumb/{os.path.basename(cached)}"
+        return
+
     ext = os.path.splitext(url.split("?")[0])[1].lower()
     ext_known = ext in _THUMB_EXTS
     if not ext_known:
         ext = ".mp4" if info.get("thumbnail_is_video") else ".jpg"
-    fname = "c_" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ext
-    dest  = os.path.join(_THUMB_DIR, fname)
-    if os.path.isfile(dest):
-        info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
-        return
 
-    is_video = ext in _VIDEO_EXTS
-    cap = 64 * 1024 * 1024 if is_video else 16 * 1024 * 1024
     ses = session
-    if is_video:
+    if ext in _VIDEO_EXTS:
         import aiohttp
         ses = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300))
     try:
@@ -662,29 +682,26 @@ async def _cache_thumbnail(session, info: Dict[str, Any], api_key: str) -> None:
         async with ses.get(fetch_url) as r:
             if r.status != 200:
                 return
-            if not ext_known:
-                # extension was a guess — refine it from the real Content-Type
-                ctype = (r.headers.get("Content-Type") or "").lower()
-                for needle, e in (("webm", ".webm"), ("mp4", ".mp4"),
-                                  ("webp", ".webp"), ("png", ".png"),
-                                  ("gif", ".gif"), ("jpeg", ".jpg"), ("jpg", ".jpg")):
-                    if needle in ctype:
-                        ext = e
-                        break
-                fname = "c_" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ext
-                dest  = os.path.join(_THUMB_DIR, fname)
-                if os.path.isfile(dest):
-                    info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
-                    return
-                is_video = ext in _VIDEO_EXTS
-                cap = 64 * 1024 * 1024 if is_video else 16 * 1024 * 1024
-            data = await r.read()
-        if not data or len(data) > cap:
+            data  = await r.read()
+            ctype = (r.headers.get("Content-Type") or "").lower()
+        if not data:
+            return
+        if not ext_known:
+            # extension was a guess — refine it from the real Content-Type
+            for needle, e in (("webm", ".webm"), ("mp4", ".mp4"),
+                              ("webp", ".webp"), ("png", ".png"),
+                              ("gif", ".gif"), ("jpeg", ".jpg"), ("jpg", ".jpg")):
+                if needle in ctype:
+                    ext = e
+                    break
+        cap = (64 if ext in _VIDEO_EXTS else 16) * 1024 * 1024
+        if len(data) > cap:
             return
         os.makedirs(_THUMB_DIR, exist_ok=True)
+        dest = os.path.join(_THUMB_DIR, f"c_{url_hash}{ext}")
         with open(dest, "wb") as f:
             f.write(data)
-        info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
+        info["thumbnail"] = f"/cwk/loras/thumb/c_{url_hash}{ext}"
     except Exception as e:
         print(f"[CWK LoRA] thumbnail cache error: {e}")
     finally:
@@ -794,7 +811,8 @@ try:
 
     @_lora_routes.post("/cwk/lora/thumbnail")
     async def cwk_lora_set_thumbnail(request):
-        """Upload a custom thumbnail: multipart fields 'lora' + 'file'."""
+        """Upload a custom thumbnail (image or video): multipart fields
+        'lora' + 'file'."""
         lora_name, data, ext = None, None, ""
         try:
             reader = await request.multipart()
@@ -814,9 +832,10 @@ try:
         if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
                        ".mp4", ".webm"):
             return web.json_response({"ok": False, "error": f"unsupported media type: {ext}"}, status=400)
-        cap = 64 * 1024 * 1024 if ext in (".mp4", ".webm") else 16 * 1024 * 1024
+        cap = (64 if ext in (".mp4", ".webm") else 16) * 1024 * 1024
         if len(data) > cap:
             return web.json_response({"ok": False, "error": f"file too large (max {cap // (1024 * 1024)} MB)"}, status=400)
+
         try:
             os.makedirs(_THUMB_DIR, exist_ok=True)
             fname = hashlib.md5(lora_name.encode("utf-8")).hexdigest()[:12] + ext
@@ -1226,7 +1245,7 @@ class CWK_LoraLoader:
     RETURN_TYPES = ("MODEL", "CLIP", "STRING")
     RETURN_NAMES = ("model", "clip", "trigger_words")
     FUNCTION     = "execute"
-    CATEGORY     = "CWK/Loaders"
+    CATEGORY    = "CWK/Loaders"
     DESCRIPTION  = ("Applies a stack of LoRAs (weight + on/off per LoRA, global "
                     "on/off switch) and outputs the combined trigger words.")
 

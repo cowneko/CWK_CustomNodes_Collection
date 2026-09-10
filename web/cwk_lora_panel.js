@@ -7,6 +7,13 @@
  * description, trigger words, editable Version / Base model, and custom
  * thumbnail + NSFW controls. "Load LorA" hands the selected LoRA back to the
  * calling node.
+ *
+ * Hash-miss rescues: "🔗 Link by CivitAI URL" matches a selected LoRA to a
+ * CivitAI model by pasted URL (civitai.red downloads of models deleted from
+ * civitai.com, re-saved files). Cards carry badges for unverified matches:
+ *   ∅ not on CivitAI · ≈ filename match · i sidecar .civitai.info · 🔗 manual
+ * Server-cached thumbnails are served from /cwk/loras/thumb/ (local URL in
+ * civ.thumbnail), so the grid renders even when civitai.com is unreachable.
  */
 
 import { injectStyles } from "./cwk_styles.js";
@@ -135,15 +142,6 @@ export function injectLoraStyles() {
     .cwk-search-bar .cwk-favorite-filter { flex-shrink:0; margin:0; }
     .cwk-search-bar .cwk-favorite-filter span { font-size:14px; }
 
-    .cwk-card-match-badge {
-      background:rgba(20,24,36,.85); border-radius:4px;
-      padding:1px 5px; font-size:10px; font-weight:700; line-height:1.4;
-    }
-    .cwk-card-match-badge.filename { color:#e5c07b; border:1px solid #6b5b2e; }
-    .cwk-card-match-badge.sidecar  { color:#a6e3a1; border:1px solid #3f5a45; }
-    .cwk-card-match-badge.manual   { color:#89b4fa; border:1px solid #313552; }
-    .cwk-card-match-badge.missing  { color:#e78284; border:1px solid #5a3a45; }
-
     /* ── Sidebar description / trigger words ─────────────────────── */
     .cwk-lora-desc {
       max-height:200px; overflow-y:auto;
@@ -196,24 +194,37 @@ export function injectLoraStyles() {
       padding:1px 5px; font-size:10px; color:#a6e3a1; font-weight:700;
     }
 
+    /* ── Match / missing badges (hash-miss rescues) ─────────────── */
+    .cwk-card-match-badge {
+      background:rgba(20,24,36,.85); border-radius:4px;
+      padding:1px 5px; font-size:10px; font-weight:700; line-height:1.4;
+    }
+    .cwk-card-match-badge.filename { color:#e5c07b; border:1px solid #6b5b2e; }
+    .cwk-card-match-badge.sidecar  { color:#a6e3a1; border:1px solid #3f5a45; }
+    .cwk-card-match-badge.manual   { color:#89b4fa; border:1px solid #313552; }
+    .cwk-card-match-badge.missing  { color:#e78284; border:1px solid #5a3a45; }
+
     /* ── Node widget overlay (CWK LoRA Loader) ──────────────────── */
     .cwk-lora-overlay {
       position:fixed; left:0; top:0; z-index:100;
       transform-origin:0 0; display:none; pointer-events:auto;
     }
-    /* native multiline widget of the LoRA node — hidden by the extension.
+        /* native multiline widget of the LoRA node — hidden by the extension.
        !important beats the inline styles the frontend re-applies each frame. */
-    .cwk-lora-dom-hidden { display: none !important; }
+    .cwk-lora-dom-hidden {
+    display: none !important;
+    }
     .cwk-lora-widget {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
-      background:#1A1F2E; border:none; border-radius:8px;
+      background:#141824;
+      border:1px solid #2a2f45; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
       user-select:none;
     }
     .cwkl-w-header {
       display:flex; align-items:center; gap:7px;
-      padding:6px 9px; background:#1A1F2E;
+      padding:6px 9px; background:#141824;
       border-bottom:1px solid #2a2f45; flex-shrink:0;
     }
     .cwkl-w-header input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#89b4fa; }
@@ -260,7 +271,7 @@ export function injectLoraStyles() {
       color:#6c7086; font-style:italic; font-size:11px; padding:10px; text-align:center;
     }
     .cwkl-w-footer {
-      padding:4px 9px; background:#1A1F2E; border-top:1px solid #2a2f45;
+      padding:4px 9px; background:#141824; border-top:1px solid #2a2f45;
       flex-shrink:0; max-height:40px; overflow:hidden;
     }
     .cwkl-w-trigger {
@@ -368,15 +379,9 @@ export class LoraBrowserPanel {
               placeholder="Describe this LoRA… (leave empty to use the Civitai description)"></textarea>
           </div>
           <div class="cwk-sidebar-section">
-            <button class="cwk-btn cwk-btn-secondary" id="cwkl-refresh-btn" style="width:100%">
-              🔄 Refresh Civitai Data
-            </button>
-            <button class="cwk-btn cwk-btn-secondary" id="cwkl-link-btn"
-                    style="width:100%; margin-top:5px"
-                    title="Match this LoRA to a CivitAI model by pasting its page/version URL — for LoRAs the hash lookup can't find (re-saved files, civitai.red downloads of deleted models)">
-              🔗 Link by CivitAI URL…
-            </button>
-          </div>
+            <div class="cwk-sidebar-title">Trigger Words:
+              <span id="cwkl-trig-source" class="cwk-source-badge none">no data</span>
+            </div>
             <div id="cwkl-triggers" class="cwk-lora-tags"></div>
             <textarea id="cwkl-triggers-edit" class="cwk-lora-edit" style="display:none"
               placeholder="Comma-separated trigger words… (leave empty to use Civitai values)"></textarea>
@@ -405,6 +410,11 @@ export class LoraBrowserPanel {
           <div class="cwk-sidebar-section">
             <button class="cwk-btn cwk-btn-secondary" id="cwkl-refresh-btn" style="width:100%">
               🔄 Refresh Civitai Data
+            </button>
+            <button class="cwk-btn cwk-btn-secondary" id="cwkl-link-btn"
+                    style="width:100%; margin-top:5px"
+                    title="Match this LoRA to a CivitAI model by pasting its page/version URL — for LoRAs the hash lookup can't find (re-saved files, civitai.red downloads of deleted models)">
+              🔗 Link by CivitAI URL…
             </button>
           </div>
         </div>
@@ -552,7 +562,6 @@ export class LoraBrowserPanel {
     getBaseModelMatchers().then(list => {
       this._baseModelMatchers = list;
       this._rebuildFilterDropdown();
-      this._applyFilter(this._searchEl?.value ?? "");
     }).catch(() => {});
   }
 
@@ -568,6 +577,7 @@ export class LoraBrowserPanel {
     const counts = new Array(middle.length).fill(0);
     let othersCount = 0;
     for (const l of this._loras) {
+      // resolved base model: custom → CivitAI → safetensors metadata (server)
       const raw = (l.base_model ?? l.civitai?.base_model ?? "").toLowerCase();
       const idx = raw ? middleLc.findIndex(keywords => keywords.some(s => raw.includes(s))) : -1;
       if (idx === -1) othersCount++;
@@ -734,38 +744,6 @@ export class LoraBrowserPanel {
     document.getElementById("cwkl-fetch-btn")
       .addEventListener("click", () => this._fetchCivitAI(false));
 
-    document.getElementById("cwkl-link-btn")
-      .addEventListener("click", () => this._linkByUrl());
-
-  /** Manual rescue: link a LoRA to a CivitAI model by URL (for hash-miss
-   *  LoRAs, incl. civitai.red downloads of models deleted from civitai.com). */
-  async _linkByUrl() {
-    const l = this._current();
-    if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
-    const url = prompt(
-      `Paste a CivitAI link for “${l.name.replace(/^.*[/\\]/, "")}”:\n` +
-      "e.g. https://civitai.com/models/12345?modelVersionId=67890", "");
-    if (url === null || !url.trim()) return;
-    this._setStatus(`Linking ${l.name}…`);
-    try {
-      const res  = await fetch("/cwk/lora/lookup_by_id", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ lora: l.name, url: url.trim(), api_key: this._civitaiKey }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      l.civitai = data.info;
-      if (data.info?.base_model) l.base_model = data.info.base_model;
-      triggerCache.set(l.name, data.info?.trigger_words || []);
-      this._updateCard(l);
-      this._updateSidebarStatic();
-      this._rebuildFilterDropdown();
-      this._applyFilter(this._searchEl?.value ?? "");
-      this._setStatus(`✓ Linked: ${l.name}`);
-    } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
-  }
-
     document.getElementById("cwkl-rebuild-btn").addEventListener("click", () => {
       if (!confirm(
         "Re-fetch ALL LoRA metadata from CivitAI?\n\nCustom descriptions, trigger words, base models and thumbnails are preserved."
@@ -785,6 +763,9 @@ export class LoraBrowserPanel {
 
     document.getElementById("cwkl-refresh-btn")
       .addEventListener("click", () => this._refreshSelected());
+
+    document.getElementById("cwkl-link-btn")
+      .addEventListener("click", () => this._linkByUrl());
 
     this._editBtn.addEventListener("click", () => {
       if (!this._current()) { this._setStatus("⚠ Select a LoRA first", true); return; }
@@ -975,6 +956,7 @@ export class LoraBrowserPanel {
             l._resolving = false;
             if (p.ok) {
               l.civitai = p.info;
+              if (p.info?.base_model) l.base_model = p.info.base_model;
               found++;
               if (p.info?.trigger_words?.length) {
                 withTriggers++;
@@ -1025,9 +1007,12 @@ export class LoraBrowserPanel {
       });
       if (res.ok) {
         l.civitai = res.info;
+        if (res.info?.base_model) l.base_model = res.info.base_model;
         triggerCache.set(l.name, res.info?.trigger_words || []);
         this._updateCard(l);
         this._updateSidebarStatic();
+        this._rebuildFilterDropdown();
+        this._applyFilter(this._searchEl?.value ?? "");
         this._setStatus(`✓ Refreshed: ${l.name}`);
       } else {
         if (res.error === "api_key_invalid") {
@@ -1037,6 +1022,35 @@ export class LoraBrowserPanel {
         }
         this._setStatus(`✗ ${res.error}`, true);
       }
+    } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
+  }
+
+  /** Manual rescue: link a LoRA to a CivitAI model by URL (for hash-miss
+   *  LoRAs, incl. civitai.red downloads of models deleted from civitai.com). */
+  async _linkByUrl() {
+    const l = this._current();
+    if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
+    const url = prompt(
+      `Paste a CivitAI link for “${l.name.replace(/^.*[/\\]/, "")}”:\n` +
+      "e.g. https://civitai.com/models/12345?modelVersionId=67890", "");
+    if (url === null || !url.trim()) return;
+    this._setStatus(`Linking ${l.name}…`);
+    try {
+      const res  = await fetch("/cwk/lora/lookup_by_id", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ lora: l.name, url: url.trim(), api_key: this._civitaiKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      l.civitai = data.info;
+      if (data.info?.base_model) l.base_model = data.info.base_model;
+      triggerCache.set(l.name, data.info?.trigger_words || []);
+      this._updateCard(l);
+      this._updateSidebarStatic();
+      this._rebuildFilterDropdown();
+      this._applyFilter(this._searchEl?.value ?? "");
+      this._setStatus(`✓ Linked: ${l.name}`);
     } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
   }
 
@@ -1051,6 +1065,7 @@ export class LoraBrowserPanel {
            && !(l.civitai?.civitai_name || "").toLowerCase().includes(q)) return false;
       if (this._filterFavorite && !l.civitai?.favorite) return false;
       if (fm !== null) {
+        // resolved base model: custom → CivitAI → safetensors metadata (server)
         const raw = (l.base_model ?? l.civitai?.base_model ?? "").toLowerCase();
         if (fm === OTHERS_MATCH) {
           const allKnown = (this._baseModelMatchers || [])
@@ -1098,6 +1113,7 @@ export class LoraBrowserPanel {
                      || !!(civ.custom_version || "").trim()
                      || !!civ.thumbnail_custom;
 
+    // match / missing badges (data provenance for hash-miss rescues)
     const match = civ.match || "";
     let matchHtml = "";
     if (match === "filename")
@@ -1126,7 +1142,8 @@ export class LoraBrowserPanel {
     card.innerHTML = `
       <div class="cwk-card-top-left">
         <div class="cwk-card-badge">LORA</div>
-        ${customHtml}${matchHtml}
+        ${customHtml}
+        ${matchHtml}
         ${eyeHtml}
       </div>
       ${starHtml}
@@ -1289,6 +1306,7 @@ export class LoraBrowserPanel {
       });
       if (res.ok) {
         l.civitai = res.civitai || {};
+        if (res.civitai?.base_model) l.base_model = res.civitai.base_model;
         triggerCache.set(l.name, l.civitai.trigger_words || []);
         this._updateCard(l);
         this._updateSidebarStatic();

@@ -66,25 +66,8 @@ function injectLoraSettingsStyles() {
       color: #9aa4b8; font-size: 14px; line-height: 1;
       padding: 2px 5px; border-radius: 4px;
     }
-    .cwk-lora-widget .cwkl-w-gear:hover,
-    .cwk-lora-widget .cwkl-w-gear.open { color: #fff; }
-    .cwk-lora-widget .cwkl-w-gear.open { background: rgba(255,255,255,.12); }
-    .cwk-lora-widget .cwkl-w-settings {
-      flex-direction: column; gap: 7px; flex: 0 0 auto;
-      margin: 0 0 6px 0; padding: 8px 10px;
-      background: rgba(0,0,0,.28);
-      border: 1px solid rgba(255,255,255,.08); border-radius: 6px;
-      font-size: 11px; color: #c7cede;
-    }
-    .cwk-lora-widget .cwkl-w-set-row { display: flex; align-items: center; gap: 8px; }
-    .cwk-lora-widget .cwkl-w-set-row > span { flex: 1; }
-    .cwk-lora-widget .cwkl-w-set-row input[type="number"] {
-      width: 68px; padding: 2px 5px; font-size: 11px;
-      background: #141824; color: #e8ecf4;
-      border: 1px solid rgba(255,255,255,.14); border-radius: 4px;
-    }
-    .cwk-lora-widget .cwkl-w-set-chk {
-      display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none;
+    .cwk-lora-widget .cwkl-w-gear:hover {
+      color: #fff; background: rgba(255,255,255,.12);
     }
   `;
   document.head.appendChild(st);
@@ -106,6 +89,163 @@ async function ensureLoraSettings() {
   _loraSettings ??= { default_strength: 1, strength_step: 0.05,
                        keep_in_memory: false, truncate_names: false };
   return _loraSettings;
+}
+
+// ─── ⚙ LoRA Loader settings popup (cloned from CWK Save Image) ──────────────
+
+let _loraSetPanel = null, _loraSetBackdrop = null;
+
+function _blockLoraCanvasEvents(el) {
+  for (const evt of ["mousedown","mouseup","click","pointerdown","pointerup",
+                     "dblclick","contextmenu","wheel","touchstart","touchend"]) {
+    el.addEventListener(evt, e => e.stopPropagation());
+  }
+}
+
+function closeLoraSettingsPopup() {
+  _loraSetPanel?.remove(); _loraSetBackdrop?.remove();
+  _loraSetPanel = null; _loraSetBackdrop = null;
+}
+
+async function openLoraSettingsPopup(onChange) {
+  closeLoraSettingsPopup();
+  await ensureLoraSettings();
+  let s = { ..._loraSettings };
+  let postTimer = null;
+
+  const persist = () => {
+    clearTimeout(postTimer);
+    postTimer = setTimeout(async () => {
+      try {
+        const res = await fetch("/cwk/loras/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(_loraSettings),
+        });
+        if (res.ok) {
+          const j = await res.json();
+          if (j?.settings) _loraSettings = j.settings;   // server-clamped truth
+        }
+      } catch {}
+    }, 350);
+  };
+
+  const apply = patch => {
+    s = { ...s, ...patch };
+    _loraSettings = s;
+    onChange?.();      // rows re-render → new slider step / labels / defaults
+    persist();
+  };
+
+  _loraSetBackdrop = document.createElement("div");
+  Object.assign(_loraSetBackdrop.style, { position:"fixed", inset:"0", background:"rgba(0,0,0,.5)", zIndex:"100001" });
+  _blockLoraCanvasEvents(_loraSetBackdrop);
+  _loraSetBackdrop.addEventListener("mousedown", () => closeLoraSettingsPopup());
+
+  _loraSetPanel = document.createElement("div");
+  Object.assign(_loraSetPanel.style, {
+    position:"fixed", left:"50%", top:"50%", transform:"translate(-50%,-50%)",
+    width:"min(92vw, 430px)", background:"#141824", border:"1px solid #313552",
+    borderRadius:"10px", color:"#cdd6f4", fontFamily:"Inter,system-ui,sans-serif",
+    fontSize:"13px", zIndex:"100002", boxShadow:"0 24px 80px rgba(0,0,0,.7)", userSelect:"none",
+  });
+  _blockLoraCanvasEvents(_loraSetPanel);
+
+  // header — same pattern as "⚙ Save Settings"
+  const header = document.createElement("div");
+  Object.assign(header.style, { display:"flex", alignItems:"center", padding:"12px 16px",
+    background:"#1a2035", borderBottom:"1px solid #2a2f45", borderRadius:"10px 10px 0 0" });
+  const title = document.createElement("span");
+  title.textContent = "⚙ LoRA Loader Settings"; title.style.cssText = "font-weight:600; flex:1;";
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "✕";
+  closeBtn.style.cssText = "background:none; border:none; color:#6c7086; font-size:16px; cursor:pointer; line-height:1;";
+  closeBtn.onmouseenter = () => closeBtn.style.color = "#f38ba8";
+  closeBtn.onmouseleave = () => closeBtn.style.color = "#6c7086";
+  closeBtn.onclick = closeLoraSettingsPopup;
+  header.append(title, closeBtn);
+
+  const body = document.createElement("div");
+  Object.assign(body.style, { padding: "14px 16px", display: "flex", flexDirection: "column", gap: "13px" });
+
+  const row = () => {
+    const r = document.createElement("div");
+    Object.assign(r.style, { display:"flex", alignItems:"center", gap:"10px" });
+    body.appendChild(r);
+    return r;
+  };
+  const labelCss = "width:175px; flex-shrink:0; color:#cdd6f4;";
+  const sliderCss = "flex:1; accent-color:#89b4fa; cursor:pointer;";
+
+  // Default strength — slider row (pattern: JPG quality)
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Default strength"; l.style.cssText = labelCss;
+    const sl = document.createElement("input"); sl.type = "range"; sl.min = -2; sl.max = 2; sl.step = 0.05;
+    sl.value = s.default_strength ?? 1;
+    sl.style.cssText = sliderCss;
+    const v = document.createElement("span"); v.textContent = Number(sl.value).toFixed(2);
+    v.style.cssText = "width:28px; text-align:right; color:#89b4fa; font-weight:600;";
+    sl.addEventListener("input", () => {
+      v.textContent = Number(sl.value).toFixed(2);
+      apply({ default_strength: Number(sl.value) });
+    });
+    r.append(l, sl, v);
+  }
+
+  // Strength step — number input (pattern: Counter digits)
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Strength step"; l.style.cssText = labelCss;
+    const inp = document.createElement("input"); inp.type = "number";
+    inp.min = 0.001; inp.max = 1; inp.step = 0.001;
+    inp.value = s.strength_step ?? 0.05;
+    inp.style.cssText = "width:64px; background:#1e2335; border:1px solid #313552; border-radius:6px; color:#cdd6f4; padding:4px 8px; outline:none; font-size:13px;";
+    inp.addEventListener("change", () => {
+      let v = parseFloat(inp.value);
+      if (!Number.isFinite(v)) v = 0.05;
+      v = Math.min(1, Math.max(0.001, v));
+      inp.value = v;
+      apply({ strength_step: v });
+    });
+    r.append(l, inp);
+  }
+
+  // Keep all LoRAs loaded in memory — checkbox (pattern: WebP lossless)
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Keep all LoRAs in memory"; l.style.cssText = labelCss;
+    const cb = document.createElement("input"); cb.type = "checkbox";
+    cb.checked = !!s.keep_in_memory;
+    cb.style.accentColor = "#89b4fa"; cb.style.cursor = "pointer";
+    cb.addEventListener("change", () => apply({ keep_in_memory: cb.checked }));
+    r.append(l, cb);
+  }
+
+  // Truncate LoRA names — checkbox (pattern: Save workflow)
+  {
+    const r = row();
+    const l = document.createElement("span"); l.textContent = "Truncate LoRA names"; l.style.cssText = labelCss;
+    const cb = document.createElement("input"); cb.type = "checkbox";
+    cb.checked = !!s.truncate_names;
+    cb.style.accentColor = "#89b4fa"; cb.style.cursor = "pointer";
+    cb.addEventListener("change", () => apply({ truncate_names: cb.checked }));
+    r.append(l, cb);
+  }
+
+  // Done — same button
+  {
+    const r = row(); r.style.justifyContent = "flex-end";
+    const b = document.createElement("button"); b.textContent = "Done";
+    b.style.cssText = "background:#313552; color:#cdd6f4; border:1px solid #313552; border-radius:6px; padding:6px 20px; font-weight:600; cursor:pointer; font-size:13px;";
+    b.onmouseenter = () => b.style.filter = "brightness(1.15)";
+    b.onmouseleave = () => b.style.filter = "";
+    b.onclick = closeLoraSettingsPopup;
+    r.appendChild(b);
+  }
+
+  _loraSetPanel.append(header, body);
+  document.body.append(_loraSetBackdrop, _loraSetPanel);
 }
 
 async function ensureLoraNames(force = false) {
@@ -334,24 +474,6 @@ function _setupLoraNode(node) {
           title="Open the LoRA browser (infos, trigger words, thumbnails)">🔎 Browser</button>
         <button class="cwkl-w-add" title="Add an empty LoRA slot">＋ Add LoRA</button>
       </div>
-      <div class="cwkl-w-settings" style="display:none">
-        <div class="cwkl-w-set-row">
-          <span>Default strength for new LoRAs</span>
-          <input type="number" class="cwkl-w-set-strength" min="-2" max="2" step="0.05" value="1"/>
-        </div>
-        <div class="cwkl-w-set-row">
-          <span>Strength step</span>
-          <input type="number" class="cwkl-w-set-step" min="0.001" max="1" step="0.001" value="0.05"/>
-        </div>
-        <label class="cwkl-w-set-chk">
-          <input type="checkbox" class="cwkl-w-set-memory"/>
-          Keep all LoRAs loaded in memory
-        </label>
-        <label class="cwkl-w-set-chk">
-          <input type="checkbox" class="cwkl-w-set-truncate"/>
-          Truncate LoRA names (remove folders &amp; extension)
-        </label>
-      </div>
       <div class="cwkl-w-rows"></div>
       <div class="cwkl-w-empty">No LoRAs yet — click “＋ Add LoRA”.</div>
       <div class="cwkl-w-footer">
@@ -549,58 +671,9 @@ function _setupLoraNode(node) {
       _render();
     });
 
-        // ── ⚙ Settings drawer ───────────────────────────────────────────────────
-    let settingsTimer = null;
-
-    function _syncSettingsUI() {
-      const s = _loraSettings ?? {};
-      setStrength.value     = String(s.default_strength ?? 1);
-      setStep.value         = String(s.strength_step ?? 0.05);
-      setMemory.checked     = !!s.keep_in_memory;
-      setTruncate.checked   = !!s.truncate_names;
-    }
-
-    function _onSettingChange() {
-      const sv = Number(setStrength.value);
-      const st = Number(setStep.value);
-      _loraSettings = {
-        ...(_loraSettings ?? {}),
-        default_strength: Number.isFinite(sv) ? Math.max(-2, Math.min(2, sv)) : 1,
-        strength_step:    (Number.isFinite(st) && st > 0) ? st : 0.05,
-        keep_in_memory:   setMemory.checked,
-        truncate_names:   setTruncate.checked,
-      };
-      _render();   // rows pick up new slider step + truncated labels immediately
-      clearTimeout(settingsTimer);
-      settingsTimer = setTimeout(async () => {
-        try {
-          const res = await fetch("/cwk/loras/settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(_loraSettings),
-          });
-          if (res.ok) {
-            const j = await res.json();
-            if (j?.settings) _loraSettings = j.settings;   // server-clamped truth
-          }
-        } catch {}
-        _syncSettingsUI();
-      }, 400);
-    }
-
-    setStrength.addEventListener("change", _onSettingChange);
-    setStep.addEventListener("change", _onSettingChange);
-    setMemory.addEventListener("change", _onSettingChange);
-    setTruncate.addEventListener("change", _onSettingChange);
-
-    gearBtn.addEventListener("click", () => {
-      const open = settingsEl.style.display === "none";
-      settingsEl.style.display = open ? "flex" : "none";
-      gearBtn.classList.toggle("open", open);
-      if (open) _syncSettingsUI();
-    });
-
-    ensureLoraSettings().then(() => { _syncSettingsUI(); _render(); });
+    // ── ⚙ Settings (popup, same behaviour as CWK Save Image) ────────────────
+    gearBtn.addEventListener("click", () => openLoraSettingsPopup(() => _render()));
+    ensureLoraSettings().then(() => _render());   // rows pick up step/labels once loaded
 
     // ── Trigger-word preview (mirrors the node's STRING output) ─────────────
     let trigTimer = null;

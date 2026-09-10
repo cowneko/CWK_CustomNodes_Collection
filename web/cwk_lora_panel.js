@@ -12,8 +12,13 @@
  * CivitAI model by pasted URL (civitai.red downloads of models deleted from
  * civitai.com, re-saved files). Cards carry badges for unverified matches:
  *   ∅ not on CivitAI · ≈ filename match · i sidecar .civitai.info · 🔗 manual
- * Server-cached thumbnails are served from /cwk/loras/thumb/ (local URL in
- * civ.thumbnail), so the grid renders even when civitai.com is unreachable.
+ *
+ * Video previews: versions whose previews are all videos get a <video>
+ * thumbnail (still images preferred whenever available; the server flags
+ * them via civitai.thumbnail_is_video and serves them from local cache).
+ * Videos are muted+looping and only play while their card is in the viewport
+ * (one shared IntersectionObserver for the whole grid). Cards show a ▶ badge;
+ * NSFW blur applies to videos like images.
  */
 
 import { injectStyles } from "./cwk_styles.js";
@@ -94,6 +99,13 @@ function isNsfwLora(l) {
   if (c.nsfw_manual === true)  return true;
   if (c.nsfw_manual === false) return false;
   return (c.nsfw_level ?? 0) >= NSFW_R;
+}
+
+/** True when the resolved thumbnail is a video: server flag, or a custom /
+ *  cached video URL detected by extension. */
+function isVideoThumb(civ) {
+  const thumb = civ?.thumbnail || "";
+  return !!civ?.thumbnail_is_video || /\.(mp4|webm)(\?|#|$)/i.test(thumb);
 }
 
 // ─── Shared trigger-word cache (used by the node widget preview) ─────────────
@@ -204,6 +216,19 @@ export function injectLoraStyles() {
     .cwk-card-match-badge.manual   { color:#89b4fa; border:1px solid #313552; }
     .cwk-card-match-badge.missing  { color:#e78284; border:1px solid #5a3a45; }
 
+    /* ── Video thumbnails (CivitAI video previews) ───────────────── */
+    .cwk-card video.cwk-card-video {
+      position:absolute; inset:0; width:100%; height:100%;
+      object-fit:cover; background:#10131f; display:block;
+    }
+    .cwk-card-video-badge {
+      background:rgba(20,24,36,.85); color:#cba6f7; border:1px solid #453a5e;
+      border-radius:4px; padding:1px 5px; font-size:10px; font-weight:700;
+    }
+    /* mirror of the .cwk-card.blurred img rule in cwk_styles.js —
+       align the blur radius with that rule if it differs */
+    .cwk-card.blurred video { filter: blur(18px); }
+
     /* ── Node widget overlay (CWK LoRA Loader) ──────────────────── */
     .cwk-lora-overlay {
       position:fixed; left:0; top:0; z-index:100;
@@ -301,6 +326,7 @@ export class LoraBrowserPanel {
       return Number.isFinite(v) ? Math.min(THUMB_MAX, Math.max(THUMB_MIN, v)) : THUMB_DEF;
     })();
     this._thumbObserver   = null;
+    this._videoObserver   = null;
     this._lastThumbUsable = -1;
     this._baseModelMatchers = STATIC_BASE_MODEL_FILTERS;
     this._baseModelFilters  = STATIC_BASE_MODEL_FILTERS;
@@ -393,9 +419,11 @@ export class LoraBrowserPanel {
             <div class="cwk-sidebar-title">Thumbnail & NSFW:</div>
             <div class="cwk-thumb-row">
               <img id="cwkl-thumb-preview" class="cwk-thumb-preview" style="display:none" alt=""/>
+              <video id="cwkl-thumb-video" class="cwk-thumb-preview" style="display:none"
+                     muted loop playsinline preload="metadata"></video>
               <div class="cwk-thumb-btns">
                 <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-set"
-                  title="Upload a local image as custom thumbnail">🖼 Set…</button>
+                  title="Upload a local image or video as custom thumbnail">🖼 Set…</button>
                 <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-reset"
                   title="Remove the custom thumbnail (falls back to Civitai)">✕ Reset</button>
                 <label class="cwk-nsfw-tick" title="Blur this LoRA's thumbnail until revealed">
@@ -474,6 +502,7 @@ export class LoraBrowserPanel {
     this._descSrcEl    = document.getElementById("cwkl-desc-source");
     this._trigSrcEl    = document.getElementById("cwkl-trig-source");
     this._thumbImg     = document.getElementById("cwkl-thumb-preview");
+    this._thumbVideo   = document.getElementById("cwkl-thumb-video");
     this._thumbSet     = document.getElementById("cwkl-thumb-set");
     this._thumbReset   = document.getElementById("cwkl-thumb-reset");
     this._nsfwToggle   = document.getElementById("cwkl-nsfw-toggle");
@@ -845,6 +874,10 @@ export class LoraBrowserPanel {
   }
 
   hide() {
+    // stop all video playback (grid + sidebar) before hiding
+    this._grid?.querySelectorAll("video.cwk-card-video").forEach(v => v.pause());
+    this._thumbVideo?.pause();
+
     this._panel.classList.remove("visible");
     this._overlay.classList.remove("visible");
     this._setEditMode(false);
@@ -1084,6 +1117,7 @@ export class LoraBrowserPanel {
 
   _renderGrid() {
     if (!this._grid) return;
+    this._unobserveCardVideos(this._grid);   // release old <video> observers
     this._grid.innerHTML = "";
     for (const l of this._filtered) this._grid.appendChild(this._buildCard(l));
   }
@@ -1127,8 +1161,17 @@ export class LoraBrowserPanel {
     else if (!matchHtml && civ.error)
       matchHtml = `<div class="cwk-card-match-badge missing" title="${String(civ.error).replace(/"/g, "&quot;")}">⚠</div>`;
 
+    // media: <video> when the thumbnail is flagged/detected as a video
+    const videoThumb = isVideoThumb(civ);
     let mediaHtml = `<div class="cwk-card-placeholder">🧩</div>`;
-    if (thumb) mediaHtml = `<img src="${thumb}" alt="${displayName}" loading="lazy"/>`;
+    if (thumb) {
+      mediaHtml = videoThumb
+        ? `<video class="cwk-card-video" src="${thumb}" muted loop playsinline preload="metadata"></video>`
+        : `<img src="${thumb}" alt="${displayName}" loading="lazy"/>`;
+    }
+    const videoBadgeHtml = videoThumb
+      ? `<div class="cwk-card-video-badge" title="Video preview">▶</div>`
+      : "";
 
     const eyeHtml = nsfw
       ? `<button class="cwk-eye-btn" title="${revealed ? "Blur image" : "Reveal image"}">${revealed ? "🙈" : "👁"}</button>`
@@ -1144,6 +1187,7 @@ export class LoraBrowserPanel {
         <div class="cwk-card-badge">LORA</div>
         ${customHtml}
         ${matchHtml}
+        ${videoBadgeHtml}
         ${eyeHtml}
       </div>
       ${starHtml}
@@ -1155,6 +1199,9 @@ export class LoraBrowserPanel {
           : (baseModel ? `<div class="cwk-card-version">${baseModel}</div>` : "")}
       </div>
     `;
+
+    const vidEl = card.querySelector("video.cwk-card-video");
+    if (vidEl) this._observeCardVideo(vidEl);
 
     if (nsfw) {
       card.querySelector(".cwk-eye-btn").addEventListener("click", e => {
@@ -1186,9 +1233,39 @@ export class LoraBrowserPanel {
     return card;
   }
 
+  // ── Video playback management ──────────────────────────────────────────────
+
+  /** One shared observer for the whole grid: muted videos play only while
+   *  their card is actually in the viewport (a grid full of always-playing
+   *  videos would pin the GPU). */
+  _ensureVideoObserver() {
+    if (this._videoObserver) return this._videoObserver;
+    this._videoObserver = new IntersectionObserver(entries => {
+      for (const en of entries) {
+        const v = en.target;
+        if (en.isIntersecting) v.play().catch(() => {});
+        else v.pause();
+      }
+    }, { threshold: 0.1 });
+    return this._videoObserver;
+  }
+
+  _observeCardVideo(v) {
+    try { this._ensureVideoObserver().observe(v); } catch {}
+  }
+
+  _unobserveCardVideos(rootEl) {
+    if (!this._videoObserver || !rootEl) return;
+    rootEl.querySelectorAll("video.cwk-card-video")
+      .forEach(v => this._videoObserver.unobserve(v));
+  }
+
   _updateCard(l) {
     const el = this._grid?.querySelector(`.cwk-card[data-name="${CSS.escape(l.name)}"]`);
-    if (el) el.replaceWith(this._buildCard(l));
+    if (el) {
+      this._unobserveCardVideos(el);   // release the old card's observer
+      el.replaceWith(this._buildCard(l));
+    }
   }
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -1245,9 +1322,27 @@ export class LoraBrowserPanel {
     this._trigSrcEl.className   = "cwk-source-badge " + (tCustom ? "custom" : tCiv ? "civitai" : "none");
     this._trigSrcEl.textContent = tCustom ? "custom" : tCiv ? "Civitai" : "no data";
 
+    // thumbnail: <img> or <video> depending on the resolved media
     const thumb = civ.thumbnail || "";
-    this._thumbImg.src          = thumb;
-    this._thumbImg.style.display = thumb ? "" : "none";
+    const video = isVideoThumb(civ) && !!thumb;
+    if (video) {
+      this._thumbImg.removeAttribute("src");
+      this._thumbImg.style.display = "none";
+      this._thumbVideo.style.display = "";
+      if (this._thumbVideo.getAttribute("src") !== thumb) {
+        this._thumbVideo.src = thumb;
+      }
+      this._thumbVideo.play().catch(() => {});
+    } else {
+      this._thumbVideo.pause();
+      this._thumbVideo.style.display = "none";
+      if (this._thumbVideo.hasAttribute("src")) {
+        this._thumbVideo.removeAttribute("src");
+        try { this._thumbVideo.load(); } catch {}   // abort any in-flight download
+      }
+      if (thumb) this._thumbImg.src = thumb;
+      this._thumbImg.style.display = thumb ? "" : "none";
+    }
     this._thumbReset.disabled   = !civ.thumbnail_custom;
     this._nsfwToggle.checked    = isNsfwLora(l);
 
@@ -1324,7 +1419,7 @@ export class LoraBrowserPanel {
     if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
     const input = document.createElement("input");
     input.type   = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/mp4,video/webm";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;

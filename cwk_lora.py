@@ -42,6 +42,40 @@ _KEEP_FIELDS = (
     "custom_base_model", "custom_version", "custom_thumbnail",
 )
 
+_LORA_SETTINGS_FILE = os.path.join(_NODE_DIR, "lora_settings.json")
+_DEFAULT_LORA_SETTINGS: Dict[str, Any] = {
+    "default_strength": 1.0,    # weight pre-filled on new LoRA rows
+    "strength_step":    0.05,   # slider step in the loader rows
+    "keep_in_memory":   False,  # keep loaded LoRA weights in RAM between runs
+    "truncate_names":   False,  # display-only: strip folders/extension in dropdowns
+}
+
+def _load_lora_settings() -> Dict[str, Any]:
+    s = dict(_DEFAULT_LORA_SETTINGS)
+    try:
+        with open(_LORA_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            for k in s:
+                if k in data:
+                    s[k] = data[k]
+    except Exception:
+        pass
+    try:    s["default_strength"] = max(-2.0, min(2.0, float(s["default_strength"])))
+    except (TypeError, ValueError): s["default_strength"] = 1.0
+    try:    s["strength_step"] = max(0.001, min(1.0, float(s["strength_step"])))
+    except (TypeError, ValueError): s["strength_step"] = 0.05
+    s["keep_in_memory"] = bool(s["keep_in_memory"])
+    s["truncate_names"] = bool(s["truncate_names"])
+    return s
+
+def _save_lora_settings(s: Dict[str, Any]) -> None:
+    try:
+        with open(_LORA_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=2)
+    except Exception as e:
+        print(f"[CWK LoRA] Error saving settings: {e}")
+
 
 # ─── Cache handling ──────────────────────────────────────────────────────────
 
@@ -148,22 +182,26 @@ def _resolve_thumbnail(civ: Dict[str, Any]) -> str:
     return civ.get("custom_thumbnail") or civ.get("thumbnail") or ""
 
 
-def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract the fields we keep from a CivitAI model-version dict."""
-    model   = ver.get("model") or {}
-    entries = []   # (url, nsfwLevel)
+def _extract_image_entries(ver: Dict[str, Any]) -> List[Tuple[str, int]]:
+    """(url, nsfwLevel) for every still image of a version — shared by
+    _parse_version and the model-page fallback."""
+    out = []
     for img in (ver.get("images") or []):
         if (img.get("type") or "image") != "image":
             continue
         url = img.get("url")
         if not url:
             continue
-        lvl = 0
-        try:
-            lvl = int(img.get("nsfwLevel") or 0)
-        except (TypeError, ValueError):
-            pass
-        entries.append((url, lvl))
+        try:    lvl = int(img.get("nsfwLevel") or 0)
+        except (TypeError, ValueError): lvl = 0
+        out.append((url, lvl))
+    return out
+
+
+def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract the fields we keep from a CivitAI model-version dict."""
+    model   = ver.get("model") or {}
+    entries = _extract_image_entries(ver)
 
     nsfw_level = max((lvl for _, lvl in entries), default=0)
     try:
@@ -172,7 +210,7 @@ def _parse_version(ver: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
     images    = [u for u, _ in entries]
-    thumbnail = next((u for _, lvl in entries if lvl < NSFW_R),
+    thumbnail = next((u for u, lvl in entries if lvl < NSFW_R),
                      images[0] if images else None)
 
     return {
@@ -215,6 +253,7 @@ def _public_civitai(civ: Dict[str, Any]) -> Dict[str, Any]:
         "nsfw_level":         civ.get("nsfw_level", 0),
         "nsfw_manual":        civ.get("nsfw_manual"),
         "not_on_civitai":     bool(civ.get("not_on_civitai")),
+        "match":              civ.get("match"),      # ← add: "sidecar"|"filename"|"manual"|None
         "error":              civ.get("error"),
     }
 
@@ -225,17 +264,133 @@ def _lora_triggers(name: str) -> List[str]:
     return _resolve_triggers(civ)
 
 
+_SF_BASE_PATTERNS: List[Tuple[str, Tuple[str, ...]]] = [
+    # CivitAI's base_model always wins when present — metadata can't tell
+    # Pony/Illustrious apart from plain SDXL (they all report sd_xl_base_1.0).
+    ("Flux", ("flux",)), ("Chroma", ("chroma",)), ("SD 3.5", ("sd3",)),
+    ("Illustrious", ("illustrious", "noob")), ("Pony", ("pony",)),
+    ("SDXL", ("sdxl", "sd_xl")),
+    ("SD 2.1", ("sd2", "v2-1", "v2.1")),
+    ("SD 1.5", ("sd15", "sd1.5", "sd_1.5", "sd-v1", "v1-5", "v1.5",
+                "stable-diffusion-v1")),
+    ("Wan Video", ("wan",)), ("Qwen", ("qwen",)), ("Hunyuan", ("hunyuan",)),
+]
+
+def _safetensors_meta(path: str) -> Dict[str, Any]:
+    """Read the __metadata__ dict from a safetensors header (no full load)."""
+    import struct
+    try:
+        with open(path, "rb") as f:
+            (n,) = struct.unpack("<Q", f.read(8))
+            if n <= 0 or n > 16 * 1024 * 1024:
+                return {}
+            header = json.loads(f.read(n))
+        meta = header.get("__metadata__") if isinstance(header, dict) else None
+        return meta if isinstance(meta, dict) else {}
+    except Exception:
+        return {}
+
+def _base_from_sf_meta(meta: Dict[str, Any]) -> str:
+    for key in ("ss_base_model_version", "base_model", "base_model_version",
+                "ss_sd_model_name"):
+        val = str(meta.get(key) or "").lower()
+        if not val:
+            continue
+        for label, needles in _SF_BASE_PATTERNS:
+            if any(n in val for n in needles):
+                return label
+    return ""
+
+def _sf_base_for(name: str, entry: Dict[str, Any]) -> Tuple[str, bool]:
+    """→ (base_model, cache_changed). Cached by (size, mtime) in the entry."""
+    if not name.lower().endswith(".safetensors"):
+        return entry.get("sf_base_model", ""), False
+    path = folder_paths.get_full_path("loras", name)
+    if not path or not os.path.exists(path):
+        return entry.get("sf_base_model", ""), False
+    try:
+        st = os.stat(path)
+        key = [st.st_size, int(st.st_mtime)]
+    except OSError:
+        return entry.get("sf_base_model", ""), False
+    if entry.get("_sf_key") == key and "sf_base_model" in entry:
+        return entry["sf_base_model"], False
+    base = _base_from_sf_meta(_safetensors_meta(path))
+    entry["_sf_key"]       = key
+    entry["sf_base_model"] = base
+    return base, True
+
+
 def _lora_api_list() -> List[Dict[str, Any]]:
-    cache = _load_lora_cache().get("loras", {})
-    return [
-        {"name": name, "type": "lora",
-         "civitai": _public_civitai(cache.get(name, {}).get("civitai", {}))}
-        for name in _list_loras()
-    ]
+    cache = _load_lora_cache()
+    loras = cache.get("loras", {})
+    out, dirty = [], False
+    for name in _list_loras():
+        entry = loras.setdefault(name, {"civitai": {}})
+        civ   = entry.get("civitai", {})
+        base  = _resolve_base(civ)                # custom → CivitAI
+        if not base:                              # → safetensors metadata
+            base, ch = _sf_base_for(name, entry)
+            dirty = dirty or ch
+        out.append({"name": name, "type": "lora", "base_model": base,
+                    "civitai": _public_civitai(civ)})
+    if dirty:
+        _save_lora_cache(cache)
+    return out
 
 
 async def _sse_write(resp, payload: Dict[str, Any]) -> None:
     await resp.write(f"data: {json.dumps(payload)}\n\n".encode("utf-8"))
+
+
+async def _civitai_get_json(session, url: str, params=None, tries: int = 3):
+    """GET → (status, json|None) with 429 backoff."""
+    delay = 2.0
+    for attempt in range(tries):
+        async with session.get(url, params=params) as r:
+            if r.status == 429 and attempt < tries - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            if r.status != 200:
+                return r.status, None
+            return 200, await r.json(content_type=None)
+    return 0, None
+
+
+async def _fill_from_model_page(session, info: Dict[str, Any], api_key: str) -> None:
+    """A version can have zero images while the model page has plenty —
+    borrow them from the model's other versions (fixes 'description only')."""
+    model_id = info.get("model_id")
+    if not model_id:
+        return
+    params = {"token": api_key} if api_key else None
+    try:
+        status, data = await _civitai_get_json(
+            session, f"{_CIVITAI_API}/models/{model_id}", params)
+    except Exception as e:
+        print(f"[CWK LoRA] model-page fallback error: {e}")
+        return
+    if status != 200 or not isinstance(data, dict):
+        return
+    versions = [v for v in (data.get("modelVersions") or []) if isinstance(v, dict)]
+    versions.sort(key=lambda v: (v.get("id") == info.get("version_id"),
+                                 bool(v.get("images"))), reverse=True)
+    for v in versions:
+        entries = _extract_image_entries(v)
+        if not entries:
+            continue
+        images = [u for u, _ in entries]
+        info["images"]    = images
+        info["thumbnail"] = next((u for u, lvl in entries if lvl < NSFW_R), images[0])
+        if not info.get("trigger_words"):
+            info["trigger_words"] = [str(t) for t in (v.get("trainedWords") or [])
+                                     if str(t).strip()]
+        break
+    if not info.get("description"):
+        desc = _html_to_text(data.get("description") or "")
+        if desc:
+            info["description"] = desc[:4000]
 
 
 async def _civitai_lookup(session, sha: str, api_key: str) -> Tuple[bool, Any]:
@@ -243,21 +398,162 @@ async def _civitai_lookup(session, sha: str, api_key: str) -> Tuple[bool, Any]:
     url    = f"{_CIVITAI_API}/model-versions/by-hash/{sha}"
     params = {"token": api_key} if api_key else None
     try:
-        async with session.get(url, params=params) as r:
-            if r.status == 404:
-                return False, "not found on Civitai"
-            if r.status == 401:
-                return False, "api_key_invalid"
-            if r.status != 200:
-                return False, f"CivitAI HTTP {r.status}"
-            ver = await r.json()
+        status, ver = await _civitai_get_json(session, url, params)
     except Exception as e:
         return False, f"network error: {e}"
+    if status == 404:
+        return False, "not found on Civitai"
+    if status == 401:
+        return False, "api_key_invalid"
+    if status != 200 or not isinstance(ver, dict):
+        return False, f"CivitAI HTTP {status}"
     try:
-        return True, _parse_version(ver)
+        info = _parse_version(ver)
     except Exception as e:
         return False, f"parse error: {e}"
+    if not info.get("images"):
+        await _fill_from_model_page(session, info, api_key)
+    return True, info
 
+
+def _clean_query_name(name: str) -> str:
+    stem = os.path.splitext(os.path.basename(name))[0]
+    stem = re.sub(r"[_\s-]*v\d+(\.\d+)*$", "", stem)   # trailing version
+    stem = re.sub(r"\b[0-9a-f]{8,}\b", "", stem)        # embedded hash fragments
+    stem = re.sub(r"\(\d+\)", "", stem)
+    return stem.strip(" _-")
+
+
+def _sidecar_lookup(name: str, sha: str):
+    """'<file>.civitai.info' sidecars (A1111 CivitAI Helper, many download
+    managers) — the model JSON, so they work even for civitai.red downloads
+    of models deleted from civitai.com."""
+    path = folder_paths.get_full_path("loras", name)
+    if not path:
+        return None
+    for cand in (path + ".civitai.info", os.path.splitext(path)[0] + ".civitai.info"):
+        if not os.path.isfile(cand):
+            continue
+        try:
+            with open(cand, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        versions = [v for v in (data.get("modelVersions") or []) if isinstance(v, dict)]
+        chosen = None
+        if sha:
+            for v in versions:                       # exact: match by SHA256
+                for fdef in (v.get("files") or []):
+                    if (isinstance(fdef, dict)
+                            and str(fdef.get("SHA256") or "").upper() == sha.upper()):
+                        chosen = v
+                        break
+                if chosen:
+                    break
+        if chosen is None and versions:
+            chosen = versions[0]
+        if chosen is None:
+            return None
+        chosen = dict(chosen)
+        chosen.setdefault("model", {"id": data.get("id"), "name": data.get("name"),
+                                     "nsfwLevel": data.get("nsfwLevel")})
+        info = _parse_version(chosen)
+        if not info.get("description"):
+            desc = _html_to_text(data.get("description") or "")
+            if desc:
+                info["description"] = desc[:4000]
+        info["match"] = "sidecar"
+        return info
+    return None
+
+
+async def _filename_search(session, name: str, api_key: str):
+    """by-hash 404'd → search by filename, accept only near-exact matches."""
+    import difflib
+    import urllib.parse
+    q = _clean_query_name(name)
+    if len(q) < 3:
+        return None
+    params = {"query": q, "types": "LORA", "limit": 20}
+    if api_key:
+        params["token"] = api_key
+    try:
+        status, data = await _civitai_get_json(session, f"{_CIVITAI_API}/models", params)
+    except Exception:
+        return None
+    if status != 200 or not isinstance(data, dict):
+        return None
+    target = os.path.splitext(os.path.basename(name))[0].lower()
+    best, best_score = None, 0.0
+    for item in (data.get("items") or []):
+        if not isinstance(item, dict):
+            continue
+        for ver in (item.get("modelVersions") or [])[:5]:
+            if not isinstance(ver, dict):
+                continue
+            for fdef in (ver.get("files") or []):
+                if not isinstance(fdef, dict):
+                    continue
+                cand = os.path.splitext(str(fdef.get("name") or ""))[0].lower()
+                score = difflib.SequenceMatcher(None, target, cand).ratio()
+                if score > best_score:
+                    best_score, best = score, (item, ver)
+    if not best or best_score < 0.85:
+        return None
+    item, ver = best
+    ver = dict(ver)
+    ver.setdefault("model", {"id": item.get("id"), "name": item.get("name"),
+                             "nsfwLevel": item.get("nsfwLevel")})
+    info = _parse_version(ver)
+    info["match"] = "filename"      # UI can badge it "unverified"
+    return info
+
+
+async def _lookup_fallback(session, name: str, sha: str, api_key: str):
+    try:
+        info = _sidecar_lookup(name, sha)
+    except Exception as e:
+        print(f"[CWK LoRA] sidecar error for {name}: {e}")
+        info = None
+    if info is None:
+        info = await _filename_search(session, name, api_key)
+    return info
+
+
+_THUMB_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+
+async def _cache_thumbnail(session, info: Dict[str, Any], api_key: str) -> None:
+    """Download the thumbnail into _THUMB_DIR (served by the existing
+    /cwk/loras/thumb/ route) so the browser never needs civitai.com."""
+    url = info.get("thumbnail") or ""
+    if not url.startswith("http"):
+        return
+    ext = os.path.splitext(url.split("?")[0])[1].lower()
+    if ext not in _THUMB_EXTS:
+        ext = ".jpg"
+    fname = "c_" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ext
+    dest  = os.path.join(_THUMB_DIR, fname)
+    if os.path.isfile(dest):
+        info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
+        return
+    try:
+        fetch_url = url
+        if api_key and "token=" not in fetch_url:
+            fetch_url += ("&" if "?" in fetch_url else "?") + "token=" + api_key
+        async with session.get(fetch_url) as r:
+            if r.status != 200:
+                return
+            data = await r.read()
+        if not data or len(data) > 16 * 1024 * 1024:
+            return
+        os.makedirs(_THUMB_DIR, exist_ok=True)
+        with open(dest, "wb") as f:
+            f.write(data)
+        info["thumbnail"] = f"/cwk/loras/thumb/{fname}"
+    except Exception as e:
+        print(f"[CWK LoRA] thumbnail cache error: {e}")
 
 def _apply_keep(civ: Dict[str, Any], fresh: Dict[str, Any]) -> None:
     """Replace civ with fresh CivitAI data but preserve user-defined values."""
@@ -282,6 +578,92 @@ try:
     @_lora_routes.get("/cwk/loras")
     async def cwk_lora_list(request):
         return web.json_response(_lora_api_list())
+
+    @_lora_routes.get("/cwk/loras/settings")
+    async def cwk_lora_get_settings(request):
+        return web.json_response(_load_lora_settings())
+
+    @_lora_routes.post("/cwk/loras/settings")
+    async def cwk_lora_set_settings(request):
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "bad JSON"}, status=400)
+        s = _load_lora_settings()
+        for k in _DEFAULT_LORA_SETTINGS:
+            if k not in data:
+                continue
+            v = data[k]
+            if k in ("default_strength", "strength_step"):
+                try:    v = float(v)
+                except (TypeError, ValueError):
+                    continue
+                v = (max(-2.0, min(2.0, v)) if k == "default_strength"
+                     else max(0.001, min(1.0, v)))
+            else:
+                v = bool(v)
+            s[k] = v
+        _save_lora_settings(s)
+        if not s["keep_in_memory"]:
+            _LORA_MEM_CACHE.clear()
+        return web.json_response({"ok": True, "settings": s})
+
+    @_lora_routes.post("/cwk/lora/lookup_by_id")
+    async def cwk_lora_lookup_by_id(request):
+        """Manual rescue: paste a CivitAI model/version URL — the only remedy
+        for civitai.red items deleted from civitai.com."""
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "bad JSON"}, status=400)
+        name, api_key = str(data.get("lora") or ""), str(data.get("api_key") or "")
+        if not name:
+            return web.json_response({"ok": False, "error": "missing 'lora'"}, status=400)
+        version_id, model_id, raw = data.get("version_id"), data.get("model_id"), str(data.get("url") or "")
+        if raw:
+            m = re.search(r"models/(\d+)", raw)
+            if m: model_id = m.group(1)
+            m = re.search(r"modelVersionId=(\d+)", raw)
+            if m: version_id = m.group(1)
+        if not version_id and not model_id:
+            return web.json_response({"ok": False, "error": "provide 'url', 'model_id' or 'version_id'"}, status=400)
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+            params = {"token": api_key} if api_key else None
+            if version_id:
+                try:
+                    status, ver = await _civitai_get_json(
+                        session, f"{_CIVITAI_API}/model-versions/{version_id}", params)
+                except Exception as e:
+                    return web.json_response({"ok": False, "error": f"network error: {e}"})
+                if status != 200:
+                    return web.json_response({"ok": False, "error": f"CivitAI HTTP {status}"})
+                info = _parse_version(ver)
+                if not info.get("images"):
+                    await _fill_from_model_page(session, info, api_key)
+            else:
+                try:
+                    status, mdata = await _civitai_get_json(
+                        session, f"{_CIVITAI_API}/models/{model_id}", params)
+                except Exception as e:
+                    return web.json_response({"ok": False, "error": f"network error: {e}"})
+                if status != 200:
+                    return web.json_response({"ok": False, "error": f"CivitAI HTTP {status}"})
+                versions = [v for v in (mdata.get("modelVersions") or []) if isinstance(v, dict)]
+                if not versions:
+                    return web.json_response({"ok": False, "error": "model has no versions"})
+                ver = dict(versions[0])
+                ver.setdefault("model", {"id": mdata.get("id"), "name": mdata.get("name"),
+                                         "nsfwLevel": mdata.get("nsfwLevel")})
+                info = _parse_version(ver)
+                if not info.get("images"):
+                    await _fill_from_model_page(session, info, api_key)
+            await _cache_thumbnail(session, info, api_key)
+        info["match"] = "manual"
+        cache = _load_lora_cache()
+        civ   = cache["loras"].setdefault(name, {"civitai": {}})["civitai"]
+        _apply_keep(civ, info)
+        _save_lora_cache(cache)
+        return web.json_response({"ok": True, "info": _public_civitai(civ)})
 
     @_lora_routes.get("/cwk/lora/trigger_words")
     async def cwk_lora_get_triggers(request):
@@ -385,6 +767,7 @@ try:
             shutil.rmtree(_THUMB_DIR, ignore_errors=True)
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)}, status=500)
+            _LORA_MEM_CACHE.clear()
         return web.json_response({"ok": True})
 
     @_lora_routes.post("/cwk/loras/refresh")
@@ -412,10 +795,13 @@ try:
 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             ok, payload = await _civitai_lookup(session, sha, api_key)
-        if not ok:
-            _save_lora_cache(cache)
-            return web.json_response({"ok": False, "error": str(payload)})
-
+            if not ok:
+                if payload == "not found on Civitai":
+                    payload = await _lookup_fallback(session, name, sha, api_key)
+                if payload is None:
+                    _save_lora_cache(cache)
+                    return web.json_response({"ok": False, "error": "not found on Civitai"})
+            await _cache_thumbnail(session, payload, api_key)
         _apply_keep(civ, payload)
         _save_lora_cache(cache)
         return web.json_response({"ok": True, "info": _public_civitai(civ)})
@@ -486,17 +872,26 @@ try:
                                                 "message": "CivitAI rejected the API key"})
                         return resp
 
-                    if ok:
+                    if ok or (isinstance(payload, dict)):
+                        await _cache_thumbnail(session, payload, api_key)
                         _apply_keep(civ, payload)
                         found += 1
                         await _sse_write(resp, {"lora": name, "ok": True,
                                                 "info": _public_civitai(civ)})
                     elif payload == "not found on Civitai":
-                        civ["fetched"] = True
-                        civ["not_on_civitai"] = True
-                        civ.pop("error", None)
-                        await _sse_write(resp, {"lora": name, "ok": False,
-                                                "error": "not found on Civitai"})
+                        fb = await _lookup_fallback(session, name, sha, api_key)
+                        if fb is not None:
+                            await _cache_thumbnail(session, fb, api_key)
+                            _apply_keep(civ, fb)
+                            found += 1
+                            await _sse_write(resp, {"lora": name, "ok": True,
+                                                    "info": _public_civitai(civ)})
+                        else:
+                            civ["fetched"] = True
+                            civ["not_on_civitai"] = True
+                            civ.pop("error", None)
+                            await _sse_write(resp, {"lora": name, "ok": False,
+                                                    "error": "not found on Civitai"})
                     else:
                         civ["error"] = str(payload)
                         await _sse_write(resp, {"lora": name, "ok": False,
@@ -527,7 +922,41 @@ except Exception as e:
 
 
 # ─── LoRA application ────────────────────────────────────────────────────────
+_LORA_MEM_CACHE: Dict[str, Dict[str, Any]] = {}
+_LORA_MEM_CACHE_ON = False
 
+def _comfy_load_lora(path: str, sm: float, sc: float):
+    """Keyword-first — immune to ComfyUI parameter reordering (recent builds
+    added `lora_on_gpu` as 2nd positional, which the old positional fallback
+    silently mis-fed)."""
+    import comfy.sd
+    try:
+        return comfy.sd.load_lora(path, strength_model=sm, strength_clip=sc)
+    except TypeError:
+        return comfy.sd.load_lora(path, sm, sc)
+
+def _load_lora_cached(path: str, sm: float, sc: float):
+    """Honour the ⚙ 'Keep all LoRA loaded in memory' setting."""
+    global _LORA_MEM_CACHE_ON
+    on = _load_lora_settings()["keep_in_memory"]
+    if not on:
+        if _LORA_MEM_CACHE_ON:
+            _LORA_MEM_CACHE.clear()
+        _LORA_MEM_CACHE_ON = False
+        return _comfy_load_lora(path, sm, sc)
+    _LORA_MEM_CACHE_ON = True
+    try:
+        st = os.stat(path)
+        key = [st.st_size, int(st.st_mtime)]
+    except OSError:
+        key = None
+    entry = _LORA_MEM_CACHE.get(path)
+    if entry and key is not None and entry.get("key") == key:
+        return entry["lora"]
+    lora = _comfy_load_lora(path, sm, sc)
+    _LORA_MEM_CACHE[path] = {"key": key, "lora": lora}
+    return lora
+  
 def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):
     """Apply one LoRA via ComfyUI's built-in LoraLoader. GGUF LoRAs go through
     ComfyUI-GGUF's LoraLoaderGGUF when it is installed.
@@ -548,27 +977,23 @@ def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_cli
 
     from nodes import LoraLoader
     try:
-        # Newer ComfyUI returns (model, clip, vae) — handle both shapes.
-        res = LoraLoader().load_lora(
-            lora_name=lora_name,
-            strength_model=strength_model,
-            strength_clip=strength_clip,
-            model=model,
-            clip=clip,
-        )
-    except TypeError:
-        # Parameter names changed in some (future) version — fall back to the
-        # low-level API, whose positional signature has been stable for years.
+        # Low-level API + our optional in-RAM cache. Keywords are order-proof.
         import comfy.sd
-        lora = comfy.sd.load_lora(lora_path, strength_model, strength_clip)
-        return comfy.sd.load_lora_for_models(model, clip, lora,
-                                             strength_model, strength_clip)
-
-    if isinstance(res, (list, tuple)):
-        if len(res) >= 2:
-            return res[0], res[1]
-        return res[0], clip
-    return model, clip
+        lora = _load_lora_cached(lora_path, strength_model, strength_clip)
+        return comfy.sd.load_lora_for_models(
+            model, clip, lora,
+            strength_model=strength_model, strength_clip=strength_clip)
+    except TypeError:
+        # Low-level signature drift we can't satisfy → core node handles it.
+        from nodes import LoraLoader
+        res = LoraLoader().load_lora(
+            lora_name=lora_name, strength_model=strength_model,
+            strength_clip=strength_clip, model=model, clip=clip)
+        if isinstance(res, (list, tuple)):
+            if len(res) >= 2:
+                return res[0], res[1]
+            return res[0], clip
+        return model, clip
 
 
 def _apply_gguf_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):

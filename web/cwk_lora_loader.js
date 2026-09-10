@@ -56,29 +56,94 @@ function _fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
 let _probeLogged = false;   // one-time environment diagnostic
 
+function injectLoraSettingsStyles() {
+  if (document.getElementById("cwk-lora-settings-styles")) return;
+  const st = document.createElement("style");
+  st.id = "cwk-lora-settings-styles";
+  st.textContent = `
+    .cwk-lora-widget .cwkl-w-gear {
+      background: transparent; border: none; cursor: pointer;
+      color: #9aa4b8; font-size: 14px; line-height: 1;
+      padding: 2px 5px; border-radius: 4px;
+    }
+    .cwk-lora-widget .cwkl-w-gear:hover,
+    .cwk-lora-widget .cwkl-w-gear.open { color: #fff; }
+    .cwk-lora-widget .cwkl-w-gear.open { background: rgba(255,255,255,.12); }
+    .cwk-lora-widget .cwkl-w-settings {
+      flex-direction: column; gap: 7px; flex: 0 0 auto;
+      margin: 0 0 6px 0; padding: 8px 10px;
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.08); border-radius: 6px;
+      font-size: 11px; color: #c7cede;
+    }
+    .cwk-lora-widget .cwkl-w-set-row { display: flex; align-items: center; gap: 8px; }
+    .cwk-lora-widget .cwkl-w-set-row > span { flex: 1; }
+    .cwk-lora-widget .cwkl-w-set-row input[type="number"] {
+      width: 68px; padding: 2px 5px; font-size: 11px;
+      background: #141824; color: #e8ecf4;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 4px;
+    }
+    .cwk-lora-widget .cwkl-w-set-chk {
+      display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none;
+    }
+  `;
+  document.head.appendChild(st);
+}
+
 // ─── Installed-LoRA name list (for the row dropdowns) ────────────────────────
 
-let _loraNames   = null;
+let _loraList    = null;   // [{name, base_model, civitai}] from /cwk/loras
+let _loraNames   = null;   // derived: names only (kept for legacy references)
 let _loraNamesAt = 0;
+let _loraSettings = null;
+
+async function ensureLoraSettings() {
+  if (_loraSettings) return _loraSettings;
+  try {
+    const r = await fetch("/cwk/loras/settings");
+    if (r.ok) _loraSettings = await r.json();
+  } catch {}
+  _loraSettings ??= { default_strength: 1, strength_step: 0.05,
+                       keep_in_memory: false, truncate_names: false };
+  return _loraSettings;
+}
 
 async function ensureLoraNames(force = false) {
-  if (!force && _loraNames && (Date.now() - _loraNamesAt) < 30000) return _loraNames;
+  if (!force && _loraList && (Date.now() - _loraNamesAt) < 30000) return _loraList;
   try {
     const res = await fetch("/cwk/loras");
     if (res.ok) {
-      const list = await res.json();
-      _loraNames = list.map(l => l.name);
+      _loraList = await res.json();
+      _loraNames = _loraList.map(l => l.name);
       _loraNamesAt = Date.now();
-      list.forEach(l => {
+      _loraList.forEach(l => {
         if (l.civitai?.trigger_words?.length) {
           triggerCache.set(l.name, l.civitai.trigger_words);
         }
       });
     }
   } catch {}
-  return _loraNames ?? [];
+  return _loraList ?? [];
 }
 
+function _groupedLoras() {
+  const groups = new Map();
+  for (const l of (_loraList ?? [])) {
+    const g = (l.base_model || "").trim() || "Other";
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(l);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => (a[0] === "Other") - (b[0] === "Other")
+                  || a[0].localeCompare(b[0]))
+    .map(([g, items]) => [g, items.sort((a, b) => a.name.localeCompare(b.name))]);
+}
+
+function _displayName(n) {
+  return _loraSettings?.truncate_names
+    ? n.split("/").pop().replace(/\.[^.]+$/, "")
+    : n;
+}
 // ─── Node-container probes (names vary between litegraph builds) ─────────────
 
 function _canvasVisibleNodes() {
@@ -119,6 +184,7 @@ app.registerExtension({
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (!LORA_NODES.includes(nodeData?.name)) return;
     injectLoraStyles();   // panel + node-overlay CSS (incl. .cwk-lora-dom-hidden)
+    injectLoraSettingsStyles();
 
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
@@ -263,9 +329,28 @@ function _setupLoraNode(node) {
         <input type="checkbox" class="cwkl-w-all" title="Activate / deactivate all LoRAs"/>
         <span class="cwkl-w-title">LoRAs (<span class="cwkl-w-count">0</span>)</span>
         <span class="cwkl-w-spacer"></span>
+        <button class="cwkl-w-gear" title="Loader settings">⚙</button>
         <button class="cwkl-w-browser"
           title="Open the LoRA browser (infos, trigger words, thumbnails)">🔎 Browser</button>
         <button class="cwkl-w-add" title="Add an empty LoRA slot">＋ Add LoRA</button>
+      </div>
+      <div class="cwkl-w-settings" style="display:none">
+        <div class="cwkl-w-set-row">
+          <span>Default strength for new LoRAs</span>
+          <input type="number" class="cwkl-w-set-strength" min="-2" max="2" step="0.05" value="1"/>
+        </div>
+        <div class="cwkl-w-set-row">
+          <span>Strength step</span>
+          <input type="number" class="cwkl-w-set-step" min="0.001" max="1" step="0.001" value="0.05"/>
+        </div>
+        <label class="cwkl-w-set-chk">
+          <input type="checkbox" class="cwkl-w-set-memory"/>
+          Keep all LoRAs loaded in memory
+        </label>
+        <label class="cwkl-w-set-chk">
+          <input type="checkbox" class="cwkl-w-set-truncate"/>
+          Truncate LoRA names (remove folders &amp; extension)
+        </label>
       </div>
       <div class="cwkl-w-rows"></div>
       <div class="cwkl-w-empty">No LoRAs yet — click “＋ Add LoRA”.</div>
@@ -273,7 +358,7 @@ function _setupLoraNode(node) {
         <span class="cwkl-w-trigger" title="Trigger words of the active LoRAs">trigger: —</span>
       </div>
     `;
-
+    
     const rowsEl     = root.querySelector(".cwkl-w-rows");
     const emptyEl    = root.querySelector(".cwkl-w-empty");
     const countEl    = root.querySelector(".cwkl-w-count");
@@ -281,6 +366,12 @@ function _setupLoraNode(node) {
     const addBtn     = root.querySelector(".cwkl-w-add");
     const browserBtn = root.querySelector(".cwkl-w-browser");
     const trigEl     = root.querySelector(".cwkl-w-trigger");
+    const gearBtn     = root.querySelector(".cwkl-w-gear");
+    const settingsEl  = root.querySelector(".cwkl-w-settings");
+    const setStrength = root.querySelector(".cwkl-w-set-strength");
+    const setStep     = root.querySelector(".cwkl-w-set-step");
+    const setMemory   = root.querySelector(".cwkl-w-set-memory");
+    const setTruncate = root.querySelector(".cwkl-w-set-truncate");
 
     root.addEventListener("mousedown", () => {
       try {
@@ -345,19 +436,23 @@ function _setupLoraNode(node) {
     }
 
     function _fillSelect(sel, selected) {
-      const names = _loraNames || [];
       sel.innerHTML = "";
       const ph = document.createElement("option");
       ph.value = "";
       ph.textContent = "— pick a LoRA —";
       sel.appendChild(ph);
-      for (const n of names) {
-        const o = document.createElement("option");
-        o.value = n;
-        o.textContent = n;
-        sel.appendChild(o);
+      for (const [group, items] of _groupedLoras()) {
+        const og = document.createElement("optgroup");
+        og.label = group;
+        for (const l of items) {
+          const o = document.createElement("option");
+          o.value = l.name;                    // full path — required
+          o.textContent = _displayName(l.name);
+          og.appendChild(o);
+        }
+        sel.appendChild(og);
       }
-      if (selected && !names.includes(selected)) {
+      if (selected && !(_loraNames || []).includes(selected)) {
         const o = document.createElement("option");
         o.value = selected;
         o.textContent = selected;
@@ -380,8 +475,7 @@ function _setupLoraNode(node) {
         <select class="cwkl-w-select" title="LoRA file"></select>
         <button class="cwkl-w-info"
           title="Open the LoRA browser with this LoRA selected">ℹ</button>
-        <input type="range" class="cwkl-w-weight" min="-2" max="2" step="0.05"
-               value="${l.weight}" title="LoRA weight"/>
+        <input type="range" class="cwkl-w-weight" min="-2" max="2" step="${_loraSettings?.strength_step ?? 0.05}" value="${l.weight}" title="LoRA weight"/>
         <span class="cwkl-w-wval">${_fmt(l.weight)}</span>
         <button class="cwkl-w-del" title="Remove this LoRA">✕</button>
       `;
@@ -426,7 +520,7 @@ function _setupLoraNode(node) {
     function _addLora(name) {
       const exists = state.list.findIndex(l => l.name === name);
       if (exists >= 0) state.list[exists].enabled = true;
-      else             state.list.push({ name, weight: 1, enabled: true });
+      else             state.list.push({ name, weight: _loraSettings?.default_strength ?? 1, enabled: true });
       _render();
     }
 
@@ -440,7 +534,7 @@ function _setupLoraNode(node) {
 
     addBtn.addEventListener("click", async () => {
       await ensureLoraNames();
-      state.list.push({ name: "", weight: 1, enabled: true });
+      state.list.push({ name: "", weight: _loraSettings?.default_strength ?? 1, enabled: true });
       _render();
       const sels = rowsEl.querySelectorAll(".cwkl-w-select");
       sels[sels.length - 1]?.focus();
@@ -449,10 +543,64 @@ function _setupLoraNode(node) {
     browserBtn.addEventListener("click", () => _openBrowser());
 
     allToggle.addEventListener("change", e => {
+      ensureLoraSettings().then(() => _render());
       const on = e.target.checked;
       state.list.forEach(l => { l.enabled = on; });
       _render();
     });
+
+        // ── ⚙ Settings drawer ───────────────────────────────────────────────────
+    let settingsTimer = null;
+
+    function _syncSettingsUI() {
+      const s = _loraSettings ?? {};
+      setStrength.value     = String(s.default_strength ?? 1);
+      setStep.value         = String(s.strength_step ?? 0.05);
+      setMemory.checked     = !!s.keep_in_memory;
+      setTruncate.checked   = !!s.truncate_names;
+    }
+
+    function _onSettingChange() {
+      const sv = Number(setStrength.value);
+      const st = Number(setStep.value);
+      _loraSettings = {
+        ...(_loraSettings ?? {}),
+        default_strength: Number.isFinite(sv) ? Math.max(-2, Math.min(2, sv)) : 1,
+        strength_step:    (Number.isFinite(st) && st > 0) ? st : 0.05,
+        keep_in_memory:   setMemory.checked,
+        truncate_names:   setTruncate.checked,
+      };
+      _render();   // rows pick up new slider step + truncated labels immediately
+      clearTimeout(settingsTimer);
+      settingsTimer = setTimeout(async () => {
+        try {
+          const res = await fetch("/cwk/loras/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(_loraSettings),
+          });
+          if (res.ok) {
+            const j = await res.json();
+            if (j?.settings) _loraSettings = j.settings;   // server-clamped truth
+          }
+        } catch {}
+        _syncSettingsUI();
+      }, 400);
+    }
+
+    setStrength.addEventListener("change", _onSettingChange);
+    setStep.addEventListener("change", _onSettingChange);
+    setMemory.addEventListener("change", _onSettingChange);
+    setTruncate.addEventListener("change", _onSettingChange);
+
+    gearBtn.addEventListener("click", () => {
+      const open = settingsEl.style.display === "none";
+      settingsEl.style.display = open ? "flex" : "none";
+      gearBtn.classList.toggle("open", open);
+      if (open) _syncSettingsUI();
+    });
+
+    ensureLoraSettings().then(() => { _syncSettingsUI(); _render(); });
 
     // ── Trigger-word preview (mirrors the node's STRING output) ─────────────
     let trigTimer = null;

@@ -107,6 +107,45 @@ function getCaretCoordinates(editableEl) {
     return coords;
 }
 
+// ── Clipboard helpers (non-secure-context fallback included) ────────────────
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // Fallback for non-secure contexts (e.g. ComfyUI opened via LAN IP):
+        // a detached textarea + execCommand still works everywhere.
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        Object.assign(ta.style, { position: "fixed", opacity: "0", pointerEvents: "none" });
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch {}
+        ta.remove();
+        return ok;
+    }
+}
+
+let _toastEl = null, _toastTimer = null;
+function _toast(msg) {
+    if (!_toastEl) {
+        _toastEl = document.createElement("div");
+        Object.assign(_toastEl.style, {
+            position: "fixed", bottom: "16px", right: "16px", zIndex: "100001",
+            background: "#1e2335", border: "1px solid #313552", borderRadius: "6px",
+            padding: "6px 12px", fontSize: "12px", color: "#cdd6f4",
+            fontFamily: "Inter, system-ui, sans-serif", pointerEvents: "none",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)", display: "none",
+        });
+        document.body.appendChild(_toastEl);
+    }
+    _toastEl.textContent = msg;
+    _toastEl.style.display = "block";
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { _toastEl.style.display = "none"; }, 1400);
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  TAGGED PRESET SYSTEM — server-backed .json files
 // ══════════════════════════════════════════════════════════════════════════════
@@ -961,6 +1000,28 @@ export class PromptPanel {
                 this._pillCanvas._closeCtxMenu();
                 openPresetManager((pills, category) => this._smartInsertPills(pills, category));
             }));
+			            // ── 📋 Copy / Paste ──
+            menu.appendChild(divider.cloneNode());
+            const selIds   = [...this._pillCanvas.selected];
+            const copyPills = selIds.length > 0
+                ? selIds.map(id => this._pillCanvas.pills.find(p => p.id === id)).filter(Boolean)
+                : [pill];
+            const copyLabel = selIds.length > 1
+                ? `Copy Selected (${copyPills.length})` : "Copy Tag";
+            menu.appendChild(this._mkCtxItem("📋", copyLabel, () => {
+                this._pillCanvas._closeCtxMenu();
+                this._copyToClipboard(
+                    this._serializePills(copyPills),
+                    selIds.length > 1 ? `${copyPills.length} tags` : "Tag");
+            }));
+            menu.appendChild(this._mkCtxItem("⧉", "Copy All", () => {
+                this._pillCanvas._closeCtxMenu();
+                this._copyToClipboard(this.getValue(), "Prompt");
+            }));
+            menu.appendChild(this._mkCtxItem("📥", "Paste", () => {
+                this._pillCanvas._closeCtxMenu();
+                this._pasteFromClipboard();
+            }));
         };
 
         this._pillContainer = document.createElement("div");
@@ -995,6 +1056,136 @@ export class PromptPanel {
         return item;
     }
 
+    // ── 📋 Clipboard operations ──────────────────────────────────────────────
+    async _copyToClipboard(text, what) {
+        const ok = await copyToClipboard(text);
+        _toast(ok ? `📋 ${what} copied` : "❌ Copy failed");
+    }
+
+    async _pasteFromClipboard() {
+        try {
+            if (!(navigator.clipboard && window.isSecureContext)) throw new Error("no api");
+            const text = await navigator.clipboard.readText();
+            if (text && text.trim()) {
+                this._insertClipboardText(text);
+                _toast("📥 Pasted from clipboard");
+            } else {
+                _toast("⚠️ Clipboard is empty");
+            }
+        } catch {
+            // readText denied or unavailable → manual paste dialog
+            this._openPasteDialog();
+        }
+    }
+
+    _insertClipboardText(text) {
+        if (!text || !text.trim()) return;
+        if (this.mode === "pill") {
+            const pills = this._parseString(text);
+            if (!pills.length) return;
+            this._pillCanvas._snapshot?.();
+            this._pillCanvas.pills.push(...pills.map(p => ({
+                id: Math.random().toString(36).slice(2),
+                text: p.text, category: p.category, weight: p.weight,
+            })));
+            this._syncPillsFromCanvas();
+            this._pillCanvas._render();
+        } else {
+            this._pasteTextAtCaret(text.trim());
+        }
+        this.onChange(this.getValue());
+        this._updateTokenCount();
+    }
+
+    _pasteTextAtCaret(text) {
+        const wasFocused = document.activeElement === this._editor;
+        this._editor.focus();
+        if (wasFocused) {
+            // Insert at caret / replace native selection — fires an input
+            // event so the panel reparses; reparse defensively anyway.
+            document.execCommand("insertText", false, text);
+            this._onEditorInput();
+        } else {
+            // Editor wasn't focused (right-clicked without clicking in first)
+            // → append at the end with a clean separator.
+            const cur = this._getEditorPlainText().replace(/[,\s]+$/, "");
+            const val = cur ? cur + ", " + text : text;
+            this._pills = this._parseString(val);
+            this._setEditorColored(val);
+            this._setCaretOffset(val.length);
+        }
+    }
+
+    _openPasteDialog() {
+        const { win, backdrop, body, closeBtn } = makeWindow({
+            title: "📥 Paste Prompt", width: "420px", height: "auto",
+            minWidth: "300px", minHeight: "150px", zIndex: "10004",
+        });
+        Object.assign(win.style, { height: "auto" });
+        const hide = () => { backdrop.style.display = "none"; win.style.display = "none"; win.remove(); backdrop.remove(); };
+        closeBtn.addEventListener("click", hide);
+
+        const desc = document.createElement("div");
+        desc.textContent = "Clipboard access unavailable — paste below with Ctrl+V, then Insert:";
+        Object.assign(desc.style, { color: "#a6adc8", fontSize: "12px", fontFamily: "Inter, system-ui, sans-serif" });
+
+        const ta = document.createElement("textarea");
+        ta.spellcheck = false;
+        ta.placeholder = "tag1, (tag2:1.2), tag3…";
+        Object.assign(ta.style, {
+            width: "100%", boxSizing: "border-box", minHeight: "110px", resize: "vertical",
+            background: C.bgFull, color: C.text, border: `1px solid ${C.border}`,
+            borderRadius: "6px", padding: "6px 8px", fontSize: "12px",
+            fontFamily: "monospace", outline: "none",
+        });
+        for (const evt of ["mousedown","mouseup","click","keydown","keyup","input","pointerdown"]) {
+            ta.addEventListener(evt, (e) => e.stopPropagation());
+        }
+
+        const status = document.createElement("div");
+        Object.assign(status.style, { fontSize: "12px", minHeight: "16px", textAlign: "center" });
+
+        const btnRow = document.createElement("div");
+        Object.assign(btnRow.style, { display: "flex", gap: "8px" });
+
+        const insBtn = document.createElement("button");
+        insBtn.textContent = "📥 Insert";
+        Object.assign(insBtn.style, {
+            flex: "1", padding: "8px", background: "#89b4fa", color: "#141824",
+            border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold",
+            fontSize: "13px", fontFamily: "Inter,system-ui,sans-serif",
+        });
+        insBtn.addEventListener("click", () => {
+            const text = ta.value.trim();
+            if (!text) { status.style.color = "#f9e2af"; status.textContent = "⚠️ Nothing to paste"; return; }
+            this._insertClipboardText(text);
+            hide();
+        });
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Cancel";
+        Object.assign(cancelBtn.style, {
+            flex: "1", padding: "8px", background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "6px", cursor: "pointer",
+            fontSize: "13px", fontFamily: "Inter,system-ui,sans-serif",
+        });
+        cancelBtn.addEventListener("click", hide);
+
+        ta.addEventListener("keydown", (e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); insBtn.click(); }
+            if (e.key === "Escape") hide();
+        });
+
+        btnRow.append(insBtn, cancelBtn);
+        body.append(desc, ta, status, btnRow);
+
+        backdrop.style.display = "block";
+        win.style.display = "flex";
+        win.style.left = "50%"; win.style.top = "160px"; win.style.transform = "translateX(-50%)";
+        ta.focus();
+    }
+	
     _mkHeaderBtn(text, color, onClick) {
         const btn = document.createElement("button");
         btn.textContent = text;
@@ -1008,11 +1199,15 @@ export class PromptPanel {
         return btn;
     }
 
-    getValue() {
-        return this._pills.map(p => {
+    _serializePills(pills) {
+        return pills.map(p => {
             const w = Math.round(p.weight * 10) / 10;
             return w !== 1.0 ? `(${p.text}:${w.toFixed(1)})` : p.text;
         }).join(", ");
+    }
+
+    getValue() {
+        return this._serializePills(this._pills);
     }
 
     setValue(str) {
@@ -1534,8 +1729,8 @@ export class PromptPanel {
 
     _openTextCtxMenu(e) {
         this._closeTextCtxMenu();
-        const pill = this._getTagAtCaret();
-        if (!pill || !pill.text.trim()) return;
+        const pill      = this._getTagAtCaret();
+        const nativeSel = (window.getSelection()?.toString() ?? "").trim();
 
         const menu = document.createElement("div");
         this._textCtxMenu = menu;
@@ -1547,11 +1742,11 @@ export class PromptPanel {
         });
 
         const header = document.createElement("div");
-        header.textContent = pill.text;
+        header.textContent = pill?.text || (this.kind === "positive" ? "✅ Positive prompt" : "❌ Negative prompt");
         Object.assign(header.style, {
             padding: "5px 10px 3px", fontSize: "11px", color: "#6c7086",
             fontStyle: "italic", userSelect: "none", overflow: "hidden",
-            textOverflow: "ellipsis", whiteSpace: "nowrap",
+            textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px",
         });
         menu.appendChild(header);
 
@@ -1559,34 +1754,61 @@ export class PromptPanel {
         Object.assign(hr1.style, { border: "none", borderTop: "1px solid #313552", margin: "2px 0" });
         menu.appendChild(hr1);
 
-        // 📌 Add to Tag List (with category submenu)
-        this._appendAddToTagsSubmenu(menu, pill.text, pill.category);
-
-        // Underscore / Space toggle
-        const hr2 = document.createElement("hr");
-        Object.assign(hr2.style, { border: "none", borderTop: "1px solid #313552", margin: "2px 0" });
-        menu.appendChild(hr2);
-
-        const hasUnderscore = pill.text.includes("_");
-        menu.appendChild(this._mkCtxItem(
-            hasUnderscore ? "␣" : "_",
-            hasUnderscore ? "Underscores → Spaces" : "Spaces → Underscores",
-            () => {
+        // ── 📋 Copy / Paste (always available, even on an empty prompt) ──
+        if (nativeSel) {
+            menu.appendChild(this._mkCtxItem("📋", "Copy Selection", () => {
                 this._closeTextCtxMenu();
-                if (hasUnderscore) pill.text = pill.text.replace(/_/g, " ");
-                else pill.text = pill.text.replace(/ /g, "_");
-                const newVal = this.getValue();
-                this._setEditorColored(newVal);
-                this.onChange(newVal);
-            }
-        ));
+                this._copyToClipboard(nativeSel, "Selection");
+            }));
+        }
+        if (pill && pill.text.trim()) {
+            menu.appendChild(this._mkCtxItem("📋", "Copy Tag", () => {
+                this._closeTextCtxMenu();
+                this._copyToClipboard(this._serializePills([pill]), "Tag");
+            }));
+        }
+        menu.appendChild(this._mkCtxItem("⧉", "Copy All", () => {
+            this._closeTextCtxMenu();
+            this._copyToClipboard(this.getValue(), "Prompt");
+        }));
+        menu.appendChild(this._mkCtxItem("📥", "Paste", () => {
+            this._closeTextCtxMenu();
+            this._pasteFromClipboard();
+        }));
+
+        // ── Tag-specific items (only when a tag is under the caret) ──
+        if (pill && pill.text.trim()) {
+            const hr2 = document.createElement("hr");
+            Object.assign(hr2.style, { border: "none", borderTop: "1px solid #313552", margin: "2px 0" });
+            menu.appendChild(hr2);
+
+            this._appendAddToTagsSubmenu(menu, pill.text, pill.category);
+
+            const hr3 = document.createElement("hr");
+            Object.assign(hr3.style, { border: "none", borderTop: "1px solid #313552", margin: "2px 0" });
+            menu.appendChild(hr3);
+
+            const hasUnderscore = pill.text.includes("_");
+            menu.appendChild(this._mkCtxItem(
+                hasUnderscore ? "␣" : "_",
+                hasUnderscore ? "Underscores → Spaces" : "Spaces → Underscores",
+                () => {
+                    this._closeTextCtxMenu();
+                    if (hasUnderscore) pill.text = pill.text.replace(/_/g, " ");
+                    else pill.text = pill.text.replace(/ /g, "_");
+                    const newVal = this.getValue();
+                    this._setEditorColored(newVal);
+                    this.onChange(newVal);
+                }
+            ));
+        }
 
         document.body.appendChild(menu);
 
-        const mw = 200;
+        const mw = 220;
         let left = e.clientX + 4, top = e.clientY + 4;
         if (left + mw > window.innerWidth - 8) left = e.clientX - mw - 4;
-        if (top + 160 > window.innerHeight - 8) top = e.clientY - 160;
+        if (top + 240 > window.innerHeight - 8) top = e.clientY - 240;
         menu.style.left = left + "px";
         menu.style.top  = top  + "px";
 
@@ -1609,7 +1831,6 @@ export class PromptPanel {
             window.addEventListener("contextmenu", closeCtx, true);
         }, 0);
     }
-
     // ── Shared "Add to Tag List" submenu ─────────────────────────────────────
     _appendAddToTagsSubmenu(menu, tagText, tagCategory) {
         const addItem = document.createElement("div");

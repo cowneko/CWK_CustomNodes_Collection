@@ -564,10 +564,11 @@ async function _loadModelIntoNode(node, modelName, modelType) {
     if (res.ok) node._cwkMeta = await res.json();
   } catch {}
 
-  // Recalculate height if AIO state changed
+  // Grow to fit the new row count, but keep any extra height the user gave
+  // the node by resizing.
   if (prevAIO !== node._cwkIsAIO) {
     node.size[0] = Math.max(NODE_MIN_W, node.size[0]);
-    node.size[1] = calcNodeHeight(node);
+    node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
   }
 
   node.setDirtyCanvas(true);
@@ -795,9 +796,9 @@ app.registerExtension({
         const getW = name => node.widgets?.find(w => w.name === name);
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
-        node.size[1] = calcNodeHeight(node);
-        app.canvas.setDirty(true, true);
-      }, 0);
+        // Math.max: configure() has already restored the saved size by now —
+        // a user-grown height must survive the init pass.
+        node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
 
       // Restore last-used model
       setTimeout(async () => {
@@ -819,9 +820,21 @@ app.registerExtension({
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
-        this.size[1] = calcNodeHeight(this);
+        // Vertical resize: never shrink below the content, but let the user
+        // grow the node — getButtonRect is bottom-relative, so the Models
+        // Manager button follows the bottom edge; all other layout is
+        // top-anchored and stays fixed.
+        this.size[1] = Math.max(calcNodeHeight(this), this.size[1]);
       };
 
+      const prevComputeSize = node.computeSize?.bind(node);
+      node.computeSize = function (...args) {
+        const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
+        s[0] = Math.max(s[0] ?? 0, NODE_MIN_W);
+        s[1] = Math.max(s[1] ?? 0, calcNodeHeight(this));
+        return s;
+      };
+		  
       node.onMouseDown = function (e, pos) {
         const qlKind = hitTestQuickLoad(this, pos[0], pos[1]);
         if (qlKind) { openQuickLoadDropdown(node, qlKind); return true; }

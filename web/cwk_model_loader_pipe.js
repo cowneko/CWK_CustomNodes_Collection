@@ -6,6 +6,13 @@
  *
  * NEW: "Name" row (always editable, even outside edit mode) — a free-form label
  * cast through the infos output; CWK_Save_Image exposes it as the {name} tag.
+ *
+ * Vertical resizing: the node can be grown freely by dragging its bottom
+ * edge/corner. The rows are top-anchored and stay fixed; only the bottom-
+ * anchored elements move — the Reload/Edit/Update Presets buttons
+ * (getButtonRects) and the status line (getStatusY). The node never shrinks
+ * below the content height (calcNodeHeight), and a user-grown height
+ * survives workflow reloads.
  */
 
 import { app }          from "../../scripts/app.js";
@@ -120,6 +127,10 @@ async function _loadPipeOptions() {
 _loadPipeOptions();
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
+// NOTE: the rows (getRowY / getValueRect) and the divider are TOP-anchored —
+// fixed once drawn. getButtonRects and getStatusY are anchored to
+// node.size[1] — those are the elements that follow the bottom edge when
+// the node is vertically resized.
 
 function getSlotsArea() {
   const inputsH  = TITLE_H() + N_INPUTS  * SLOT_H() + 6;
@@ -296,7 +307,7 @@ function openDropdown(node, rowIdx, currentValue, onCommit) {
   sel.id = "cwk-pipe-dropdown"; sel.size = maxV;
   Object.assign(sel.style, {
     position:"fixed", left:sc.x+"px", top:dropTop+"px", width:sc.w+"px", height:listH+"px",
-    fontSize:Math.max(11, Math.round(11*zoom))+"px", fontFamily:"Inter,system-ui,sans-serif",
+    fontSize:Math.max(11,Math.round(11*zoom))+"px", fontFamily:"Inter,system-ui,sans-serif",
     background:C.bgFull, color:C.text, border:`1px solid ${C.arrowHov}`,
     borderRadius:"4px", outline:"none", zIndex:"99999", cursor:"pointer", padding:"2px 0", overflow:"auto",
   });
@@ -335,6 +346,8 @@ function openDropdown(node, rowIdx, currentValue, onCommit) {
 }
 
 // ─── Apply row value ──────────────────────────────────────────────────────────
+// (module-level version — used by preset fetch/apply flows, which never
+// touch the "name" field, so no name-persistence here)
 
 function applyRowValue(node, rowIdx, val) {
   const row = PIPE_ROWS[rowIdx];
@@ -588,7 +601,7 @@ function drawNode(node, ctx) {
     }
   }
 
-  // ── Status line ──
+  // ── Status line (bottom-anchored — moves with the bottom edge) ──
   const flashActive = !!node._cwkFlash;
   const statusText  = flashActive ? node._cwkFlashLabel : (node._cwkStatus?.text ?? null);
   const statusColor = flashActive ? (node._cwkFlashColor ?? C.flashGreen) : (node._cwkStatus?.color ?? C.flashGreen);
@@ -599,7 +612,7 @@ function drawNode(node, ctx) {
     ctx.fillText(statusText, w / 2, getStatusY(node), w - PAD * 2);
   }
 
-  // ── Buttons ──
+  // ── Buttons (bottom-anchored — move with the bottom edge) ──
   const labels = {
     reload: "🔄 Reload Presets",
     edit:   editMode ? "✖ Cancel Edit" : "✏️ Edit Presets",
@@ -700,7 +713,10 @@ app.registerExtension({
         const ms = getW("model_sampling"); if (ms) ms.value = "default";
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
-        node.size[1] = calcNodeHeight();
+        // Math.max (not assignment): configure() has already restored the
+        // size saved in the workflow by now — a user-grown height must
+        // survive the init pass and the workflow reload that restored it.
+        node.size[1] = Math.max(calcNodeHeight(), node.size[1]);
         app.canvas.setDirty(true, true);
       }, 0);
 
@@ -721,7 +737,22 @@ app.registerExtension({
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
-        this.size[1] = calcNodeHeight();
+        // Vertical resize: never shrink below the content, but let the user
+        // grow the node freely — getButtonRects and getStatusY are
+        // bottom-relative (buttons + status line follow the bottom edge);
+        // the rows are top-anchored and stay fixed.
+        this.size[1] = Math.max(calcNodeHeight(), this.size[1]);
+      };
+
+      // Auto-fit paths (widget-triggered refits, corner double-click on some
+      // builds) go through computeSize — clamp those the same way so they
+      // can't shrink the node below its content either.
+      const prevComputeSize = node.computeSize?.bind(node);
+      node.computeSize = function (...args) {
+        const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
+        s[0] = Math.max(s[0] ?? 0, NODE_MIN_W);
+        s[1] = Math.max(s[1] ?? 0, calcNodeHeight());
+        return s;
       };
 
       node.onMouseDown = function (e, pos) {
@@ -759,26 +790,31 @@ app.registerExtension({
         return false;
       };
 
-       function applyRowValue(node, rowIdx, val) {
-  const row = PIPE_ROWS[rowIdx];
-  if (!node._cwkValues) node._cwkValues = {};
-  node._cwkValues[row.key] = val;
-  const w = node.widgets?.find(w => w.name === row.widget);
-  if (w) { w.value = val; w.callback?.(val); }
-  // persist the last "Name" used (fire-and-forget)
-  if (row.key === "name") {
-    const n = String(val ?? "").trim();
-    if (n) {
-      fetch("/cwk/pipe/last_name", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: n }),
-      }).catch(() => {});
-    }
-  }
-  app.canvas.setDirty(true, false);
-}  
-      
+      // Inner variant (shadows the module-level applyRowValue for user edits
+      // made through this node): identical, plus persistence of the last
+      // "Name" used. Preset application uses the module-level one, which
+      // never touches "name" — so behaviour is unchanged, just consolidated
+      // here as it was in the original file.
+      function applyRowValue(node, rowIdx, val) {
+        const row = PIPE_ROWS[rowIdx];
+        if (!node._cwkValues) node._cwkValues = {};
+        node._cwkValues[row.key] = val;
+        const w = node.widgets?.find(w => w.name === row.widget);
+        if (w) { w.value = val; w.callback?.(val); }
+        // persist the last "Name" used (fire-and-forget)
+        if (row.key === "name") {
+          const n = String(val ?? "").trim();
+          if (n) {
+            fetch("/cwk/pipe/last_name", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: n }),
+            }).catch(() => {});
+          }
+        }
+        app.canvas.setDirty(true, false);
+      }
+
       node.onMouseMove = function (e, pos) {
         const btnKey = hitTestButton(this, pos[0], pos[1]);
         if (btnKey) {

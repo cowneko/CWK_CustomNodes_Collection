@@ -156,10 +156,12 @@ function _groupedLoras() {
     .map(([g, items]) => [g, items.sort((a, b) => a.name.localeCompare(b.name))]);
 }
 
-/** Display-only truncation — the widget value always keeps the full path. */
+/** Display-only truncation — the widget value always keeps the full path.
+ *  Splits on BOTH separators: folder_paths returns "folder\file.safetensors"
+ *  on Windows but "folder/file.safetensors" elsewhere. */
 function _displayName(n) {
   return _loraSettings?.truncate_names
-    ? n.split("/").pop().replace(/\.[^.]+$/, "")
+    ? n.split(/[\\/]/).pop().replace(/\.[^.]+$/, "")
     : n;
 }
 
@@ -170,15 +172,14 @@ function injectLoraSettingsStyles() {
   const st = document.createElement("style");
   st.id = "cwk-lora-gear-styles";
   st.textContent = `
-    .cwk-lora-widget .cwkl-w-gear {
-      background: transparent; border: none; cursor: pointer;
-      color: #6c7086; font-size: 14px; line-height: 1;
-      padding: 2px 5px; border-radius: 4px;
+    .cwk-lora-widget .cwkl-w-fold {
+      background: #313552; color: #cdd6f4; border: none;
+      width: 22px; height: 20px; border-radius: 5px; cursor: pointer;
+      font-size: 10px; line-height: 1; padding: 0; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: filter .15s;
     }
-    .cwk-lora-widget .cwkl-w-gear:hover,
-    .cwk-lora-widget .cwkl-w-gear.open {
-      color: #fff; background: rgba(255,255,255,.12);
-    }
+    .cwk-lora-widget .cwkl-w-fold:hover { filter: brightness(1.35); color: #fff; }
 
     /* ── Foldable settings panel (inline, like CWK Save Image's ▲ fold) ── */
     .cwk-lora-widget .cwkl-w-settings {
@@ -429,10 +430,10 @@ function _setupLoraNode(node) {
         <input type="checkbox" class="cwkl-w-all" title="Activate / deactivate all LoRAs"/>
         <span class="cwkl-w-title">LoRAs (<span class="cwkl-w-count">0</span>)</span>
         <span class="cwkl-w-spacer"></span>
-        <button class="cwkl-w-gear" title="Loader settings (fold)">⚙</button>
         <button class="cwkl-w-browser"
           title="Open the LoRA browser (infos, trigger words, thumbnails)">🔎 Browser</button>
         <button class="cwkl-w-add" title="Add an empty LoRA slot">＋ Add LoRA</button>
+        <button class="cwkl-w-fold" title="Unfold loader settings">▼</button>
       </div>
       <div class="cwkl-w-settings" style="display:none">
         <div class="cwkl-w-set-row">
@@ -474,7 +475,7 @@ function _setupLoraNode(node) {
     const addBtn     = root.querySelector(".cwkl-w-add");
     const browserBtn = root.querySelector(".cwkl-w-browser");
     const trigEl     = root.querySelector(".cwkl-w-trigger");
-    const gearBtn    = root.querySelector(".cwkl-w-gear");
+    const foldBtn    = root.querySelector(".cwkl-w-fold");
     const settingsEl = root.querySelector(".cwkl-w-settings");
     const setStrength = root.querySelector(".cwkl-w-set-strength");
     const setStep     = root.querySelector(".cwkl-w-set-step");
@@ -801,12 +802,17 @@ function _setupLoraNode(node) {
     setMemory.addEventListener("change", _onSettingChange);
     setTruncate.addEventListener("change", _onSettingChange);
 
-    gearBtn.addEventListener("click", () => {
-      const open = settingsEl.style.display === "none";
+    // ── ▲/▼ fold (same convention as CWK Save Image: ▼ = folded,
+    //    ▲ = unfolded — click toggles). Extreme right of the header.
+    function _setFold(open) {
       settingsEl.style.display = open ? "flex" : "none";
-      gearBtn.classList.toggle("open", open);
-      if (open) _syncSettingsInputs();
+      foldBtn.textContent = open ? "▲" : "▼";
+      foldBtn.title = open ? "Fold loader settings" : "Unfold loader settings";
+    }
+    foldBtn.addEventListener("click", () => {
+      _setFold(settingsEl.style.display === "none");
     });
+    _setFold(false);   // starts folded (matches the inline display:none)
 
     ensureLoraSettings().then(() => { _syncSettingsInputs(); _render(); });
 

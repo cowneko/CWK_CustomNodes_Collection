@@ -65,9 +65,11 @@ _KEEP_FIELDS = (
 
 _DEFAULT_LORA_SETTINGS: Dict[str, Any] = {
     "default_strength": 1.0,    # weight pre-filled on new LoRA rows
-    "strength_step":    0.05,   # slider step in the loader rows
+    "strength_step":    0.05,   # stepper increment in the loader rows
     "keep_in_memory":   False,  # keep loaded LoRA weights in RAM between runs
     "truncate_names":   False,  # display-only: strip folders/extension in dropdowns
+    "separate_weights": False,  # per-row model AND clip weight steppers
+    "trigger_separator": ",",   # join string for the trigger_words STRING output
 }
 
 _settings_cache: Optional[Dict[str, Any]] = None
@@ -95,8 +97,11 @@ def _load_lora_settings(force: bool = False) -> Dict[str, Any]:
         s["strength_step"] = max(0.001, min(1.0, float(s["strength_step"])))
     except (TypeError, ValueError):
         s["strength_step"] = 0.05
-    s["keep_in_memory"] = bool(s["keep_in_memory"])
-    s["truncate_names"] = bool(s["truncate_names"])
+    s["keep_in_memory"]   = bool(s["keep_in_memory"])
+    s["truncate_names"]   = bool(s["truncate_names"])
+    s["separate_weights"] = bool(s["separate_weights"])
+    sep = s.get("trigger_separator")
+    s["trigger_separator"] = sep if isinstance(sep, str) and len(sep) <= 8 else ","
     _settings_cache = s
     return s
 
@@ -755,6 +760,8 @@ try:
                     continue
                 v = (max(-2.0, min(2.0, v)) if k == "default_strength"
                      else max(0.001, min(1.0, v)))
+            elif k == "trigger_separator":
+                v = str(v)[:8]
             else:
                 v = bool(v)
             s[k] = v
@@ -1307,7 +1314,8 @@ class CWK_LoraLoader:
                 if t not in triggers:
                     triggers.append(t)
 
-        trigger_str = ", ".join(triggers)
+        sep = _load_lora_settings().get("trigger_separator", ",")
+        trigger_str = sep.join(triggers)
         print(f"[CWK LoRA] Applied {len(applied)}/{len(entries)} LoRA(s)"
               + (f": {'; '.join(applied)}" if applied else "")
               + (f" | trigger words: {trigger_str}" if trigger_str else ""))

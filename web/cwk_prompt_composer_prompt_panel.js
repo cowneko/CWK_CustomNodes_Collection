@@ -147,6 +147,38 @@ function _toast(msg) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  ✨ LLM PROMPT ENHANCEMENT — shared state & helpers
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _llmSettings = null;   // global (server-persisted) settings; key never echoed
+let _llmModels   = null;   // model ids from the endpoint (null = not fetched)
+
+async function ensureLlmSettings() {
+    if (_llmSettings) return _llmSettings;
+    try {
+        const r = await fetch("/cwk/pc/llm");
+        if (r.ok) _llmSettings = await r.json();
+    } catch {}
+    _llmSettings ??= {
+        provider: "ollama", base_url: "http://127.0.0.1:11434/v1",
+        model: "dolphin3", temperature: 0.8, max_tokens: 500, timeout: 120,
+    };
+    return _llmSettings;
+}
+
+/** Tag-based vs natural-language — heuristic to preselect the dialog's mode. */
+function detectPromptMode(text) {
+    const t = (text || "").trim();
+    if (!t) return "tag";
+    if (/\.\s/.test(t)) return "nl";                          // sentence periods
+    if (/\([^()]+:\d+(?:\.\d+)?\)/.test(t)) return "tag";      // weighted tags
+    const segments = t.split(",").map(s => s.trim()).filter(Boolean);
+    if (segments.length <= 1) return t.split(/\s+/).length > 8 ? "nl" : "tag";
+    const avgWords = segments.reduce((a, s) => a + s.split(/\s+/).length, 0) / segments.length;
+    return avgWords <= 4.5 ? "tag" : "nl";
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  TAGGED PRESET SYSTEM — server-backed .json files
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -797,7 +829,7 @@ function openTagPicker({ title, key, onPick }) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  PROMPT PANEL
-// ═════════════════════════��════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
 
 export class PromptPanel {
     constructor({ kind, onChange }) {
@@ -814,6 +846,7 @@ export class PromptPanel {
         this._renderTimer = null;
         this._weightSelIndices = null;
         this._weightSelTimer   = null;
+        this._llmSaveTimer     = null;
 
         this.el = document.createElement("div");
         Object.assign(this.el.style, {
@@ -855,7 +888,7 @@ export class PromptPanel {
 
         headerWrapper.appendChild(this._titleRow);
 
-        // ── Row 2: Category buttons + Wildcards + Edit Tags ─────────────
+        // ── Row 2: Category buttons + Wildcards + Enhance + Edit Tags + ▼ ──
         this._btnRow = document.createElement("div");
         Object.assign(this._btnRow.style, {
             display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap",
@@ -886,11 +919,35 @@ export class PromptPanel {
             });
         }));
 
+        // ✨ AI Enhance (LLM)
+        this._btnRow.appendChild(this._mkHeaderBtn("✨ Enhance", "#cba6f7", () => this._openEnhanceDialog()));
+
         this._toggleBtn = this._mkHeaderBtn("🏷 Edit Tags", C.textDim, () => this._toggleMode());
         this._toggleBtn.style.marginLeft = "auto";
         this._btnRow.appendChild(this._toggleBtn);
 
+        // ▼ LLM options fold — extreme right, same convention as the other
+        // CWK folds (▼ folded, ▲ unfolded)
+        this._llmFoldBtn = this._mkHeaderBtn("▼", C.textDim, () => this._toggleLlmFold());
+        this._llmFoldBtn.title = "AI Enhance (LLM) options";
+        this._llmFoldBtn.style.padding = "2px 6px";
+        this._btnRow.appendChild(this._llmFoldBtn);
+
         headerWrapper.appendChild(this._btnRow);
+
+        // ── LLM settings fold (below the button row; collapsed by default.
+        //    GLOBAL settings shared by every composer panel — values reload
+        //    from the server on each open.) ──────────────────────────────
+        this._llmFold = document.createElement("div");
+        Object.assign(this._llmFold.style, {
+            display: "none", flexDirection: "column", gap: "5px", flexShrink: "0",
+            padding: "6px 8px", background: C.bgFull,
+            border: `1px solid ${C.border}`, borderRadius: "6px",
+            fontSize: "11px", fontFamily: "Inter, system-ui, sans-serif",
+        });
+        this._buildLlmFold();
+        headerWrapper.appendChild(this._llmFold);
+
         this.el.appendChild(headerWrapper);
 
         // ── Toolbar ──────────────────────────────────────────────────────
@@ -1000,14 +1057,14 @@ export class PromptPanel {
                 this._pillCanvas._closeCtxMenu();
                 openPresetManager((pills, category) => this._smartInsertPills(pills, category));
             }));
-			            // ── 📋 Copy / Paste ──
+
+            // ── 📋 Copy / Paste ──
             menu.appendChild(divider.cloneNode());
-            const selIds   = [...this._pillCanvas.selected];
-            const copyPills = selIds.length > 0
+            const selIds     = [...this._pillCanvas.selected];
+            const copyPills  = selIds.length > 0
                 ? selIds.map(id => this._pillCanvas.pills.find(p => p.id === id)).filter(Boolean)
                 : [pill];
-            const copyLabel = selIds.length > 1
-                ? `Copy Selected (${copyPills.length})` : "Copy Tag";
+            const copyLabel  = selIds.length > 1 ? `Copy Selected (${copyPills.length})` : "Copy Tag";
             menu.appendChild(this._mkCtxItem("📋", copyLabel, () => {
                 this._pillCanvas._closeCtxMenu();
                 this._copyToClipboard(
@@ -1057,6 +1114,7 @@ export class PromptPanel {
     }
 
     // ── 📋 Clipboard operations ──────────────────────────────────────────────
+
     async _copyToClipboard(text, what) {
         const ok = await copyToClipboard(text);
         _toast(ok ? `📋 ${what} copied` : "❌ Copy failed");
@@ -1153,7 +1211,7 @@ export class PromptPanel {
         Object.assign(insBtn.style, {
             flex: "1", padding: "8px", background: "#89b4fa", color: "#141824",
             border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold",
-            fontSize: "13px", fontFamily: "Inter,system-ui,sans-serif",
+            fontSize: "13px", fontFamily: "Inter, system-ui, sans-serif",
         });
         insBtn.addEventListener("click", () => {
             const text = ta.value.trim();
@@ -1167,7 +1225,7 @@ export class PromptPanel {
         Object.assign(cancelBtn.style, {
             flex: "1", padding: "8px", background: C.surface, color: C.text,
             border: `1px solid ${C.border}`, borderRadius: "6px", cursor: "pointer",
-            fontSize: "13px", fontFamily: "Inter,system-ui,sans-serif",
+            fontSize: "13px", fontFamily: "Inter, system-ui, sans-serif",
         });
         cancelBtn.addEventListener("click", hide);
 
@@ -1185,7 +1243,7 @@ export class PromptPanel {
         win.style.left = "50%"; win.style.top = "160px"; win.style.transform = "translateX(-50%)";
         ta.focus();
     }
-	
+
     _mkHeaderBtn(text, color, onClick) {
         const btn = document.createElement("button");
         btn.textContent = text;
@@ -1198,6 +1256,382 @@ export class PromptPanel {
         btn.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
         return btn;
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  ✨ LLM PROMPT ENHANCEMENT — fold (settings UI)
+    // ══════════════════════════════════════════════════════════════════════
+
+    _toggleLlmFold() {
+        const open = this._llmFold.style.display === "none";
+        this._llmFold.style.display = open ? "flex" : "none";
+        this._llmFoldBtn.textContent = open ? "▲" : "▼";
+        this._llmFoldBtn.title = open ? "Fold LLM options" : "Unfold LLM options";
+        if (open) this._refreshLlmFold();   // always reload — settings are global
+    }
+
+    _buildLlmFold() {
+        const inputCss = {
+            flex: "1", padding: "3px 8px", background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "4px", fontSize: "11px",
+            fontFamily: "Inter, system-ui, sans-serif", outline: "none",
+            boxSizing: "border-box", minWidth: "0",
+        };
+        const blockEvents = (el) => {
+            for (const evt of ["mousedown","mouseup","click","keydown","keyup",
+                               "input","change","focus","blur","pointerdown"]) {
+                el.addEventListener(evt, (e) => e.stopPropagation());
+            }
+        };
+        const mkRow = (labelText) => {
+            const row = document.createElement("div");
+            Object.assign(row.style, { display: "flex", alignItems: "center", gap: "6px" });
+            const l = document.createElement("span");
+            Object.assign(l.style, { color: "#a6adc8", fontSize: "10px",
+                                     fontWeight: "bold", width: "78px", flexShrink: "0" });
+            l.textContent = labelText;
+            row.appendChild(l);
+            this._llmFold.appendChild(row);
+            return row;
+        };
+
+        // Provider
+        const provRow = mkRow("Provider");
+        this._llmProvider = document.createElement("select");
+        Object.assign(this._llmProvider.style, inputCss);
+        for (const [val, label] of [["ollama", "Ollama (local)"], ["openai", "OpenAI-compatible"]]) {
+            const o = document.createElement("option"); o.value = val; o.textContent = label;
+            this._llmProvider.appendChild(o);
+        }
+        this._llmProvider.addEventListener("change", () => {
+            // preset the typical base URL when switching provider
+            this._llmUrl.value = this._llmProvider.value === "ollama"
+                ? "http://127.0.0.1:11434/v1" : "https://openrouter.ai/api/v1";
+            this._saveLlmDebounced();
+            this._refreshLlmModels();
+        });
+        blockEvents(this._llmProvider);
+        provRow.appendChild(this._llmProvider);
+
+        // Base URL
+        const urlRow = mkRow("Base URL");
+        this._llmUrl = document.createElement("input");
+        this._llmUrl.type = "text";
+        Object.assign(this._llmUrl.style, inputCss);
+        this._llmUrl.addEventListener("change", () => this._saveLlmDebounced());
+        blockEvents(this._llmUrl);
+        urlRow.appendChild(this._llmUrl);
+
+        // API key (never echoed back by the server; empty = keep stored)
+        const keyRow = mkRow("API Key");
+        this._llmKey = document.createElement("input");
+        this._llmKey.type = "password";
+        Object.assign(this._llmKey.style, inputCss);
+        this._llmKey.addEventListener("change", () => this._saveLlmDebounced());
+        blockEvents(this._llmKey);
+        keyRow.appendChild(this._llmKey);
+
+        // Model + refresh
+        const modelRow = mkRow("Model");
+        this._llmModel = document.createElement("select");
+        Object.assign(this._llmModel.style, inputCss);
+        this._llmModel.addEventListener("change", () => this._saveLlmDebounced());
+        blockEvents(this._llmModel);
+        const modelRefresh = document.createElement("button");
+        modelRefresh.textContent = "🔄";
+        modelRefresh.title = "Fetch the model list from the endpoint";
+        Object.assign(modelRefresh.style, {
+            padding: "3px 8px", background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "4px",
+            cursor: "pointer", fontSize: "11px", flexShrink: "0",
+        });
+        modelRefresh.addEventListener("click", (e) => { e.stopPropagation(); this._refreshLlmModels(); });
+        blockEvents(modelRefresh);
+        modelRow.append(this._llmModel, modelRefresh);
+
+        // Temperature / Max tokens / Timeout — one row
+        const tuneRow = mkRow("Sampling");
+        const mkTiny = (txt, title) => {
+            const sp = document.createElement("span");
+            sp.textContent = txt; sp.title = title;
+            Object.assign(sp.style, { fontSize: "10px", color: C.textDim, flexShrink: "0" });
+            return sp;
+        };
+        const mkNum = (min, max, step, title) => {
+            const inp = document.createElement("input");
+            inp.type = "number"; inp.min = min; inp.max = max; inp.step = step;
+            inp.title = title;
+            Object.assign(inp.style, { ...inputCss, flex: "0 0 62px" });
+            inp.addEventListener("change", () => this._saveLlmDebounced());
+            blockEvents(inp);
+            return inp;
+        };
+        this._llmTemp    = mkNum(0, 2, 0.1,    "Temperature (creativity)");
+        this._llmMaxTok  = mkNum(50, 4096, 50, "Max tokens of the response");
+        this._llmTimeout = mkNum(10, 600, 10,  "Timeout in seconds");
+        tuneRow.append(mkTiny("T",   "Temperature"),        this._llmTemp,
+                       mkTiny("Tok", "Max tokens"),          this._llmMaxTok,
+                       mkTiny("s",   "Timeout (seconds)"),  this._llmTimeout);
+
+        this._llmStatus = document.createElement("div");
+        Object.assign(this._llmStatus.style, {
+            fontSize: "10px", color: C.textDim, minHeight: "12px",
+            textAlign: "left", paddingLeft: "84px", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap",
+        });
+        this._llmFold.appendChild(this._llmStatus);
+    }
+
+    async _refreshLlmFold() {
+        await ensureLlmSettings();
+        const s = _llmSettings;
+        this._llmProvider.value = s.provider;
+        this._llmUrl.value      = s.base_url;
+        this._llmKey.value      = "";
+        this._llmKey.placeholder = s.api_key_set ? "set — leave empty to keep" : "not set";
+        this._llmTemp.value     = String(s.temperature);
+        this._llmMaxTok.value   = String(s.max_tokens);
+        this._llmTimeout.value  = String(s.timeout);
+        this._fillLlmModelSelect();
+        await this._refreshLlmModels();
+    }
+
+    _fillLlmModelSelect() {
+        const cur = _llmSettings?.model || "";
+        const ids = [...new Set([cur, ...(_llmModels ?? [])].filter(Boolean))].sort();
+        this._llmModel.innerHTML = "";
+        for (const id of ids) {
+            const o = document.createElement("option");
+            o.value = id; o.textContent = id;
+            this._llmModel.appendChild(o);
+        }
+        this._llmModel.value = cur;
+        if (this._llmModel.value !== cur && this._llmModel.options.length) {
+            this._llmModel.selectedIndex = 0;
+        }
+    }
+
+    async _refreshLlmModels() {
+        if (!this._llmStatus) return;
+        this._llmStatus.textContent = "Fetching models…";
+        this._llmStatus.style.color = C.textDim;
+        try {
+            const res  = await fetch("/cwk/pc/llm/models");
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            _llmModels = data.models || [];
+            this._llmStatus.textContent = `✓ ${_llmModels.length} model(s) found`;
+            this._llmStatus.style.color = "#a6e3a1";
+        } catch (e) {
+            _llmModels = null;
+            this._llmStatus.textContent = `⚠ ${e.message}`;
+            this._llmStatus.style.color = "#f38ba8";
+        }
+        this._fillLlmModelSelect();
+    }
+
+    _saveLlmDebounced() {
+        clearTimeout(this._llmSaveTimer);
+        this._llmSaveTimer = setTimeout(async () => {
+            const payload = {
+                provider:     this._llmProvider.value,
+                base_url:    this._llmUrl.value.trim(),
+                api_key:      this._llmKey.value,          // empty = keep stored
+                model:        this._llmModel.value,
+                temperature:  parseFloat(this._llmTemp.value),
+                max_tokens:   parseInt(this._llmMaxTok.value, 10),
+                timeout:      parseInt(this._llmTimeout.value, 10),
+            };
+            try {
+                const res = await fetch("/cwk/pc/llm", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    const j = await res.json();
+                    if (j?.settings) _llmSettings = j.settings;
+                    if (this._llmKey.value) {   // key now lives server-side only
+                        this._llmKey.value = "";
+                        this._llmKey.placeholder = "set — leave empty to keep";
+                    }
+                    if (this._llmStatus) {
+                        this._llmStatus.textContent = "✓ Saved";
+                        this._llmStatus.style.color = "#a6e3a1";
+                    }
+                }
+            } catch {}
+        }, 400);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  ✨ LLM PROMPT ENHANCEMENT — dialog
+    // ══════════════════════════════════════════════════════════════════════
+
+    async _openEnhanceDialog() {
+        await ensureLlmSettings();
+        const s = _llmSettings;
+        const kindLabel = this.kind === "negative" ? "Negative" : "Positive";
+
+        const { win, backdrop, body, closeBtn } = makeWindow({
+            title: `✨ Enhance ${kindLabel} Prompt`, width: "580px", height: "auto",
+            minWidth: "380px", minHeight: "220px", zIndex: "10004",
+        });
+        Object.assign(win.style, { height: "auto" });
+        const hide = () => { backdrop.style.display = "none"; win.style.display = "none"; win.remove(); backdrop.remove(); };
+        closeBtn.addEventListener("click", hide);
+
+        const mkLabel = (text) => {
+            const l = document.createElement("label");
+            l.textContent = text;
+            Object.assign(l.style, { color: "#a6adc8", fontSize: "12px", fontWeight: "bold",
+                                     fontFamily: "Inter, system-ui, sans-serif" });
+            return l;
+        };
+        const taCss = {
+            width: "100%", boxSizing: "border-box", background: C.bgFull, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "6px", padding: "6px 8px",
+            fontSize: "12px", fontFamily: "monospace", outline: "none", resize: "vertical",
+        };
+        const blockEvents = (el) => {
+            for (const evt of ["mousedown","mouseup","click","keydown","keyup",
+                               "input","change","focus","blur","pointerdown"]) {
+                el.addEventListener(evt, (e) => e.stopPropagation());
+            }
+        };
+
+        const modelInfo = document.createElement("div");
+        modelInfo.textContent = `🤖 ${s.model} · ${s.temperature}° · ${s.max_tokens} tok — configure via ▼ in the panel header`;
+        Object.assign(modelInfo.style, { color: C.textDim, fontSize: "11px",
+                                         fontFamily: "Inter, system-ui, sans-serif" });
+
+        const promptTa = document.createElement("textarea");
+        promptTa.spellcheck = false;
+        promptTa.value = this.getValue();
+        promptTa.placeholder = "tag1, (tag2:1.2), … or a natural-language description";
+        Object.assign(promptTa.style, { ...taCss, minHeight: "80px" });
+        blockEvents(promptTa);
+
+        const ctlRow = document.createElement("div");
+        Object.assign(ctlRow.style, { display: "flex", gap: "8px", alignItems: "center" });
+
+        const modeSel = document.createElement("select");
+        Object.assign(modeSel.style, {
+            flex: "1", padding: "4px 8px", background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "6px", fontSize: "12px",
+            fontFamily: "Inter, system-ui, sans-serif", outline: "none", cursor: "pointer",
+        });
+        for (const [val, label] of [["tag", "🏷 Tag-based"], ["nl", "📝 Natural language"]]) {
+            const o = document.createElement("option"); o.value = val; o.textContent = label;
+            modeSel.appendChild(o);
+        }
+        modeSel.value = detectPromptMode(this.getValue());
+        blockEvents(modeSel);
+
+        const enhanceBtn = document.createElement("button");
+        enhanceBtn.textContent = "✨ Enhance";
+        Object.assign(enhanceBtn.style, {
+            padding: "6px 16px", background: "#cba6f7", color: "#141824",
+            border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold",
+            fontSize: "13px", fontFamily: "Inter, system-ui, sans-serif", flexShrink: "0",
+        });
+
+        ctlRow.append(modeSel, enhanceBtn);
+
+        const status = document.createElement("div");
+        Object.assign(status.style, { fontSize: "12px", minHeight: "16px", textAlign: "center" });
+
+        const resultLabel = mkLabel("Enhanced result (editable):");
+        resultLabel.style.display = "none";
+        const resultTa = document.createElement("textarea");
+        resultTa.spellcheck = false;
+        Object.assign(resultTa.style, { ...taCss, minHeight: "100px", display: "none" });
+        blockEvents(resultTa);
+
+        const btnRow = document.createElement("div");
+        Object.assign(btnRow.style, { display: "flex", gap: "8px" });
+
+        const applyBtn = document.createElement("button");
+        applyBtn.textContent = "✅ Apply (replaces the prompt)";
+        applyBtn.disabled = true;
+        applyBtn.style.opacity = "0.5";
+        Object.assign(applyBtn.style, {
+            flex: "1", padding: "8px", background: "#a6e3a1", color: "#141824",
+            border: "none", borderRadius: "6px", fontWeight: "bold",
+            fontSize: "13px", fontFamily: "Inter, system-ui, sans-serif", cursor: "pointer",
+        });
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.textContent = "Close";
+        Object.assign(cancelBtn.style, {
+            flex: "1", padding: "8px", background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: "6px", cursor: "pointer",
+            fontSize: "13px", fontFamily: "Inter, system-ui, sans-serif",
+        });
+        cancelBtn.addEventListener("click", hide);
+
+        applyBtn.addEventListener("click", () => {
+            const val = resultTa.value.trim();
+            if (!val) return;
+            this.setValue(val);              // re-parses: weights, categories
+            this.onChange(this.getValue());  // notify the node
+            hide();
+        });
+
+        enhanceBtn.addEventListener("click", async () => {
+            const p = promptTa.value.trim();
+            if (!p) { status.style.color = "#f9e2af"; status.textContent = "⚠️ Nothing to enhance"; return; }
+            enhanceBtn.disabled = true;
+            enhanceBtn.textContent = "⏳ …";
+            const t0  = performance.now();
+            const tick = setInterval(() => {
+                status.style.color = C.textDim;
+                status.textContent = `⏳ Enhancing with ${_llmSettings?.model}… ${Math.round((performance.now() - t0) / 1000)}s`;
+            }, 500);
+            status.textContent = `⏳ Enhancing with ${_llmSettings?.model}…`;
+            try {
+                const res = await fetch("/cwk/pc/enhance", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: p, mode: modeSel.value, kind: this.kind }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                resultLabel.style.display = "";
+                resultTa.style.display   = "";
+                resultTa.value = data.prompt;
+                applyBtn.disabled = false;
+                applyBtn.style.opacity = "1";
+                const secs  = Math.round((performance.now() - t0) / 1000);
+                const usage = data.usage?.total_tokens ? ` · ${data.usage.total_tokens} tokens` : "";
+                status.style.color = "#a6e3a1";
+                status.textContent = `✓ Done in ${secs}s${usage} — review, then Apply`;
+            } catch (e) {
+                status.style.color = "#f38ba8";
+                status.textContent = `❌ ${e.message}`;
+            } finally {
+                clearInterval(tick);
+                enhanceBtn.disabled = false;
+                enhanceBtn.textContent = "✨ Enhance";
+            }
+        });
+
+        btnRow.append(applyBtn, cancelBtn);
+
+        const grid = document.createElement("div");
+        Object.assign(grid.style, { display: "flex", flexDirection: "column", gap: "8px" });
+        grid.append(modelInfo, mkLabel("Prompt to enhance (editable):"),
+                    promptTa, ctlRow, status, resultLabel, resultTa, btnRow);
+        body.appendChild(grid);
+
+        backdrop.style.display = "block";
+        win.style.display = "flex";
+        win.style.left = "50%"; win.style.top = "120px"; win.style.transform = "translateX(-50%)";
+        promptTa.focus();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Serialization / value API
+    // ══════════════════════════════════════════════════════════════════════
 
     _serializePills(pills) {
         return pills.map(p => {
@@ -1273,6 +1707,10 @@ export class PromptPanel {
         pc._render();
         pc.onChange(pc.getValue());
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Autocomplete
+    // ══════════════════════════════════════════════════════════════════════
 
     async _initAutocomplete() {
         this._acData = await buildAutocompleteList();
@@ -1396,6 +1834,10 @@ export class PromptPanel {
         this._hideAutocomplete();
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  Keydown / weight control
+    // ══════════════════════════════════════════════════════════════════════
+
     _onEditorKeydown(e) {
         // Ctrl+Up/Down weight control in text mode
         if (e.ctrlKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && !this._acVisible) {
@@ -1505,6 +1947,10 @@ export class PromptPanel {
         this._updateTokenCount();
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  Colored rendering / caret utilities
+    // ══════════════════════════════════════════════════════════════════════
+
     _renderColoredText() {
         const raw = this._getEditorPlainText();
         if (!raw.trim()) return;
@@ -1564,6 +2010,10 @@ export class PromptPanel {
         const r = document.createRange(); r.selectNodeContents(this._editor); r.collapse(false);
         sel.removeAllRanges(); sel.addRange(r);
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Mode switching
+    // ══════════════════════════════════════════════════════════════════════
 
     _toggleMode() {
         if (this.mode === "text") {
@@ -1636,6 +2086,10 @@ export class PromptPanel {
         return "custom";
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  Toolbar (pill mode)
+    // ══════════════════════════════════════════════════════════════════════
+
     _buildToolbar() {
         const mkBtn = (text, bg, color, onClick) => {
             const btn = document.createElement("button");
@@ -1673,10 +2127,10 @@ export class PromptPanel {
         this._toolbar.appendChild(mkBtn("📋 Presets", "#1f2040", C.text, () => {
             openPresetManager((pills, category) => this._smartInsertPills(pills, category));
         }));
-	    
-		this._toolbar.appendChild(mkBtn("📤 Export", "#1f2040", C.text, () => {
+
+        this._toolbar.appendChild(mkBtn("📤 Export", "#1f2040", C.text, () => {
             openExportDialog();
-        }));	
+        }));
     }
 
     // ── Token counter ────────────────────────────────────────────────────────
@@ -1831,6 +2285,7 @@ export class PromptPanel {
             window.addEventListener("contextmenu", closeCtx, true);
         }, 0);
     }
+
     // ── Shared "Add to Tag List" submenu ─────────────────────────────────────
     _appendAddToTagsSubmenu(menu, tagText, tagCategory) {
         const addItem = document.createElement("div");
@@ -1946,3 +2401,5 @@ export class PromptPanel {
         } catch (e) { alert(`❌ Network error: ${e.message}`); }
     }
 }
+
+// ===== END OF FILE =====

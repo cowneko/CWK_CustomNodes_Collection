@@ -1,6 +1,13 @@
 /**
  * CWK Model Loader — ComfyUI canvas node extension.
  * Simplified model loader with dynamic AIO / non-AIO layout.
+ *
+ * Vertical resizing: the node can be grown freely by dragging its bottom
+ * edge/corner. All content (thumbnail, quick-load buttons, CLIP/VAE rows) is
+ * top-anchored and stays fixed; only the bottom edge and the "Models
+ * Manager" button (bottom-anchored via getButtonRect) move with it. The
+ * node never shrinks below the content height (calcNodeHeight), and a
+ * user-grown height survives workflow reloads and AIO/DIFF layout changes.
  */
 
 import { app }               from "../../scripts/app.js";
@@ -74,8 +81,6 @@ const ROWS_NON_AIO = [
 function getActiveRows(node) {
   return node._cwkIsAIO ? [] : ROWS_NON_AIO;
 }
-
-// ─── Base-model badge helpers (same as preset_manager.js) ────────────────────
 
 // ─── Base-model badge helpers (dynamic, from CivitAI's base-model list) ──────
 
@@ -210,6 +215,10 @@ function _resolveThumb(meta) {
 }
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
+// NOTE: every content rect here is TOP-anchored (fixed once the node is
+// drawn) except getButtonRect, which is anchored to node.size[1] — that is
+// what makes free vertical resizing work: the button follows the bottom
+// edge, everything else stays put.
 
 function getThumbRect(node) {
   const regionTop    = TITLE_H();
@@ -564,8 +573,8 @@ async function _loadModelIntoNode(node, modelName, modelType) {
     if (res.ok) node._cwkMeta = await res.json();
   } catch {}
 
-  // Grow to fit the new row count, but keep any extra height the user gave
-  // the node by resizing.
+  // Recalculate height if AIO state changed — grow to fit the new row count,
+  // but keep any extra height the user gave the node by resizing.
   if (prevAIO !== node._cwkIsAIO) {
     node.size[0] = Math.max(NODE_MIN_W, node.size[0]);
     node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
@@ -730,7 +739,8 @@ function drawNode(node, ctx) {
     }
   }
 
-  // ── Button ──
+  // ── Button (bottom-anchored — follows the node's bottom edge when the
+  //    node is vertically resized) ──
   const br    = getButtonRect(node);
   const isHov = hover?.key === "load";
   const isFlash = node._cwkFlash === "load";
@@ -796,9 +806,12 @@ app.registerExtension({
         const getW = name => node.widgets?.find(w => w.name === name);
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
-        // Math.max: configure() has already restored the saved size by now —
-        // a user-grown height must survive the init pass.
+        // Math.max (not assignment): configure() has already restored the
+        // saved size by now — a user-grown height must survive the init pass
+        // and the workflow reload that restored it.
         node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
+        app.canvas.setDirty(true, true);
+      }, 0);
 
       // Restore last-used model
       setTimeout(async () => {
@@ -814,19 +827,22 @@ app.registerExtension({
       }, 150);
 
       node.onDrawForeground = function (ctx) {
-		if (this.flags?.collapsed) return;
-		drawNode(this, ctx);
-	  };
+        if (this.flags?.collapsed) return;
+        drawNode(this, ctx);
+      };
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
         // Vertical resize: never shrink below the content, but let the user
-        // grow the node — getButtonRect is bottom-relative, so the Models
-        // Manager button follows the bottom edge; all other layout is
-        // top-anchored and stays fixed.
+        // grow the node freely — getButtonRect is bottom-relative, so the
+        // Models Manager button follows the bottom edge; every other rect
+        // is top-anchored and stays fixed.
         this.size[1] = Math.max(calcNodeHeight(this), this.size[1]);
       };
 
+      // Auto-fit paths (widget-triggered refits, corner double-click on some
+      // builds) go through computeSize — clamp those the same way so they
+      // can't shrink the node below its content either.
       const prevComputeSize = node.computeSize?.bind(node);
       node.computeSize = function (...args) {
         const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
@@ -834,7 +850,7 @@ app.registerExtension({
         s[1] = Math.max(s[1] ?? 0, calcNodeHeight(this));
         return s;
       };
-		  
+
       node.onMouseDown = function (e, pos) {
         const qlKind = hitTestQuickLoad(this, pos[0], pos[1]);
         if (qlKind) { openQuickLoadDropdown(node, qlKind); return true; }

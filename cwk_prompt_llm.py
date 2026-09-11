@@ -191,9 +191,6 @@ try:
             else:
                 v = str(v).strip() if k in ("base_url", "model") else str(v)
             s[k] = v
-        if s["base_url"].endswith("/v1") is False and s["provider"] == "ollama" \
-                and not s["base_url"].endswith("/v1"):
-            s["base_url"] = s["base_url"]  # keep as entered; errors guide the user
         _save_llm_settings(s)
         return web.json_response({"ok": True, "settings": _masked(s)})
 

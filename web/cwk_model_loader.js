@@ -194,8 +194,17 @@ function loadImage(url) {
   if (!url) return null;
   if (_imgCache.has(url)) return _imgCache.get(url);
   const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => app.canvas.setDirty(true, false);
+  // No crossOrigin: civitai image URLs redirect to blobs-b2.civitai.com,
+  // which sends no ACAO header — crossOrigin="anonymous" then fails the
+  // load even though the image is perfectly displayable. This node only
+  // drawImage()s thumbnails and never reads pixels back (no getImageData /
+  // toDataURL, and ctx.filter blur doesn't read pixels), so a tainted
+  // canvas is harmless here.
+  img.onload  = () => app.canvas.setDirty(true, false);
+  img.onerror = () => {
+    console.warn("[CWK Loader] thumbnail failed to load:", url);
+    app.canvas.setDirty(true, false);
+  };
   img.src = url;
   _imgCache.set(url, img);
   return img;

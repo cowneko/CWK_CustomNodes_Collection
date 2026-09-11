@@ -19,6 +19,11 @@
  * Videos are muted+looping and only play while their card is in the viewport
  * (one shared IntersectionObserver for the whole grid). Cards show a ▶ badge;
  * NSFW blur applies to videos like images.
+ *
+ * Sidebar preview: the "Thumbnail & NSFW" preview is blurred while the LoRA
+ * is NSFW (manual override or CivitAI level) and not revealed — click the
+ * blurred preview to reveal/hide, shared with the grid's eye button through
+ * the same localStorage reveal store.
  */
 
 import { injectStyles } from "./cwk_styles.js";
@@ -193,6 +198,7 @@ export function injectLoraStyles() {
       width:72px; height:108px; object-fit:cover; border-radius:6px;
       border:1px solid #313552; background:#181d2e; flex-shrink:0;
     }
+    .cwk-thumb-preview.blurred { filter: blur(14px); cursor: pointer; }
     .cwk-thumb-btns { display:flex; flex-direction:column; gap:5px; flex:1; min-width:0; }
     .cwk-thumb-btns .cwk-btn { font-size:11px; padding:4px 8px; }
     .cwk-nsfw-tick {
@@ -269,8 +275,7 @@ export function injectLoraStyles() {
       padding:4px 8px; border-bottom:1px solid #20263a;
     }
     .cwkl-w-row:hover { background:#1a2035; }
-    .cwkl-w-row.disabled .cwkl-w-select,
-    .cwkl-w-row.disabled .cwkl-w-wval { opacity:.5; }
+    .cwkl-w-row.disabled .cwkl-w-select { opacity:.5; }
     .cwkl-w-row input[type=checkbox] { width:13px; height:13px; cursor:pointer; accent-color:#89b4fa; flex-shrink:0; }
     .cwkl-w-select {
       flex:1; min-width:50px; box-sizing:border-box;
@@ -284,8 +289,6 @@ export function injectLoraStyles() {
       color:#89b4fa; font-size:13px; line-height:1; flex-shrink:0; transition:color .15s;
     }
     .cwkl-w-info:hover { color:#cba6f7; }
-    .cwkl-w-weight { width:70px; flex-shrink:0; accent-color:#89b4fa; cursor:pointer; }
-    .cwkl-w-wval { min-width:32px; text-align:right; font-size:11px; color:#89b4fa; flex-shrink:0; }
     .cwkl-w-del {
       background:none; border:none; cursor:pointer; padding:0 3px;
       color:#6c7086; font-size:12px; line-height:1; flex-shrink:0; transition:color .15s;
@@ -818,6 +821,18 @@ export class LoraBrowserPanel {
         this._saveField({ clear_thumbnail: true });
       }
     });
+
+    // ── Sidebar preview: click a blurred (NSFW) thumbnail to reveal/hide ──
+    const toggleSidebarReveal = () => {
+      const l = this._current();
+      if (!l || !isNsfwLora(l)) return;   // nothing to reveal on a clean LoRA
+      this._revealed[l.name] = !this._revealed[l.name];
+      localStorage.setItem("cwk_lora_revealed", JSON.stringify(this._revealed));
+      this._updateSidebarStatic();   // re-apply blur on the preview
+      this._updateCard(l);           // …and on the grid card (eye button state)
+    };
+    this._thumbImg.addEventListener("click", toggleSidebarReveal);
+    this._thumbVideo.addEventListener("click", toggleSidebarReveal);
   }
 
   // ── Open / close ───────────────────────────────────────────────────────────
@@ -1209,6 +1224,7 @@ export class LoraBrowserPanel {
         this._revealed[l.name] = !this._revealed[l.name];
         localStorage.setItem("cwk_lora_revealed", JSON.stringify(this._revealed));
         this._updateCard(l);
+        this._updateSidebarStatic();   // keep the sidebar preview blur in sync
       });
     }
 
@@ -1343,8 +1359,19 @@ export class LoraBrowserPanel {
       if (thumb) this._thumbImg.src = thumb;
       this._thumbImg.style.display = thumb ? "" : "none";
     }
+
+    // NSFW blur on the preview (manual override → CivitAI level), click to reveal
+    const nsfw     = isNsfwLora(l);
+    const revealed = nsfw ? !!this._revealed[l.name] : true;
+    const blur     = nsfw && !revealed;
+    this._thumbImg.classList.toggle("blurred", blur);
+    this._thumbVideo.classList.toggle("blurred", blur);
+    const blurTitle = blur ? "NSFW — click to reveal" : "";
+    this._thumbImg.title   = blurTitle;
+    this._thumbVideo.title = blurTitle;
+
     this._thumbReset.disabled   = !civ.thumbnail_custom;
-    this._nsfwToggle.checked    = isNsfwLora(l);
+    this._nsfwToggle.checked    = nsfw;
 
     this._setStatus(l.name);
   }

@@ -210,17 +210,51 @@ function loadImage(url) {
   return img;
 }
 
+const _videoCache = new Map();
+/**
+ * Canvas can't <img> a video URL — but it CAN drawImage() a <video> element.
+ * Cache muted videos, seeked slightly past 0 (frame 0 is often black), and
+ * redraw the node when a drawable frame is ready. No crossOrigin — same
+ * reasoning as loadImage (blobs-b2 redirect sends no ACAO header).
+ */
+function loadVideo(url) {
+  if (!url) return null;
+  if (_videoCache.has(url)) return _videoCache.get(url);
+  const vid = document.createElement("video");
+  vid.muted = true;
+  vid.playsInline = true;
+  vid.preload = "auto";
+  vid.addEventListener("loadeddata", () => app.canvas.setDirty(true, false));
+  vid.addEventListener("loadedmetadata", () => {
+    try { vid.currentTime = Math.min(0.1, (vid.duration || 1) / 2) || 0.1; } catch {}
+  });
+  vid.addEventListener("seeked", () => app.canvas.setDirty(true, false));
+  vid.onerror = () => console.warn("[CWK Loader] video thumbnail failed to load:", url);
+  vid.src = url;
+  _videoCache.set(url, vid);
+  return vid;
+}
+
 function _resolveThumb(meta) {
   const thumb = meta?.thumbnail;
-  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false };
+  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false, isVideo: false };
+  if (thumb && isVideoUrl(thumb))  return { url: thumb, blur: false, isVideo: true  };
   const images = meta?.images;
-  if (!Array.isArray(images) || !images.length) return { url: null, blur: false };
+  if (!Array.isArray(images) || !images.length) return { url: null, blur: false, isVideo: false };
+  // Prefer still images; fall back to videos when the model only has videos.
   const stills = images.filter(img => img?.url && !isVideoUrl(img.url, img.type));
-  if (!stills.length) return { url: null, blur: false };
-  const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
-  if (sfw) return { url: sfw.url, blur: false };
-  const sorted = [...stills].sort((a, b) => (a.nsfwLevel ?? 0) - (b.nsfwLevel ?? 0));
-  return { url: sorted[0].url, blur: true };
+  if (stills.length) {
+    const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
+    if (sfw) return { url: sfw.url, blur: false, isVideo: false };
+    const sorted = [...stills].sort((a, b) => (a.nsfwLevel ?? 0) - (b.nsfwLevel ?? 0));
+    return { url: sorted[0].url, blur: true, isVideo: false };
+  }
+  const vids = images.filter(img => img?.url && isVideoUrl(img.url, img.type));
+  if (vids.length) {
+    const sfw = vids.find(img => (img.nsfwLevel ?? 0) <= 1);
+    return { url: (sfw ?? vids[0]).url, blur: !sfw, isVideo: true };
+  }
+  return { url: null, blur: false, isVideo: false };
 }
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
@@ -631,29 +665,49 @@ function drawNode(node, ctx) {
 
   // ── Thumbnail ──
   const resolved = _resolveThumb(meta);
-  const img      = loadImage(resolved.url);
   roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6);
   ctx.fillStyle = C.surface; ctx.fill();
   ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
 
-  if (img?.complete && img.naturalWidth > 0) {
-    ctx.save();
-    roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
-    if (resolved.blur) ctx.filter = "blur(12px)";
-    const ir = img.naturalWidth / img.naturalHeight;
-    const tr = thumbR.w / thumbR.h;
-    let sw, sh, sx, sy;
-    if (ir > tr) { sh = img.naturalHeight; sw = sh*tr; sx = (img.naturalWidth-sw)/2; sy = 0; }
-    else         { sw = img.naturalWidth; sh = sw/tr; sy = (img.naturalHeight-sh)/2; sx = 0; }
-    ctx.drawImage(img, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
-    if (resolved.blur) ctx.filter = "none";
-    ctx.restore();
-  } else {
-    ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("🖼", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
-  }
+  // cover-fit source rect (shared by image and video paths)
+  const fitSource = (nw, nh) => {
+    const ir = nw / nh, tr = thumbR.w / thumbR.h;
+    if (ir > tr) { const sh = nh, sw = sh * tr; return [sw, sh, (nw - sw) / 2, 0]; }
+    const sw = nw, sh = sw / tr; return [sw, sh, 0, (nh - sh) / 2];
+  };
 
+  if (resolved.isVideo) {
+    const vid = loadVideo(resolved.url);
+    if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+      ctx.save();
+      roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
+      if (resolved.blur) ctx.filter = "blur(12px)";
+      const [sw, sh, sx, sy] = fitSource(vid.videoWidth, vid.videoHeight);
+      ctx.drawImage(vid, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
+      if (resolved.blur) ctx.filter = "none";
+      ctx.restore();
+    } else {
+      // buffering or failed — distinct placeholder while it loads
+      ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🎬", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
+    }
+  } else {
+    const img = loadImage(resolved.url);
+    if (img?.complete && img.naturalWidth > 0) {
+      ctx.save();
+      roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
+      if (resolved.blur) ctx.filter = "blur(12px)";
+      const [sw, sh, sx, sy] = fitSource(img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
+      if (resolved.blur) ctx.filter = "none";
+      ctx.restore();
+    } else {
+      ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🖼", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
+    }
+  }
   // ── Model info text ──
   const ny = thumbR.y + 6;
   const displayName = meta.civitai_name

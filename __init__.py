@@ -4,6 +4,7 @@ Registers nodes and REST routes with the ComfyUI server.
 """
 
 from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+from . import cwk_prompt_llm
 from .server import register_routes
 
 try:

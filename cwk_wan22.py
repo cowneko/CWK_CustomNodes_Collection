@@ -18,7 +18,7 @@ import torch
 from PIL import Image
 
 import folder_paths
-
+import comfy.samplers
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -503,19 +503,12 @@ class CWKWanImagePrep:
     Provides interactive cropping in the UI with fixed aspect ratio maintenance.
     """
 
-    SCHEDULERS = ["simple", "sgm_uniform", "karras", "exponential", "ddim_uniform",
-                  "beta", "normal", "linear_quadratic", "kl_optimal"]
-
-    SAMPLERS = ["euler", "euler_cfg_pp", "euler_ancestral", "euler_ancestral_cfg_pp",
-                "heun", "heunpp2", "exp_heun_2_x0", "exp_heun_2_x0_sde",
-                "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive",
-                "dpmpp_2s_ancestral", "dpmpp_2s_ancestral_cfg_pp", "dpmpp_sde", "dpmpp_sde_gpu",
-                "dpmpp_2m", "dpmpp_2m_cfg_pp", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu",
-                "dpmpp_2m_sde_heun", "dpmpp_2m_sde_heun_gpu", "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
-                "ddpm", "lcm", "ipndm", "ipndm_v", "deis", "res_multistep", "res_multistep_cfg_pp",
-                "res_multistep_ancestral", "res_multistep_ancestral_cfg_pp", "gradient_estimation",
-                "gradient_estimation_cfg_pp", "er_sde", "seeds_2", "seeds_3", "sa_solver",
-                "sa_solver_pece", "ddim", "uni_pc", "uni_pc_bh2"]
+    # LIVE aliases — NOT copies. Res4lyf (and any custom node) appends to
+    # comfy.samplers' lists at import time; because these are the same list
+    # objects, INPUT_TYPES / RETURN_TYPES / the JS dropdowns always see the
+    # full current set. Do not replace with literal lists.
+    SCHEDULERS = comfy.samplers.KSampler.SCHEDULERS
+    SAMPLERS   = comfy.samplers.KSampler.SAMPLERS
 
     RETURN_TYPES  = ("IMAGE", "INT", "INT", "FLOAT", SCHEDULERS, SAMPLERS, "INT", "INT", "FLOAT")
     RETURN_NAMES  = ("image", "width", "height", "frame_rate", "scheduler",
@@ -544,8 +537,8 @@ class CWKWanImagePrep:
                 "total_steps": ("INT",   {"default": 50,   "min": 1,   "max": 1000,  "step": 1}),
                 "split_steps": ("INT",   {"default": 25,   "min": 1,   "max": 1000,  "step": 1}),
                 "cfg_scale":   ("FLOAT", {"default": 7.5,  "min": 0.0, "max": 30.0,  "step": 0.1}),
-                "scheduler":   (cls.SCHEDULERS,),
-                "sampler":     (cls.SAMPLERS,),
+                "scheduler":   (list(comfy.samplers.KSampler.SCHEDULERS),),
+                "sampler":     (list(comfy.samplers.KSampler.SAMPLERS),),
                 "image_filename": ("STRING", {"default": ""}),
             },
             "optional": {

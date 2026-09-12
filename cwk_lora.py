@@ -1106,53 +1106,137 @@ _LORA_MEM_CACHE_ON  = False
 _LORA_MEM_CACHE_MAX = 24   # hard FIFO cap — dozens of large LoRAs ≈ GBs of RAM
 
 
-def _comfy_load_lora(path: str):
-    """Strength-neutral load via the low-level API. A single-argument call is
-    compatible with every ComfyUI generation: modern builds take no strengths
-    (they are applied by load_lora_for_models), legacy builds default them
-    to 1.0."""
+def _lora_modules():
+    """Newer builds keep the lora API in comfy.lora; older in comfy.sd."""
     import comfy.sd
-    return comfy.sd.load_lora(path)
+    mods = []
+    try:
+        import comfy.lora
+        mods.append(comfy.lora)
+    except Exception:
+        pass
+    mods.append(comfy.sd)
+    return mods
 
 
-def _load_lora_cached(path: str):
-    """Load a LoRA, honouring the ⚙ 'Keep all LoRAs loaded in memory' setting.
-    Entries are keyed by (size, mtime) so updated files re-load. The cache is
-    cleared when the setting is off, when settings are saved with it off, and
-    when the LoRA cache is wiped."""
+def _load_lora_object(path: str, strength_model: float, strength_clip: float):
+    """→ (lora, strength_neutral). Newer builds load with a single arg and
+    apply strengths at patch time (cacheable); older builds bake strengths
+    at load time (3-arg call, must not be cached)."""
+    last = None
+    for mod in _lora_modules():
+        fn = getattr(mod, "load_lora", None)
+        if fn is None:
+            continue
+        try:
+            return fn(path), True
+        except TypeError as e:
+            last = e
+            try:
+                return fn(path, strength_model, strength_clip), False
+            except TypeError:
+                continue
+    raise RuntimeError(f"load_lora not usable in comfy.lora/comfy.sd: {last!r}")
+
+
+def _load_lora_for_models_any(model, clip, lora, strength_model, strength_clip):
+    for mod in _lora_modules():
+        fn = getattr(mod, "load_lora_for_models", None)
+        if fn is None:
+            continue
+        try:
+            return fn(model, clip, lora, strength_model, strength_clip)
+        except TypeError:
+            try:
+                return fn(model, clip, lora)   # very old: strengths baked at load
+            except TypeError:
+                continue
+    raise RuntimeError("load_lora_for_models not found in comfy.lora/comfy.sd")
+
+
+def _comfy_load_lora(path: str, strength_model: float = 1.0, strength_clip: float = 1.0):
+    return _load_lora_object(path, strength_model, strength_clip)[0]
+
+
+def _load_lora_cached(path: str, strength_model: float, strength_clip: float):
+    """⚙ 'Keep all LoRAs loaded in memory' (fallback path). Only caches
+    strength-neutral objects — a cached object with baked-in strengths would
+    apply the wrong weight on a later call."""
     global _LORA_MEM_CACHE_ON
     if not _load_lora_settings()["keep_in_memory"]:
         if _LORA_MEM_CACHE_ON:
             _LORA_MEM_CACHE.clear()
         _LORA_MEM_CACHE_ON = False
-        return _comfy_load_lora(path)
+        return _comfy_load_lora(path, strength_model, strength_clip)
     _LORA_MEM_CACHE_ON = True
     try:
         st = os.stat(path)
         key = [st.st_size, int(st.st_mtime)]
     except OSError:
-        return _comfy_load_lora(path)
+        return _comfy_load_lora(path, strength_model, strength_clip)
     entry = _LORA_MEM_CACHE.get(path)
     if entry and entry.get("key") == key:
         return entry["lora"]
-    lora = _comfy_load_lora(path)
-    while len(_LORA_MEM_CACHE) >= _LORA_MEM_CACHE_MAX:
-        _LORA_MEM_CACHE.pop(next(iter(_LORA_MEM_CACHE)))
-    _LORA_MEM_CACHE[path] = {"key": key, "lora": lora}
+    lora, neutral = _load_lora_object(path, strength_model, strength_clip)
+    if neutral:
+        while len(_LORA_MEM_CACHE) >= _LORA_MEM_CACHE_MAX:
+            _LORA_MEM_CACHE.pop(next(iter(_LORA_MEM_CACHE)))
+        _LORA_MEM_CACHE[path] = {"key": key, "lora": lora}
     return lora
 
 
-def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):
-    """Apply one LoRA via the low-level API (+ optional in-RAM cache). GGUF
-    LoRAs go through ComfyUI-GGUF's LoraLoaderGGUF when it is installed.
+# Singleton instance: mirrors a standard LoraLoader node, including its
+# internal loaded-LoRA cache — so repeated generations skip re-loading.
+_core_lora_loader = None
 
-    NOTE: calls are deliberately made with KEYWORD arguments — ComfyUI has
-    changed the *order* of these parameters between releases (recent builds
-    added `lora_on_gpu` as the 2nd positional of load_lora), and a positional
-    call then silently maps a weight onto the wrong parameter. The TypeError
-    fallback defers to the core LoraLoader node, which always matches the
-    installed ComfyUI.
-    """
+
+def _unpack_node_result(res, clip):
+    if isinstance(res, (list, tuple)):
+        if len(res) >= 2:
+            return res[0], res[1]
+        if len(res) == 1:
+            return res[0], clip
+    return res, clip
+
+
+def _apply_via_core_node(model, clip, lora_name, strength_model, strength_clip):
+    """Primary path: the built-in LoraLoader node — the exact code the
+    working standard node runs. Parameter names have changed across
+    releases (lora vs lora_name, reordering), so we read the live signature
+    and map our values onto it instead of guessing."""
+    import inspect
+    from nodes import LoraLoader
+
+    global _core_lora_loader
+    if _core_lora_loader is None:
+        _core_lora_loader = LoraLoader()
+    fn = _core_lora_loader.load_lora
+
+    try:
+        params = list(inspect.signature(fn).parameters.keys())
+    except (ValueError, TypeError):
+        params = []
+
+    if params:
+        lora_key = next((k for k in params if k in ("lora", "lora_name")), None)
+        if (lora_key is not None
+                and all(k in params for k in ("model", "clip",
+                                              "strength_model", "strength_clip"))):
+            res = fn(model=model, clip=clip,
+                     **{lora_key: lora_name},
+                     strength_model=strength_model, strength_clip=strength_clip)
+            return _unpack_node_result(res, clip)
+
+    # introspection unusable → classic positional order (all known releases)
+    res = fn(model, clip, lora_name, strength_model, strength_clip)
+    return _unpack_node_result(res, clip)
+
+
+def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):
+    """Apply one LoRA. Primary: core LoraLoader node (signature-adaptive).
+    Fallback: low-level comfy API (+ ⚙ RAM cache). Every failure is PRINTED
+    before falling through — a swallowed exception cost us a debugging round
+    already."""
     lora_path = folder_paths.get_full_path("loras", lora_name)
     if not lora_path or not os.path.exists(lora_path):
         raise FileNotFoundError(f"LoRA file not found: {lora_name}")
@@ -1161,26 +1245,20 @@ def _apply_lora(model, clip, lora_name: str, strength_model: float, strength_cli
         return _apply_gguf_lora(model, clip, lora_name, strength_model, strength_clip)
 
     try:
-        import comfy.sd
-        lora = _load_lora_cached(lora_path)
-        return comfy.sd.load_lora_for_models(
-            model, clip, lora,
-            strength_model=strength_model, strength_clip=strength_clip)
-    except TypeError:
-        from nodes import LoraLoader
-        res = LoraLoader().load_lora(
-            lora_name=lora_name,
-            strength_model=strength_model,
-            strength_clip=strength_clip,
-            model=model,
-            clip=clip,
-        )
-        if isinstance(res, (list, tuple)):
-            if len(res) >= 2:
-                return res[0], res[1]
-            return res[0], clip
-        return model, clip
+        return _apply_via_core_node(model, clip, lora_name,
+                                    strength_model, strength_clip)
+    except Exception as e:
+        try:
+            import inspect
+            from nodes import LoraLoader as _LL
+            sig = str(inspect.signature(_LL.load_lora))
+        except Exception:
+            sig = "<unavailable>"
+        print(f"[CWK LoRA] core node path failed for '{lora_name}': {e!r} "
+              f"(LoraLoader.load_lora signature: {sig}) — trying low-level API")
 
+    lora = _load_lora_cached(lora_path, strength_model, strength_clip)
+    return _load_lora_for_models_any(model, clip, lora, strength_model, strength_clip)
 
 def _apply_gguf_lora(model, clip, lora_name: str, strength_model: float, strength_clip: float):
     import sys

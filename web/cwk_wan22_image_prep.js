@@ -119,6 +119,20 @@ function getWidget(node, name) {
   return node.widgets?.find(w => w.name === name);
 }
 
+// ─── Live combo lists (Res4lyf etc. add samplers/schedulers at import) ────
+// Source of truth = the node's own combo definitions (object_info → the
+// hidden widgets' options). Whatever the backend validates against is
+// exactly what we offer — no more hand-curated snapshots going stale.
+function widgetComboOptions(node, widgetName, fallback) {
+  const vals = getWidget(node, widgetName)?.options?.values;
+  let opts = Array.isArray(vals) && vals.length ? [...vals] : [...fallback];
+  // A value restored from a saved workflow must stay selectable/displayable
+  // even if it's missing from the current list (e.g. Res4lyf uninstalled).
+  const cur = getWidget(node, widgetName)?.value;
+  if (cur && !opts.includes(cur)) opts = [cur, ...opts];
+  return opts;
+}
+
 // ─── Widget sync ───────────────────────────────────────────────
 function updateWidgetsFromState(node) {
   const st = node._cwk_wan;
@@ -448,21 +462,13 @@ function buildControls(node) {
       value: () => gw("split_steps")?.value  ?? 25 },
     { label:"CFG Scale",   widget:"cfg_scale",          type:"float", min:0,   max:30,
       value: () => parseFloat(gw("cfg_scale")?.value    ?? 7.5).toFixed(1) },
-    { label:"Scheduler",   widget:"scheduler",          type:"list",
-      options:["simple","sgm_uniform","karras","exponential","ddim_uniform",
-               "beta","normal","linear_quadratic","kl_optimal"],
+       { label:"Scheduler",   widget:"scheduler",          type:"list",
+      options: widgetComboOptions(node, "scheduler",
+        ["simple","sgm_uniform","karras","exponential","ddim_uniform","beta","normal"]),
       value: () => gw("scheduler")?.value  ?? "karras" },
     { label:"Sampler",     widget:"sampler",            type:"list",
-      options:["euler","euler_cfg_pp","euler_ancestral","euler_ancestral_cfg_pp",
-               "heun","heunpp2","exp_heun_2_x0","exp_heun_2_x0_sde",
-               "dpm_2","dpm_2_ancestral","lms","dpm_fast","dpm_adaptive",
-               "dpmpp_2s_ancestral","dpmpp_2s_ancestral_cfg_pp","dpmpp_sde","dpmpp_sde_gpu",
-               "dpmpp_2m","dpmpp_2m_cfg_pp","dpmpp_2m_sde","dpmpp_2m_sde_gpu",
-               "dpmpp_2m_sde_heun","dpmpp_2m_sde_heun_gpu","dpmpp_3m_sde","dpmpp_3m_sde_gpu",
-               "ddpm","lcm","ipndm","ipndm_v","deis","res_multistep","res_multistep_cfg_pp",
-               "res_multistep_ancestral","res_multistep_ancestral_cfg_pp","gradient_estimation",
-               "gradient_estimation_cfg_pp","er_sde","seeds_2","seeds_3","sa_solver",
-               "sa_solver_pece","ddim","uni_pc","uni_pc_bh2"],
+      options: widgetComboOptions(node, "sampler",
+        ["euler","euler_ancestral","dpmpp_2m","dpmpp_2m_sde","dpmpp_sde","heun","lcm","ddim","uni_pc"]),
       value: () => gw("sampler")?.value ?? "euler" },
   ];
 }

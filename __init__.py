@@ -68,11 +68,6 @@ try:
         return parts
 
     def _pick_preview_latent(candidates):
-        """Pick the tensor most likely to be the FULL evolving latent:
-        prefer 5-D (video), then the largest by element count. The old
-        'tensors[0]' unwrap grabbed the fixed I2V anchor frame — which is
-        exactly why video previewed as a still frame that only changed
-        between KSampler passes."""
         parts = []
         for c in candidates:
             _walk_latent_parts(c, parts, "cand")
@@ -82,6 +77,14 @@ try:
         vids = [t for t in tensors if t.ndim == 5]
         return max(vids or tensors, key=lambda t: t.numel())
 
+    def _frames_from_latent(previewer, x0):
+        """Decode a 5-D video latent to a list of PIL frames; 4-D → [frame]."""
+        if x0.ndim == 5:
+            x0 = x0[0]                       # drop batch → [C, T, H, W]
+            return [previewer.decode_latent_to_preview_image("JPEG", x0[:, t])[1]
+                    for t in range(x0.shape[1])]
+        return [previewer.decode_latent_to_preview_image("JPEG", x0)[1]]
+
     def _send_preview(previewer, candidates, step=None):
         server = PromptServer.instance
         if server is None or previewer is None:
@@ -90,35 +93,45 @@ try:
             x0 = _pick_preview_latent(candidates)
             if x0 is None:
                 return
-            if step == 0:
-                # one-time structure dump per pass — names every tensor part
-                # with its shape, so any remaining picker problem is a
-                # one-line fix instead of a guess
-                desc = ", ".join(f"{n}: {tuple(t.shape)}"
-                                for n, t in _collect_dump(candidates))
-                print(f"[CWK_LivePreview] candidates → {desc}")
-            if step is not None and step < 3:
-                print(f"[CWK_LivePreview] step={step} picked {tuple(x0.shape)} "
-                      f"mean={float(x0.float().mean()):.4f}")
-            if x0.ndim == 5:
-                # video latent [B, C, T, H, W] → preview the middle frame
-                x0 = x0[:, :, x0.shape[2] // 2]
-            if x0.ndim != 4:
+            frames = _frames_from_latent(previewer, x0)
+            if not frames:
                 return
-            _, pil_image, _ = previewer.decode_latent_to_preview_image("JPEG", x0)
+
+            # Upscale small latents (60px wide for 480×832) so frames are
+            # readable — same idea as VHS's upscale.
+            min_side = min(frames[0].width, frames[0].height)
+            if min_side < 160:
+                scale = min(4, 640 // min_side)
+                frames = [f.resize((f.width * scale, f.height * scale), Image.NEAREST)
+                          for f in frames]
+
+            # Stack vertically into one strip, capped for the ~65k JPEG limit.
+            MAX_STRIP_H = 60000
+            kept, strip_h = [], 0
+            for f in frames:
+                if kept and strip_h + f.height > MAX_STRIP_H:
+                    break
+                kept.append(f)
+                strip_h += f.height
+            if len(kept) == 1:
+                strip = kept[0]
+            else:
+                strip = Image.new("RGB", (kept[0].width, strip_h))
+                y = 0
+                for f in kept:
+                    strip.paste(f, (0, y))
+                    y += f.height
 
             buf = BytesIO()
-            pil_image.save(buf, format="JPEG", quality=85)
+            strip.save(buf, format="JPEG", quality=80)
             b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
             server.send_sync(
                 "cwk_live_preview",
-                {"image": f"data:image/jpeg;base64,{b64}"},
+                {"image": f"data:image/jpeg;base64,{b64}",
+                 "frames": len(kept)},
                 server.client_id,
             )
         except Exception as e:
-            # was silent for a long time — a swallowed decode failure looks
-            # exactly like a frozen preview
             print(f"[CWK_LivePreview] preview error (step={step}): {e!r}")
 
     def _patched_prepare_callback(model, steps, x0_output_dict=None):

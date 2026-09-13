@@ -1,6 +1,13 @@
 /**
  * CWK Model Loader — ComfyUI canvas node extension.
  * Simplified model loader with dynamic AIO / non-AIO layout.
+ *
+ * Vertical resizing: the node can be grown freely by dragging its bottom
+ * edge/corner. All content (thumbnail, quick-load buttons, CLIP/VAE rows) is
+ * top-anchored and stays fixed; only the bottom edge and the "Models
+ * Manager" button (bottom-anchored via getButtonRect) move with it. The
+ * node never shrinks below the content height (calcNodeHeight), and a
+ * user-grown height survives workflow reloads and AIO/DIFF layout changes.
  */
 
 import { app }               from "../../scripts/app.js";
@@ -74,8 +81,6 @@ const ROWS_NON_AIO = [
 function getActiveRows(node) {
   return node._cwkIsAIO ? [] : ROWS_NON_AIO;
 }
-
-// ─── Base-model badge helpers (same as preset_manager.js) ────────────────────
 
 // ─── Base-model badge helpers (dynamic, from CivitAI's base-model list) ──────
 
@@ -189,27 +194,74 @@ function loadImage(url) {
   if (!url) return null;
   if (_imgCache.has(url)) return _imgCache.get(url);
   const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => app.canvas.setDirty(true, false);
+  // No crossOrigin: civitai image URLs redirect to blobs-b2.civitai.com,
+  // which sends no ACAO header — crossOrigin="anonymous" then fails the
+  // load even though the image is perfectly displayable. This node only
+  // drawImage()s thumbnails and never reads pixels back (no getImageData /
+  // toDataURL, and ctx.filter blur doesn't read pixels), so a tainted
+  // canvas is harmless here.
+  img.onload  = () => app.canvas.setDirty(true, false);
+  img.onerror = () => {
+    console.warn("[CWK Loader] thumbnail failed to load:", url);
+    app.canvas.setDirty(true, false);
+  };
   img.src = url;
   _imgCache.set(url, img);
   return img;
 }
 
+const _videoCache = new Map();
+/**
+ * Canvas can't <img> a video URL — but it CAN drawImage() a <video> element.
+ * Cache muted videos, seeked slightly past 0 (frame 0 is often black), and
+ * redraw the node when a drawable frame is ready. No crossOrigin — same
+ * reasoning as loadImage (blobs-b2 redirect sends no ACAO header).
+ */
+function loadVideo(url) {
+  if (!url) return null;
+  if (_videoCache.has(url)) return _videoCache.get(url);
+  const vid = document.createElement("video");
+  vid.muted = true;
+  vid.playsInline = true;
+  vid.preload = "auto";
+  vid.addEventListener("loadeddata", () => app.canvas.setDirty(true, false));
+  vid.addEventListener("loadedmetadata", () => {
+    try { vid.currentTime = Math.min(0.1, (vid.duration || 1) / 2) || 0.1; } catch {}
+  });
+  vid.addEventListener("seeked", () => app.canvas.setDirty(true, false));
+  vid.onerror = () => console.warn("[CWK Loader] video thumbnail failed to load:", url);
+  vid.src = url;
+  _videoCache.set(url, vid);
+  return vid;
+}
+
 function _resolveThumb(meta) {
   const thumb = meta?.thumbnail;
-  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false };
+  if (thumb && !isVideoUrl(thumb)) return { url: thumb, blur: false, isVideo: false };
+  if (thumb && isVideoUrl(thumb))  return { url: thumb, blur: false, isVideo: true  };
   const images = meta?.images;
-  if (!Array.isArray(images) || !images.length) return { url: null, blur: false };
+  if (!Array.isArray(images) || !images.length) return { url: null, blur: false, isVideo: false };
+  // Prefer still images; fall back to videos when the model only has videos.
   const stills = images.filter(img => img?.url && !isVideoUrl(img.url, img.type));
-  if (!stills.length) return { url: null, blur: false };
-  const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
-  if (sfw) return { url: sfw.url, blur: false };
-  const sorted = [...stills].sort((a, b) => (a.nsfwLevel ?? 0) - (b.nsfwLevel ?? 0));
-  return { url: sorted[0].url, blur: true };
+  if (stills.length) {
+    const sfw = stills.find(img => (img.nsfwLevel ?? 0) <= 1);
+    if (sfw) return { url: sfw.url, blur: false, isVideo: false };
+    const sorted = [...stills].sort((a, b) => (a.nsfwLevel ?? 0) - (b.nsfwLevel ?? 0));
+    return { url: sorted[0].url, blur: true, isVideo: false };
+  }
+  const vids = images.filter(img => img?.url && isVideoUrl(img.url, img.type));
+  if (vids.length) {
+    const sfw = vids.find(img => (img.nsfwLevel ?? 0) <= 1);
+    return { url: (sfw ?? vids[0]).url, blur: !sfw, isVideo: true };
+  }
+  return { url: null, blur: false, isVideo: false };
 }
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
+// NOTE: every content rect here is TOP-anchored (fixed once the node is
+// drawn) except getButtonRect, which is anchored to node.size[1] — that is
+// what makes free vertical resizing work: the button follows the bottom
+// edge, everything else stays put.
 
 function getThumbRect(node) {
   const regionTop    = TITLE_H();
@@ -564,10 +616,11 @@ async function _loadModelIntoNode(node, modelName, modelType) {
     if (res.ok) node._cwkMeta = await res.json();
   } catch {}
 
-  // Recalculate height if AIO state changed
+  // Recalculate height if AIO state changed — grow to fit the new row count,
+  // but keep any extra height the user gave the node by resizing.
   if (prevAIO !== node._cwkIsAIO) {
     node.size[0] = Math.max(NODE_MIN_W, node.size[0]);
-    node.size[1] = calcNodeHeight(node);
+    node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
   }
 
   node.setDirtyCanvas(true);
@@ -612,29 +665,49 @@ function drawNode(node, ctx) {
 
   // ── Thumbnail ──
   const resolved = _resolveThumb(meta);
-  const img      = loadImage(resolved.url);
   roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6);
   ctx.fillStyle = C.surface; ctx.fill();
   ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
 
-  if (img?.complete && img.naturalWidth > 0) {
-    ctx.save();
-    roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
-    if (resolved.blur) ctx.filter = "blur(12px)";
-    const ir = img.naturalWidth / img.naturalHeight;
-    const tr = thumbR.w / thumbR.h;
-    let sw, sh, sx, sy;
-    if (ir > tr) { sh = img.naturalHeight; sw = sh*tr; sx = (img.naturalWidth-sw)/2; sy = 0; }
-    else         { sw = img.naturalWidth; sh = sw/tr; sy = (img.naturalHeight-sh)/2; sx = 0; }
-    ctx.drawImage(img, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
-    if (resolved.blur) ctx.filter = "none";
-    ctx.restore();
-  } else {
-    ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("🖼", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
-  }
+  // cover-fit source rect (shared by image and video paths)
+  const fitSource = (nw, nh) => {
+    const ir = nw / nh, tr = thumbR.w / thumbR.h;
+    if (ir > tr) { const sh = nh, sw = sh * tr; return [sw, sh, (nw - sw) / 2, 0]; }
+    const sw = nw, sh = sw / tr; return [sw, sh, 0, (nh - sh) / 2];
+  };
 
+  if (resolved.isVideo) {
+    const vid = loadVideo(resolved.url);
+    if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+      ctx.save();
+      roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
+      if (resolved.blur) ctx.filter = "blur(12px)";
+      const [sw, sh, sx, sy] = fitSource(vid.videoWidth, vid.videoHeight);
+      ctx.drawImage(vid, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
+      if (resolved.blur) ctx.filter = "none";
+      ctx.restore();
+    } else {
+      // buffering or failed — distinct placeholder while it loads
+      ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🎬", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
+    }
+  } else {
+    const img = loadImage(resolved.url);
+    if (img?.complete && img.naturalWidth > 0) {
+      ctx.save();
+      roundRect(ctx, thumbR.x, thumbR.y, thumbR.w, thumbR.h, 6); ctx.clip();
+      if (resolved.blur) ctx.filter = "blur(12px)";
+      const [sw, sh, sx, sy] = fitSource(img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, sx, sy, sw, sh, thumbR.x, thumbR.y, thumbR.w, thumbR.h);
+      if (resolved.blur) ctx.filter = "none";
+      ctx.restore();
+    } else {
+      ctx.fillStyle = C.textDim; ctx.font = "28px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🖼", thumbR.x + thumbR.w/2, thumbR.y + thumbR.h/2);
+    }
+  }
   // ── Model info text ──
   const ny = thumbR.y + 6;
   const displayName = meta.civitai_name
@@ -729,7 +802,8 @@ function drawNode(node, ctx) {
     }
   }
 
-  // ── Button ──
+  // ── Button (bottom-anchored — follows the node's bottom edge when the
+  //    node is vertically resized) ──
   const br    = getButtonRect(node);
   const isHov = hover?.key === "load";
   const isFlash = node._cwkFlash === "load";
@@ -795,7 +869,10 @@ app.registerExtension({
         const getW = name => node.widgets?.find(w => w.name === name);
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
-        node.size[1] = calcNodeHeight(node);
+        // Math.max (not assignment): configure() has already restored the
+        // saved size by now — a user-grown height must survive the init pass
+        // and the workflow reload that restored it.
+        node.size[1] = Math.max(calcNodeHeight(node), node.size[1]);
         app.canvas.setDirty(true, true);
       }, 0);
 
@@ -813,13 +890,28 @@ app.registerExtension({
       }, 150);
 
       node.onDrawForeground = function (ctx) {
-		if (this.flags?.collapsed) return;
-		drawNode(this, ctx);
-	  };
+        if (this.flags?.collapsed) return;
+        drawNode(this, ctx);
+      };
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
-        this.size[1] = calcNodeHeight(this);
+        // Vertical resize: never shrink below the content, but let the user
+        // grow the node freely — getButtonRect is bottom-relative, so the
+        // Models Manager button follows the bottom edge; every other rect
+        // is top-anchored and stays fixed.
+        this.size[1] = Math.max(calcNodeHeight(this), this.size[1]);
+      };
+
+      // Auto-fit paths (widget-triggered refits, corner double-click on some
+      // builds) go through computeSize — clamp those the same way so they
+      // can't shrink the node below its content either.
+      const prevComputeSize = node.computeSize?.bind(node);
+      node.computeSize = function (...args) {
+        const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
+        s[0] = Math.max(s[0] ?? 0, NODE_MIN_W);
+        s[1] = Math.max(s[1] ?? 0, calcNodeHeight(this));
+        return s;
       };
 
       node.onMouseDown = function (e, pos) {

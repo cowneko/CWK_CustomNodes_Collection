@@ -12,6 +12,12 @@ try:
 except Exception as e:
     print(f"[CWK_CustomNodes_Collection] Could not register routes: {e}")
 
+# ─── CWK Prompt Composer: LLM prompt enhancement routes ────────────────────
+try:
+    from . import cwk_prompt_llm   # registers the /cwk/pc/* routes on import
+except Exception as e:
+    print(f"[CWK_LLM] Failed to load cwk_prompt_llm: {e}")
+
 # ─── CWK Live Preview: forced preview patch + toggle route ────────────────────
 try:
     import base64

@@ -2,6 +2,12 @@
  * CWK Latent Image — ComfyUI canvas node extension.
  * Resolution preset + width / height / batch selector outputting a LATENT.
  * Style is identical to CWK Model Preset Manager.
+ *
+ * Vertical resizing: the node can be grown freely by dragging its bottom
+ * edge/corner. All rows are top-anchored and stay fixed; the extra space is
+ * empty painted body (this node has no bottom-anchored element). The node
+ * never shrinks below the content height (calcNodeHeight), and a user-grown
+ * height survives workflow reloads.
  */
 
 import { app }          from "../../scripts/app.js";
@@ -150,6 +156,9 @@ function applyPersistedToNode(node) {
 }
 
 // ─── Layout helpers ───────────────────────────────────────────────────────────
+// NOTE: everything here is TOP-anchored (fixed once the node is drawn). There
+// is no bottom-anchored rect — vertical resizing just grows empty body space
+// below the rows.
 
 function getRowsStartY() {
   // Start rows just below the output slots area
@@ -583,7 +592,10 @@ app.registerExtension({
         }
 
         node.size[0] = Math.max(node.size[0], NODE_MIN_W);
-        node.size[1] = calcNodeHeight();
+        // Math.max (not assignment): onConfigure has already restored the
+        // size saved in the workflow by now — a user-grown height must
+        // survive the init pass and the workflow reload that restored it.
+        node.size[1] = Math.max(calcNodeHeight(), node.size[1]);
         app.canvas.setDirty(true, true);
       }, 0);
 
@@ -599,7 +611,22 @@ app.registerExtension({
 
       node.onResize = function () {
         this.size[0] = Math.max(NODE_MIN_W, this.size[0]);
-        this.size[1] = calcNodeHeight();
+        // Vertical resize: never shrink below the content, but let the user
+        // grow the node freely. All rows are top-anchored and stay fixed;
+        // the extra space is empty painted body (no bottom-anchored element
+        // on this node).
+        this.size[1] = Math.max(calcNodeHeight(), this.size[1]);
+      };
+
+      // Auto-fit paths (widget-triggered refits, corner double-click on some
+      // builds) go through computeSize — clamp those the same way so they
+      // can't shrink the node below its content either.
+      const prevComputeSize = node.computeSize?.bind(node);
+      node.computeSize = function (...args) {
+        const s = prevComputeSize ? prevComputeSize(...args) : [0, 0];
+        s[0] = Math.max(s[0] ?? 0, NODE_MIN_W);
+        s[1] = Math.max(s[1] ?? 0, calcNodeHeight());
+        return s;
       };
 
       // ── Mouse interaction ──────────────────────────────────────────────────

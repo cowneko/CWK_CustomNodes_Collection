@@ -7,6 +7,23 @@
  * description, trigger words, editable Version / Base model, and custom
  * thumbnail + NSFW controls. "Load LorA" hands the selected LoRA back to the
  * calling node.
+ *
+ * Hash-miss rescues: "🔗 Link by CivitAI URL" matches a selected LoRA to a
+ * CivitAI model by pasted URL (civitai.red downloads of models deleted from
+ * civitai.com, re-saved files). Cards carry badges for unverified matches:
+ *   ∅ not on CivitAI · ≈ filename match · i sidecar .civitai.info · 🔗 manual
+ *
+ * Video previews: versions whose previews are all videos get a <video>
+ * thumbnail (still images preferred whenever available; the server flags
+ * them via civitai.thumbnail_is_video and serves them from local cache).
+ * Videos are muted+looping and only play while their card is in the viewport
+ * (one shared IntersectionObserver for the whole grid). Cards show a ▶ badge;
+ * NSFW blur applies to videos like images.
+ *
+ * Sidebar preview: the "Thumbnail & NSFW" preview is blurred while the LoRA
+ * is NSFW (manual override or CivitAI level) and not revealed — click the
+ * blurred preview to reveal/hide, shared with the grid's eye button through
+ * the same localStorage reveal store.
  */
 
 import { injectStyles } from "./cwk_styles.js";
@@ -87,6 +104,13 @@ function isNsfwLora(l) {
   if (c.nsfw_manual === true)  return true;
   if (c.nsfw_manual === false) return false;
   return (c.nsfw_level ?? 0) >= NSFW_R;
+}
+
+/** True when the resolved thumbnail is a video: server flag, or a custom /
+ *  cached video URL detected by extension. */
+function isVideoThumb(civ) {
+  const thumb = civ?.thumbnail || "";
+  return !!civ?.thumbnail_is_video || /\.(mp4|webm)(\?|#|$)/i.test(thumb);
 }
 
 // ─── Shared trigger-word cache (used by the node widget preview) ─────────────
@@ -174,6 +198,7 @@ export function injectLoraStyles() {
       width:72px; height:108px; object-fit:cover; border-radius:6px;
       border:1px solid #313552; background:#181d2e; flex-shrink:0;
     }
+    .cwk-thumb-preview.blurred { filter: blur(14px); cursor: pointer; }
     .cwk-thumb-btns { display:flex; flex-direction:column; gap:5px; flex:1; min-width:0; }
     .cwk-thumb-btns .cwk-btn { font-size:11px; padding:4px 8px; }
     .cwk-nsfw-tick {
@@ -187,24 +212,50 @@ export function injectLoraStyles() {
       padding:1px 5px; font-size:10px; color:#a6e3a1; font-weight:700;
     }
 
+    /* ── Match / missing badges (hash-miss rescues) ─────────────── */
+    .cwk-card-match-badge {
+      background:rgba(20,24,36,.85); border-radius:4px;
+      padding:1px 5px; font-size:10px; font-weight:700; line-height:1.4;
+    }
+    .cwk-card-match-badge.filename { color:#e5c07b; border:1px solid #6b5b2e; }
+    .cwk-card-match-badge.sidecar  { color:#a6e3a1; border:1px solid #3f5a45; }
+    .cwk-card-match-badge.manual   { color:#89b4fa; border:1px solid #313552; }
+    .cwk-card-match-badge.missing  { color:#e78284; border:1px solid #5a3a45; }
+
+    /* ── Video thumbnails (CivitAI video previews) ───────────────── */
+    .cwk-card video.cwk-card-video {
+      position:absolute; inset:0; width:100%; height:100%;
+      object-fit:cover; background:#10131f; display:block;
+    }
+    .cwk-card-video-badge {
+      background:rgba(20,24,36,.85); color:#cba6f7; border:1px solid #453a5e;
+      border-radius:4px; padding:1px 5px; font-size:10px; font-weight:700;
+    }
+    /* mirror of the .cwk-card.blurred img rule in cwk_styles.js —
+       align the blur radius with that rule if it differs */
+    .cwk-card.blurred video { filter: blur(18px); }
+
     /* ── Node widget overlay (CWK LoRA Loader) ──────────────────── */
     .cwk-lora-overlay {
       position:fixed; left:0; top:0; z-index:100;
       transform-origin:0 0; display:none; pointer-events:auto;
     }
-    /* native multiline widget of the LoRA node — hidden by the extension.
+        /* native multiline widget of the LoRA node — hidden by the extension.
        !important beats the inline styles the frontend re-applies each frame. */
-    .cwk-lora-dom-hidden { display: none !important; }
+    .cwk-lora-dom-hidden {
+    display: none !important;
+    }
     .cwk-lora-widget {
       width:100%; height:100%; box-sizing:border-box;
       display:flex; flex-direction:column;
-      background:#1A1F2E; border:none; border-radius:8px;
+      background:#141824;
+      border:1px solid #2a2f45; border-radius:8px;
       font:12px Inter,system-ui,sans-serif; color:#cdd6f4; overflow:hidden;
       user-select:none;
     }
     .cwkl-w-header {
       display:flex; align-items:center; gap:7px;
-      padding:6px 9px; background:#1A1F2E;
+      padding:6px 9px; background:#141824;
       border-bottom:1px solid #2a2f45; flex-shrink:0;
     }
     .cwkl-w-header input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:#89b4fa; }
@@ -224,8 +275,7 @@ export function injectLoraStyles() {
       padding:4px 8px; border-bottom:1px solid #20263a;
     }
     .cwkl-w-row:hover { background:#1a2035; }
-    .cwkl-w-row.disabled .cwkl-w-select,
-    .cwkl-w-row.disabled .cwkl-w-wval { opacity:.5; }
+    .cwkl-w-row.disabled .cwkl-w-select { opacity:.5; }
     .cwkl-w-row input[type=checkbox] { width:13px; height:13px; cursor:pointer; accent-color:#89b4fa; flex-shrink:0; }
     .cwkl-w-select {
       flex:1; min-width:50px; box-sizing:border-box;
@@ -239,8 +289,6 @@ export function injectLoraStyles() {
       color:#89b4fa; font-size:13px; line-height:1; flex-shrink:0; transition:color .15s;
     }
     .cwkl-w-info:hover { color:#cba6f7; }
-    .cwkl-w-weight { width:70px; flex-shrink:0; accent-color:#89b4fa; cursor:pointer; }
-    .cwkl-w-wval { min-width:32px; text-align:right; font-size:11px; color:#89b4fa; flex-shrink:0; }
     .cwkl-w-del {
       background:none; border:none; cursor:pointer; padding:0 3px;
       color:#6c7086; font-size:12px; line-height:1; flex-shrink:0; transition:color .15s;
@@ -251,7 +299,7 @@ export function injectLoraStyles() {
       color:#6c7086; font-style:italic; font-size:11px; padding:10px; text-align:center;
     }
     .cwkl-w-footer {
-      padding:4px 9px; background:#1A1F2E; border-top:1px solid #2a2f45;
+      padding:4px 9px; background:#141824; border-top:1px solid #2a2f45;
       flex-shrink:0; max-height:40px; overflow:hidden;
     }
     .cwkl-w-trigger {
@@ -281,6 +329,7 @@ export class LoraBrowserPanel {
       return Number.isFinite(v) ? Math.min(THUMB_MAX, Math.max(THUMB_MIN, v)) : THUMB_DEF;
     })();
     this._thumbObserver   = null;
+    this._videoObserver   = null;
     this._lastThumbUsable = -1;
     this._baseModelMatchers = STATIC_BASE_MODEL_FILTERS;
     this._baseModelFilters  = STATIC_BASE_MODEL_FILTERS;
@@ -373,9 +422,11 @@ export class LoraBrowserPanel {
             <div class="cwk-sidebar-title">Thumbnail & NSFW:</div>
             <div class="cwk-thumb-row">
               <img id="cwkl-thumb-preview" class="cwk-thumb-preview" style="display:none" alt=""/>
+              <video id="cwkl-thumb-video" class="cwk-thumb-preview" style="display:none"
+                     muted loop playsinline preload="metadata"></video>
               <div class="cwk-thumb-btns">
                 <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-set"
-                  title="Upload a local image as custom thumbnail">🖼 Set…</button>
+                  title="Upload a local image or video as custom thumbnail">🖼 Set…</button>
                 <button class="cwk-btn cwk-btn-secondary" id="cwkl-thumb-reset"
                   title="Remove the custom thumbnail (falls back to Civitai)">✕ Reset</button>
                 <label class="cwk-nsfw-tick" title="Blur this LoRA's thumbnail until revealed">
@@ -390,6 +441,11 @@ export class LoraBrowserPanel {
           <div class="cwk-sidebar-section">
             <button class="cwk-btn cwk-btn-secondary" id="cwkl-refresh-btn" style="width:100%">
               🔄 Refresh Civitai Data
+            </button>
+            <button class="cwk-btn cwk-btn-secondary" id="cwkl-link-btn"
+                    style="width:100%; margin-top:5px"
+                    title="Match this LoRA to a CivitAI model by pasting its page/version URL — for LoRAs the hash lookup can't find (re-saved files, civitai.red downloads of deleted models)">
+              🔗 Link by CivitAI URL…
             </button>
           </div>
         </div>
@@ -449,6 +505,7 @@ export class LoraBrowserPanel {
     this._descSrcEl    = document.getElementById("cwkl-desc-source");
     this._trigSrcEl    = document.getElementById("cwkl-trig-source");
     this._thumbImg     = document.getElementById("cwkl-thumb-preview");
+    this._thumbVideo   = document.getElementById("cwkl-thumb-video");
     this._thumbSet     = document.getElementById("cwkl-thumb-set");
     this._thumbReset   = document.getElementById("cwkl-thumb-reset");
     this._nsfwToggle   = document.getElementById("cwkl-nsfw-toggle");
@@ -552,7 +609,8 @@ export class LoraBrowserPanel {
     const counts = new Array(middle.length).fill(0);
     let othersCount = 0;
     for (const l of this._loras) {
-      const raw = (l.civitai?.base_model ?? "").toLowerCase();
+      // resolved base model: custom → CivitAI → safetensors metadata (server)
+      const raw = (l.base_model ?? l.civitai?.base_model ?? "").toLowerCase();
       const idx = raw ? middleLc.findIndex(keywords => keywords.some(s => raw.includes(s))) : -1;
       if (idx === -1) othersCount++;
       else counts[idx]++;
@@ -738,6 +796,9 @@ export class LoraBrowserPanel {
     document.getElementById("cwkl-refresh-btn")
       .addEventListener("click", () => this._refreshSelected());
 
+    document.getElementById("cwkl-link-btn")
+      .addEventListener("click", () => this._linkByUrl());
+
     this._editBtn.addEventListener("click", () => {
       if (!this._current()) { this._setStatus("⚠ Select a LoRA first", true); return; }
       this._setEditMode(!this._editMode);
@@ -760,6 +821,18 @@ export class LoraBrowserPanel {
         this._saveField({ clear_thumbnail: true });
       }
     });
+
+    // ── Sidebar preview: click a blurred (NSFW) thumbnail to reveal/hide ──
+    const toggleSidebarReveal = () => {
+      const l = this._current();
+      if (!l || !isNsfwLora(l)) return;   // nothing to reveal on a clean LoRA
+      this._revealed[l.name] = !this._revealed[l.name];
+      localStorage.setItem("cwk_lora_revealed", JSON.stringify(this._revealed));
+      this._updateSidebarStatic();   // re-apply blur on the preview
+      this._updateCard(l);           // …and on the grid card (eye button state)
+    };
+    this._thumbImg.addEventListener("click", toggleSidebarReveal);
+    this._thumbVideo.addEventListener("click", toggleSidebarReveal);
   }
 
   // ── Open / close ───────────────────────────────────────────────────────────
@@ -816,6 +889,10 @@ export class LoraBrowserPanel {
   }
 
   hide() {
+    // stop all video playback (grid + sidebar) before hiding
+    this._grid?.querySelectorAll("video.cwk-card-video").forEach(v => v.pause());
+    this._thumbVideo?.pause();
+
     this._panel.classList.remove("visible");
     this._overlay.classList.remove("visible");
     this._setEditMode(false);
@@ -927,6 +1004,7 @@ export class LoraBrowserPanel {
             l._resolving = false;
             if (p.ok) {
               l.civitai = p.info;
+              if (p.info?.base_model) l.base_model = p.info.base_model;
               found++;
               if (p.info?.trigger_words?.length) {
                 withTriggers++;
@@ -977,9 +1055,12 @@ export class LoraBrowserPanel {
       });
       if (res.ok) {
         l.civitai = res.info;
+        if (res.info?.base_model) l.base_model = res.info.base_model;
         triggerCache.set(l.name, res.info?.trigger_words || []);
         this._updateCard(l);
         this._updateSidebarStatic();
+        this._rebuildFilterDropdown();
+        this._applyFilter(this._searchEl?.value ?? "");
         this._setStatus(`✓ Refreshed: ${l.name}`);
       } else {
         if (res.error === "api_key_invalid") {
@@ -989,6 +1070,35 @@ export class LoraBrowserPanel {
         }
         this._setStatus(`✗ ${res.error}`, true);
       }
+    } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
+  }
+
+  /** Manual rescue: link a LoRA to a CivitAI model by URL (for hash-miss
+   *  LoRAs, incl. civitai.red downloads of models deleted from civitai.com). */
+  async _linkByUrl() {
+    const l = this._current();
+    if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
+    const url = prompt(
+      `Paste a CivitAI link for “${l.name.replace(/^.*[/\\]/, "")}”:\n` +
+      "e.g. https://civitai.com/models/12345?modelVersionId=67890", "");
+    if (url === null || !url.trim()) return;
+    this._setStatus(`Linking ${l.name}…`);
+    try {
+      const res  = await fetch("/cwk/lora/lookup_by_id", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ lora: l.name, url: url.trim(), api_key: this._civitaiKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      l.civitai = data.info;
+      if (data.info?.base_model) l.base_model = data.info.base_model;
+      triggerCache.set(l.name, data.info?.trigger_words || []);
+      this._updateCard(l);
+      this._updateSidebarStatic();
+      this._rebuildFilterDropdown();
+      this._applyFilter(this._searchEl?.value ?? "");
+      this._setStatus(`✓ Linked: ${l.name}`);
     } catch (e) { this._setStatus(`✗ ${e.message}`, true); }
   }
 
@@ -1003,7 +1113,8 @@ export class LoraBrowserPanel {
            && !(l.civitai?.civitai_name || "").toLowerCase().includes(q)) return false;
       if (this._filterFavorite && !l.civitai?.favorite) return false;
       if (fm !== null) {
-        const raw = (l.civitai?.base_model ?? "").toLowerCase();
+        // resolved base model: custom → CivitAI → safetensors metadata (server)
+        const raw = (l.base_model ?? l.civitai?.base_model ?? "").toLowerCase();
         if (fm === OTHERS_MATCH) {
           const allKnown = (this._baseModelMatchers || [])
             .filter(f => Array.isArray(f.match)).flatMap(f => f.match);
@@ -1021,6 +1132,7 @@ export class LoraBrowserPanel {
 
   _renderGrid() {
     if (!this._grid) return;
+    this._unobserveCardVideos(this._grid);   // release old <video> observers
     this._grid.innerHTML = "";
     for (const l of this._filtered) this._grid.appendChild(this._buildCard(l));
   }
@@ -1050,8 +1162,31 @@ export class LoraBrowserPanel {
                      || !!(civ.custom_version || "").trim()
                      || !!civ.thumbnail_custom;
 
+    // match / missing badges (data provenance for hash-miss rescues)
+    const match = civ.match || "";
+    let matchHtml = "";
+    if (match === "filename")
+      matchHtml = `<div class="cwk-card-match-badge filename" title="Matched by filename search — unverified, check on CivitAI">≈</div>`;
+    else if (match === "sidecar")
+      matchHtml = `<div class="cwk-card-match-badge sidecar" title="Data from a local .civitai.info sidecar">i</div>`;
+    else if (match === "manual")
+      matchHtml = `<div class="cwk-card-match-badge manual" title="Linked manually via a CivitAI URL">🔗</div>`;
+    if (!matchHtml && civ.not_on_civitai)
+      matchHtml = `<div class="cwk-card-match-badge missing" title="Not found on CivitAI — try “Link by CivitAI URL” in the sidebar">∅</div>`;
+    else if (!matchHtml && civ.error)
+      matchHtml = `<div class="cwk-card-match-badge missing" title="${String(civ.error).replace(/"/g, "&quot;")}">⚠</div>`;
+
+    // media: <video> when the thumbnail is flagged/detected as a video
+    const videoThumb = isVideoThumb(civ);
     let mediaHtml = `<div class="cwk-card-placeholder">🧩</div>`;
-    if (thumb) mediaHtml = `<img src="${thumb}" alt="${displayName}" loading="lazy"/>`;
+    if (thumb) {
+      mediaHtml = videoThumb
+        ? `<video class="cwk-card-video" src="${thumb}" muted loop playsinline preload="metadata"></video>`
+        : `<img src="${thumb}" alt="${displayName}" loading="lazy"/>`;
+    }
+    const videoBadgeHtml = videoThumb
+      ? `<div class="cwk-card-video-badge" title="Video preview">▶</div>`
+      : "";
 
     const eyeHtml = nsfw
       ? `<button class="cwk-eye-btn" title="${revealed ? "Blur image" : "Reveal image"}">${revealed ? "🙈" : "👁"}</button>`
@@ -1066,6 +1201,8 @@ export class LoraBrowserPanel {
       <div class="cwk-card-top-left">
         <div class="cwk-card-badge">LORA</div>
         ${customHtml}
+        ${matchHtml}
+        ${videoBadgeHtml}
         ${eyeHtml}
       </div>
       ${starHtml}
@@ -1078,12 +1215,16 @@ export class LoraBrowserPanel {
       </div>
     `;
 
+    const vidEl = card.querySelector("video.cwk-card-video");
+    if (vidEl) this._observeCardVideo(vidEl);
+
     if (nsfw) {
       card.querySelector(".cwk-eye-btn").addEventListener("click", e => {
         e.stopPropagation();
         this._revealed[l.name] = !this._revealed[l.name];
         localStorage.setItem("cwk_lora_revealed", JSON.stringify(this._revealed));
         this._updateCard(l);
+        this._updateSidebarStatic();   // keep the sidebar preview blur in sync
       });
     }
 
@@ -1108,9 +1249,39 @@ export class LoraBrowserPanel {
     return card;
   }
 
+  // ── Video playback management ──────────────────────────────────────────────
+
+  /** One shared observer for the whole grid: muted videos play only while
+   *  their card is actually in the viewport (a grid full of always-playing
+   *  videos would pin the GPU). */
+  _ensureVideoObserver() {
+    if (this._videoObserver) return this._videoObserver;
+    this._videoObserver = new IntersectionObserver(entries => {
+      for (const en of entries) {
+        const v = en.target;
+        if (en.isIntersecting) v.play().catch(() => {});
+        else v.pause();
+      }
+    }, { threshold: 0.1 });
+    return this._videoObserver;
+  }
+
+  _observeCardVideo(v) {
+    try { this._ensureVideoObserver().observe(v); } catch {}
+  }
+
+  _unobserveCardVideos(rootEl) {
+    if (!this._videoObserver || !rootEl) return;
+    rootEl.querySelectorAll("video.cwk-card-video")
+      .forEach(v => this._videoObserver.unobserve(v));
+  }
+
   _updateCard(l) {
     const el = this._grid?.querySelector(`.cwk-card[data-name="${CSS.escape(l.name)}"]`);
-    if (el) el.replaceWith(this._buildCard(l));
+    if (el) {
+      this._unobserveCardVideos(el);   // release the old card's observer
+      el.replaceWith(this._buildCard(l));
+    }
   }
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -1167,11 +1338,40 @@ export class LoraBrowserPanel {
     this._trigSrcEl.className   = "cwk-source-badge " + (tCustom ? "custom" : tCiv ? "civitai" : "none");
     this._trigSrcEl.textContent = tCustom ? "custom" : tCiv ? "Civitai" : "no data";
 
+    // thumbnail: <img> or <video> depending on the resolved media
     const thumb = civ.thumbnail || "";
-    this._thumbImg.src          = thumb;
-    this._thumbImg.style.display = thumb ? "" : "none";
+    const video = isVideoThumb(civ) && !!thumb;
+    if (video) {
+      this._thumbImg.removeAttribute("src");
+      this._thumbImg.style.display = "none";
+      this._thumbVideo.style.display = "";
+      if (this._thumbVideo.getAttribute("src") !== thumb) {
+        this._thumbVideo.src = thumb;
+      }
+      this._thumbVideo.play().catch(() => {});
+    } else {
+      this._thumbVideo.pause();
+      this._thumbVideo.style.display = "none";
+      if (this._thumbVideo.hasAttribute("src")) {
+        this._thumbVideo.removeAttribute("src");
+        try { this._thumbVideo.load(); } catch {}   // abort any in-flight download
+      }
+      if (thumb) this._thumbImg.src = thumb;
+      this._thumbImg.style.display = thumb ? "" : "none";
+    }
+
+    // NSFW blur on the preview (manual override → CivitAI level), click to reveal
+    const nsfw     = isNsfwLora(l);
+    const revealed = nsfw ? !!this._revealed[l.name] : true;
+    const blur     = nsfw && !revealed;
+    this._thumbImg.classList.toggle("blurred", blur);
+    this._thumbVideo.classList.toggle("blurred", blur);
+    const blurTitle = blur ? "NSFW — click to reveal" : "";
+    this._thumbImg.title   = blurTitle;
+    this._thumbVideo.title = blurTitle;
+
     this._thumbReset.disabled   = !civ.thumbnail_custom;
-    this._nsfwToggle.checked    = isNsfwLora(l);
+    this._nsfwToggle.checked    = nsfw;
 
     this._setStatus(l.name);
   }
@@ -1228,6 +1428,7 @@ export class LoraBrowserPanel {
       });
       if (res.ok) {
         l.civitai = res.civitai || {};
+        if (res.civitai?.base_model) l.base_model = res.civitai.base_model;
         triggerCache.set(l.name, l.civitai.trigger_words || []);
         this._updateCard(l);
         this._updateSidebarStatic();
@@ -1245,7 +1446,7 @@ export class LoraBrowserPanel {
     if (!l) { this._setStatus("⚠ Select a LoRA first", true); return; }
     const input = document.createElement("input");
     input.type   = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/mp4,video/webm";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;

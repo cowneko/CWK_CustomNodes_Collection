@@ -23,6 +23,7 @@ try:
     import base64
     from io import BytesIO
 
+    import torch
     import latent_preview
     from server import PromptServer
 
@@ -32,6 +33,8 @@ try:
     _original_prepare_callback = latent_preview.prepare_callback
 
     def _build_forced_previewer(model):
+        """Build our own previewer independent of the global Preview Method,
+        so it works even when the global setting is 'none'."""
         lf = model.model.latent_format
         if lf.latent_rgb_factors is None:
             return None
@@ -41,7 +44,7 @@ try:
             lf.latent_rgb_factors_reshape,
         )
 
-        def _walk_latent_parts(t, out, prefix, depth=0):
+    def _walk_latent_parts(t, out, prefix, depth=0):
         """Collect real tensors from nested/tree latent wrappers and lists."""
         if t is None or depth > 4:
             return
@@ -58,14 +61,21 @@ try:
         if isinstance(t, torch.Tensor):
             out.append((prefix, t))
 
+    def _collect_dump(candidates):
+        parts = []
+        for i, c in enumerate(candidates):
+            _walk_latent_parts(c, parts, f"cand[{i}]")
+        return parts
+
     def _pick_preview_latent(candidates):
         """Pick the tensor most likely to be the FULL evolving latent:
         prefer 5-D (video), then the largest by element count. The old
         'tensors[0]' unwrap grabbed the fixed I2V anchor frame — which is
-        exactly why video previewed as a still frame."""
+        exactly why video previewed as a still frame that only changed
+        between KSampler passes."""
         parts = []
-        for i, c in enumerate(candidates):
-            _walk_latent_parts(c, parts, f"cand[{i}]")
+        for c in candidates:
+            _walk_latent_parts(c, parts, "cand")
         if not parts:
             return None
         tensors = [t for _, t in parts]
@@ -80,43 +90,52 @@ try:
             x0 = _pick_preview_latent(candidates)
             if x0 is None:
                 return
-            if step == 0:   # one-time structure dump — tells us everything
+            if step == 0:
+                # one-time structure dump per pass — names every tensor part
+                # with its shape, so any remaining picker problem is a
+                # one-line fix instead of a guess
                 desc = ", ".join(f"{n}: {tuple(t.shape)}"
                                 for n, t in _collect_dump(candidates))
                 print(f"[CWK_LivePreview] candidates → {desc}")
             if step is not None and step < 3:
                 print(f"[CWK_LivePreview] step={step} picked {tuple(x0.shape)} "
                       f"mean={float(x0.float().mean()):.4f}")
-            if x0.ndim == 5:   # video latent → preview the middle frame
+            if x0.ndim == 5:
+                # video latent [B, C, T, H, W] → preview the middle frame
                 x0 = x0[:, :, x0.shape[2] // 2]
             if x0.ndim != 4:
                 return
             _, pil_image, _ = previewer.decode_latent_to_preview_image("JPEG", x0)
+
             buf = BytesIO()
             pil_image.save(buf, format="JPEG", quality=85)
             b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
             server.send_sync(
                 "cwk_live_preview",
                 {"image": f"data:image/jpeg;base64,{b64}"},
                 server.client_id,
             )
         except Exception as e:
+            # was silent for a long time — a swallowed decode failure looks
+            # exactly like a frozen preview
             print(f"[CWK_LivePreview] preview error (step={step}): {e!r}")
 
-    def _collect_dump(candidates):
-        parts = []
-        for i, c in enumerate(candidates):
-            _walk_latent_parts(c, parts, f"cand[{i}]")
-        return parts
-
     def _patched_prepare_callback(model, steps, x0_output_dict=None):
+        # Preserve original behavior completely. NOTE: returns None when the
+        # global method is 'none' — the original code called it anyway and
+        # crashed sampling in that mode.
         original_callback = _original_prepare_callback(model, steps, x0_output_dict)
+
         forced_previewer = _build_forced_previewer(model) if CWK_STATE["enabled"] else None
 
         def callback(step, x0, x, total_steps):
             if original_callback is not None:
                 original_callback(step, x0, x, total_steps)
             if CWK_STATE["enabled"] and forced_previewer is not None:
+                # Gather every plausible source of the evolving latent:
+                # SDE-family samplers deliver it via the dict, I2V pipelines
+                # wrap it in nested structures. _pick_preview_latent decides.
                 cands = []
                 if x0_output_dict:
                     dx = x0_output_dict.get("x0")

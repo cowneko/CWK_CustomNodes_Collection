@@ -109,7 +109,7 @@ try:
             min_side = min(frames[0].width, frames[0].height)
             if min_side < 160:
                 scale = min(4, 640 // min_side)
-                frames = [f.resize((f.width * scale, f.height * scale), Image.NEAREST)
+                frames = [f.resize((f.width * scale, f.height * scale), Image.BILINEAR)
                           for f in frames]
 
             # Stack vertically into one strip; the JS splits it back into

@@ -41,23 +41,56 @@ try:
             lf.latent_rgb_factors_reshape,
         )
 
-    def _send_preview(previewer, x0, step=None):
+        def _walk_latent_parts(t, out, prefix, depth=0):
+        """Collect real tensors from nested/tree latent wrappers and lists."""
+        if t is None or depth > 4:
+            return
+        if getattr(t, "is_nested", False):
+            parts = getattr(t, "tensors", None)
+            if parts is not None:
+                for i, p in enumerate(parts):
+                    _walk_latent_parts(p, out, f"{prefix}.tensors[{i}]", depth + 1)
+                return
+        if isinstance(t, (list, tuple)):
+            for i, p in enumerate(t):
+                _walk_latent_parts(p, out, f"{prefix}[{i}]", depth + 1)
+            return
+        if isinstance(t, torch.Tensor):
+            out.append((prefix, t))
+
+    def _pick_preview_latent(candidates):
+        """Pick the tensor most likely to be the FULL evolving latent:
+        prefer 5-D (video), then the largest by element count. The old
+        'tensors[0]' unwrap grabbed the fixed I2V anchor frame — which is
+        exactly why video previewed as a still frame."""
+        parts = []
+        for i, c in enumerate(candidates):
+            _walk_latent_parts(c, parts, f"cand[{i}]")
+        if not parts:
+            return None
+        tensors = [t for _, t in parts]
+        vids = [t for t in tensors if t.ndim == 5]
+        return max(vids or tensors, key=lambda t: t.numel())
+
+    def _send_preview(previewer, candidates, step=None):
         server = PromptServer.instance
         if server is None or previewer is None:
             return
         try:
-            if getattr(x0, "is_nested", False):
-                x0 = x0.tensors[0]
-            # Video latents are 5-D [B, C, T, H, W] — preview the middle
-            # frame instead of the giant stacked-frames strip.
-            if getattr(x0, "ndim", 4) == 5:
+            x0 = _pick_preview_latent(candidates)
+            if x0 is None:
+                return
+            if step == 0:   # one-time structure dump — tells us everything
+                desc = ", ".join(f"{n}: {tuple(t.shape)}"
+                                for n, t in _collect_dump(candidates))
+                print(f"[CWK_LivePreview] candidates → {desc}")
+            if step is not None and step < 3:
+                print(f"[CWK_LivePreview] step={step} picked {tuple(x0.shape)} "
+                      f"mean={float(x0.float().mean()):.4f}")
+            if x0.ndim == 5:   # video latent → preview the middle frame
                 x0 = x0[:, :, x0.shape[2] // 2]
-            if step is not None and step < 3:   # one-time diagnostic per pass
-                try:
-                    print(f"[CWK_LivePreview] step={step} shape={tuple(x0.shape)} "
-                          f"mean={float(x0.float().mean()):.4f}")
-                except Exception:
-                    pass
+            if x0.ndim != 4:
+                return
             _, pil_image, _ = previewer.decode_latent_to_preview_image("JPEG", x0)
             buf = BytesIO()
             pil_image.save(buf, format="JPEG", quality=85)
@@ -68,23 +101,30 @@ try:
                 server.client_id,
             )
         except Exception as e:
-            # was silent — a swallowed decode failure looks exactly like a frozen preview
             print(f"[CWK_LivePreview] preview error (step={step}): {e!r}")
+
+    def _collect_dump(candidates):
+        parts = []
+        for i, c in enumerate(candidates):
+            _walk_latent_parts(c, parts, f"cand[{i}]")
+        return parts
 
     def _patched_prepare_callback(model, steps, x0_output_dict=None):
         original_callback = _original_prepare_callback(model, steps, x0_output_dict)
         forced_previewer = _build_forced_previewer(model) if CWK_STATE["enabled"] else None
 
         def callback(step, x0, x, total_steps):
-            # None when global method is "none" — calling it crashed sampling
             if original_callback is not None:
                 original_callback(step, x0, x, total_steps)
             if CWK_STATE["enabled"] and forced_previewer is not None:
-                # SDE-family samplers deliver the true evolving x0 via the
-                # dict; the positional argument is not it in that path.
-                true_x0 = x0_output_dict.get("x0") if x0_output_dict else None
-                _send_preview(forced_previewer,
-                              true_x0 if true_x0 is not None else x0, step)
+                cands = []
+                if x0_output_dict:
+                    dx = x0_output_dict.get("x0")
+                    if dx is not None:
+                        cands.append(dx)
+                cands.append(x0)
+                _send_preview(forced_previewer, cands, step)
+
         return callback
 
     # Apply the patch once at import time. Since nodes.py etc. call

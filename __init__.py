@@ -77,13 +77,17 @@ try:
         vids = [t for t in tensors if t.ndim == 5]
         return max(vids or tensors, key=lambda t: t.numel())
 
+    def _decode_one(previewer, t):
+        out = previewer.decode_latent_to_preview_image("JPEG", t)
+        img = out[1] if isinstance(out, (tuple, list)) else out
+        return img if img is not None else (out[0] if isinstance(out, (tuple, list)) else None)
+
     def _frames_from_latent(previewer, x0):
         """Decode a 5-D video latent to a list of PIL frames; 4-D → [frame]."""
         if x0.ndim == 5:
             x0 = x0[0]                       # drop batch → [C, T, H, W]
-            return [previewer.decode_latent_to_preview_image("JPEG", x0[:, t])[1]
-                    for t in range(x0.shape[1])]
-        return [previewer.decode_latent_to_preview_image("JPEG", x0)[1]]
+            return [_decode_one(previewer, x0[:, i]) for i in range(x0.shape[1])]
+        return [_decode_one(previewer, x0)]
 
     def _send_preview(previewer, candidates, step=None):
         server = PromptServer.instance
@@ -93,7 +97,7 @@ try:
             x0 = _pick_preview_latent(candidates)
             if x0 is None:
                 return
-            frames = _frames_from_latent(previewer, x0)
+            frames = [f for f in frames if f is not None]
             if not frames:
                 return
 

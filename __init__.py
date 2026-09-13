@@ -25,6 +25,7 @@ try:
 
     import torch
     import latent_preview
+    from PIL import Image
     from server import PromptServer
 
     # In-memory toggle, controlled from the ComfyUI Settings panel (see JS file).
@@ -61,13 +62,9 @@ try:
         if isinstance(t, torch.Tensor):
             out.append((prefix, t))
 
-    def _collect_dump(candidates):
-        parts = []
-        for i, c in enumerate(candidates):
-            _walk_latent_parts(c, parts, f"cand[{i}]")
-        return parts
-
     def _pick_preview_latent(candidates):
+        """Pick the tensor most likely to be the FULL evolving latent:
+        prefer 5-D (video), then the largest by element count."""
         parts = []
         for c in candidates:
             _walk_latent_parts(c, parts, "cand")
@@ -78,17 +75,20 @@ try:
         return max(vids or tensors, key=lambda t: t.numel())
 
     def _decode_one(previewer, t):
+        """Shape-agnostic decode — handles 2- and 3-tuple returns."""
         out = previewer.decode_latent_to_preview_image("JPEG", t)
-        img = out[1] if isinstance(out, (tuple, list)) else out
-        return img if img is not None else (out[0] if isinstance(out, (tuple, list)) else None)
+        if isinstance(out, (tuple, list)):
+            return out[1] if len(out) > 1 else out[0]
+        return out
 
     def _frames_from_latent(previewer, x0):
-        """Decode a 5-D video latent to a list of PIL frames; 4-D → [frame].
-        NOTE: slices keep the batch dimension — Latent2RGBPreviewer requires
-        4-D [B, C, H, W] tensors (a 3-D slice throws a matmul shape error)."""
+        """5-D video latent [B, C, T, H, W] → one PIL frame per timestep.
+        The slice MUST be x[:, :, t]: time is dim 2. x[:, t] would index
+        CHANNELS (wrong-channel-count tensor → matmul error) and dropping
+        the batch first (x[0] then x[:, t]) leaves a 3-D tensor the
+        previewer can't consume either. 4-D (image) latents pass through."""
         if x0.ndim == 5:
-            # keep batch: [B, C, T, H, W] → per-step [B, C, H, W]
-            return [_decode_one(previewer, x0[:, t]) for t in range(x0.shape[2])]
+            return [_decode_one(previewer, x0[:, :, t]) for t in range(x0.shape[2])]
         return [_decode_one(previewer, x0)]
 
     def _send_preview(previewer, candidates, step=None):
@@ -99,19 +99,21 @@ try:
             x0 = _pick_preview_latent(candidates)
             if x0 is None:
                 return
-            frames = [f for f in frames if f is not None]
+            frames = _frames_from_latent(previewer, x0)
+            frames = [f.convert("RGB") for f in frames if f is not None]
             if not frames:
                 return
 
-            # Upscale small latents (60px wide for 480×832) so frames are
-            # readable — same idea as VHS's upscale.
+            # Upscale tiny latent-resolution frames (60px wide for 480×832)
+            # so the preview is readable — same idea as VHS.
             min_side = min(frames[0].width, frames[0].height)
             if min_side < 160:
                 scale = min(4, 640 // min_side)
                 frames = [f.resize((f.width * scale, f.height * scale), Image.NEAREST)
                           for f in frames]
 
-            # Stack vertically into one strip, capped for the ~65k JPEG limit.
+            # Stack vertically into one strip; the JS splits it back into
+            # frames and animates them. Cap for PIL's ~65k JPEG height limit.
             MAX_STRIP_H = 60000
             kept, strip_h = [], 0
             for f in frames:
@@ -133,28 +135,22 @@ try:
             b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
             server.send_sync(
                 "cwk_live_preview",
-                {"image": f"data:image/jpeg;base64,{b64}",
-                 "frames": len(kept)},
+                {"image": f"data:image/jpeg;base64,{b64}", "frames": len(kept)},
                 server.client_id,
             )
         except Exception as e:
             print(f"[CWK_LivePreview] preview error (step={step}): {e!r}")
 
     def _patched_prepare_callback(model, steps, x0_output_dict=None):
-        # Preserve original behavior completely. NOTE: returns None when the
-        # global method is 'none' — the original code called it anyway and
+        # Returns None when the global method is 'none' — calling it anyway
         # crashed sampling in that mode.
         original_callback = _original_prepare_callback(model, steps, x0_output_dict)
-
         forced_previewer = _build_forced_previewer(model) if CWK_STATE["enabled"] else None
 
         def callback(step, x0, x, total_steps):
             if original_callback is not None:
                 original_callback(step, x0, x, total_steps)
             if CWK_STATE["enabled"] and forced_previewer is not None:
-                # Gather every plausible source of the evolving latent:
-                # SDE-family samplers deliver it via the dict, I2V pipelines
-                # wrap it in nested structures. _pick_preview_latent decides.
                 cands = []
                 if x0_output_dict:
                     dx = x0_output_dict.get("x0")
@@ -165,12 +161,8 @@ try:
 
         return callback
 
-    # Apply the patch once at import time. Since nodes.py etc. call
-    # `latent_preview.prepare_callback(...)` by attribute lookup on the module,
-    # patching the module attribute affects ALL callers globally.
     latent_preview.prepare_callback = _patched_prepare_callback
 
-    # --- Simple route so the frontend Settings toggle can sync to the backend ---
     routes = PromptServer.instance.routes
 
     @routes.post("/cwk_live_preview/toggle")

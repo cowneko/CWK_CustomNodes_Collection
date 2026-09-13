@@ -83,10 +83,12 @@ try:
         return img if img is not None else (out[0] if isinstance(out, (tuple, list)) else None)
 
     def _frames_from_latent(previewer, x0):
-        """Decode a 5-D video latent to a list of PIL frames; 4-D → [frame]."""
+        """Decode a 5-D video latent to a list of PIL frames; 4-D → [frame].
+        NOTE: slices keep the batch dimension — Latent2RGBPreviewer requires
+        4-D [B, C, H, W] tensors (a 3-D slice throws a matmul shape error)."""
         if x0.ndim == 5:
-            x0 = x0[0]                       # drop batch → [C, T, H, W]
-            return [_decode_one(previewer, x0[:, i]) for i in range(x0.shape[1])]
+            # keep batch: [B, C, T, H, W] → per-step [B, C, H, W]
+            return [_decode_one(previewer, x0[:, t]) for t in range(x0.shape[2])]
         return [_decode_one(previewer, x0)]
 
     def _send_preview(previewer, candidates, step=None):

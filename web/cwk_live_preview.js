@@ -34,7 +34,7 @@ const PREVIEW_MARGIN = 4;
 const PREVIEW_TITLE_GAP = 20;
 const MIN_NODE_HEIGHT = 260;
 
-const ANIM_FPS = 8;   // VHS-like cycling speed through the frames
+const ANIM_FPS = 4;   // VHS-like cycling speed through the frames
 
 // ── Settings sync (unchanged) ─────────────────────────────────────────
 const CWK_LIVE_PREVIEW_SETTING_KEY = "cwk.LivePreview.enabled";

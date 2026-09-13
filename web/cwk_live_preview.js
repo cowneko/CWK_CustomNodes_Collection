@@ -90,12 +90,14 @@ app.registerExtension({
     // Listen for live preview image updates from backend
     api.addEventListener("cwk_live_preview", (event) => {
       const { image } = event.detail || {};
+      console.log(`[CWKLP] msg ${image ? image.length : "empty"}`);
       if (!image) return;
 
       for (const node of app.graph._nodes) {
         if (node.comfyClass === NODE_TYPE) {
           node._cwkHasPreview = true;
           if (node._cwkImgEl) node._cwkImgEl.src = image;
+          node._cwkImgEl.onload = () => console.log("[CWKLP] img displayed");
           // Keep a plain Image object too, for canvas fallback drawing
           if (!node._cwkImgObj) node._cwkImgObj = new Image();
           node._cwkImgObj.onload = () => {

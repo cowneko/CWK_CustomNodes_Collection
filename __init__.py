@@ -32,8 +32,6 @@ try:
     _original_prepare_callback = latent_preview.prepare_callback
 
     def _build_forced_previewer(model):
-        """Build our own previewer independent of the global Preview Method,
-        so it works even when the global setting is 'none'."""
         lf = model.model.latent_format
         if lf.latent_rgb_factors is None:
             return None
@@ -43,36 +41,50 @@ try:
             lf.latent_rgb_factors_reshape,
         )
 
-    def _send_preview(previewer, x0):
+    def _send_preview(previewer, x0, step=None):
         server = PromptServer.instance
         if server is None or previewer is None:
             return
-        if x0.is_nested:
-            x0 = x0.tensors[0]
-
-        _, pil_image, _ = previewer.decode_latent_to_preview_image("JPEG", x0)
-
-        buf = BytesIO()
-        pil_image.save(buf, format="JPEG", quality=85)
-        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
-        server.send_sync(
-            "cwk_live_preview",
-            {"image": f"data:image/jpeg;base64,{b64}"},
-            server.client_id,
-        )
+        try:
+            if getattr(x0, "is_nested", False):
+                x0 = x0.tensors[0]
+            # Video latents are 5-D [B, C, T, H, W] — preview the middle
+            # frame instead of the giant stacked-frames strip.
+            if getattr(x0, "ndim", 4) == 5:
+                x0 = x0[:, :, x0.shape[2] // 2]
+            if step is not None and step < 3:   # one-time diagnostic per pass
+                try:
+                    print(f"[CWK_LivePreview] step={step} shape={tuple(x0.shape)} "
+                          f"mean={float(x0.float().mean()):.4f}")
+                except Exception:
+                    pass
+            _, pil_image, _ = previewer.decode_latent_to_preview_image("JPEG", x0)
+            buf = BytesIO()
+            pil_image.save(buf, format="JPEG", quality=85)
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            server.send_sync(
+                "cwk_live_preview",
+                {"image": f"data:image/jpeg;base64,{b64}"},
+                server.client_id,
+            )
+        except Exception as e:
+            # was silent — a swallowed decode failure looks exactly like a frozen preview
+            print(f"[CWK_LivePreview] preview error (step={step}): {e!r}")
 
     def _patched_prepare_callback(model, steps, x0_output_dict=None):
-        # Preserve original behavior completely (respects global setting as before).
         original_callback = _original_prepare_callback(model, steps, x0_output_dict)
-
         forced_previewer = _build_forced_previewer(model) if CWK_STATE["enabled"] else None
 
         def callback(step, x0, x, total_steps):
-            original_callback(step, x0, x, total_steps)
+            # None when global method is "none" — calling it crashed sampling
+            if original_callback is not None:
+                original_callback(step, x0, x, total_steps)
             if CWK_STATE["enabled"] and forced_previewer is not None:
-                _send_preview(forced_previewer, x0)
-
+                # SDE-family samplers deliver the true evolving x0 via the
+                # dict; the positional argument is not it in that path.
+                true_x0 = x0_output_dict.get("x0") if x0_output_dict else None
+                _send_preview(forced_previewer,
+                              true_x0 if true_x0 is not None else x0, step)
         return callback
 
     # Apply the patch once at import time. Since nodes.py etc. call

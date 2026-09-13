@@ -1,12 +1,18 @@
 /**
  * CWK Live Preview — ComfyUI frontend extension.
  * Receives live image updates via WebSocket and displays them on canvas.
+ *
+ * Video latents arrive as vertical FRAME STRIPS (all timesteps of the
+ * current step stacked in one image, "frames" count in the payload).
+ * The handler splits strips into per-frame canvases and ANIMATES them
+ * (VHS-style: continuously cycling through the latest frame set).
+ * Image workflows send "frames": 1 → behaves exactly like before.
  */
 
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-// ── CWK Palette (matches existing nodes) ──────────────────────────────
+// ── CWK Palette ───────────────────────────────────────────────────────
 const C = {
   bg:         "#1a1f2e",
   bgFull:     "#141824",
@@ -24,14 +30,13 @@ const NODE_TYPE = "CWKLivePreview";
 const NODE_COLOR = "#141824";
 const NODE_BGCOLOR = "#1e2335";
 
-// Preview area layout: margin around the image, vertical room left for the
-// node's title area, and the minimum node height.
 const PREVIEW_MARGIN = 4;
 const PREVIEW_TITLE_GAP = 20;
 const MIN_NODE_HEIGHT = 260;
 
-// ── Settings sync helpers (mirrors the VHS.LatentPreview pattern used in
-// cwk_wan22_prompt_composer.js, adapted for our own backend toggle route) ──
+const ANIM_FPS = 4;   // VHS-like cycling speed through the frames
+
+// ── Settings sync (unchanged) ─────────────────────────────────────────
 const CWK_LIVE_PREVIEW_SETTING_KEY = "cwk.LivePreview.enabled";
 
 async function _readLivePreviewSetting() {
@@ -59,6 +64,60 @@ async function _syncLivePreviewSetting() {
   }
 }
 
+// ── Strip splitting ────────────────────────────────────────────────────
+/** Split a vertical frame strip into an array of per-frame canvases.
+ *  Falls back to [image] when frames <= 1 or the geometry doesn't add up. */
+function _splitStrip(img, frameCount) {
+  if (!frameCount || frameCount <= 1 || img.naturalHeight < frameCount * 2) {
+    return [img];
+  }
+  const fh = Math.floor(img.naturalHeight / frameCount);
+  if (fh < 1) return [img];
+  const frames = [];
+  const w = img.naturalWidth;
+  for (let i = 0; i < frameCount; i++) {
+    // last frame absorbs any rounding remainder
+    const h = (i === frameCount - 1) ? (img.naturalHeight - fh * i) : fh;
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, fh * i, w, h, 0, 0, w, h);
+    frames.push(cv);
+  }
+  return frames;
+}
+
+// ── Shared animation ticker ────────────────────────────────────────────
+let _animNodes = new Set();
+let _animActive = false;
+let _animLast = 0;
+let _animAccum = 0;
+
+function _animTick(ts) {
+  if (_animNodes.size === 0) { _animActive = false; return; }
+  requestAnimationFrame(_animTick);
+  const dt = ts - _animLast;
+  _animLast = ts;
+  _animAccum += dt;
+  const interval = 1000 / ANIM_FPS;
+  if (_animAccum < interval) return;
+  _animAccum = 0;
+  for (const node of _animNodes) {
+    node._cwkAnimIndex = (node._cwkAnimIndex + 1) % node._cwkAnimFrames.length;
+    node._cwkAnimAt = ts;                       // mark for redraw
+  }
+  try { app.canvas.setDirty(true, false); } catch { /**/ }
+}
+
+function _ensureTicker(node) {
+  _animNodes.add(node);
+  if (!_animActive) {
+    _animActive = true;
+    _animLast = performance.now();
+    _animAccum = 0;
+    requestAnimationFrame(_animTick);
+  }
+}
+
 app.registerExtension({
   name: "cwk.live_preview",
 
@@ -82,31 +141,34 @@ app.registerExtension({
   }],
 
   async setup() {
-    // Read back the current setting value so the backend stays in sync
-    // after a page reload (the JS-side toggle can be re-enabled without
-    // the user having to touch the checkbox again).
     _syncLivePreviewSetting();
 
-    // Listen for live preview image updates from backend
     api.addEventListener("cwk_live_preview", (event) => {
-      const { image } = event.detail || {};
+      const { image, frames } = event.detail || {};
       if (!image) return;
 
       for (const node of app.graph._nodes) {
-        if (node.comfyClass === NODE_TYPE) {
-          node._cwkHasPreview = true;
-          if (node._cwkImgEl) node._cwkImgEl.src = image;
-          // Keep a plain Image object too, for canvas fallback drawing
-          if (!node._cwkImgObj) node._cwkImgObj = new Image();
-          node._cwkImgObj.onload = () => {
-            // Node keeps whatever fixed shape the user has set — only the
-            // preview content adapts (via CSS object-fit / canvas fallback
-            // letterboxing) to the current node size, preserving its own
-            // aspect ratio without resizing the node.
-            app.canvas.setDirty(true, true);
-          };
-          node._cwkImgObj.src = image;
-        }
+        if (node.comfyClass !== NODE_TYPE) continue;
+
+        // The _cwkImgObj is our decode + frame-split workhorse:
+        // the DOM widget img keeps showing the full strip (cheap), while
+        // the canvas fallback animates the split frames.
+        if (!node._cwkImgObj) node._cwkImgObj = new Image();
+        node._cwkImgObj.onload = () => {
+          const parts = _splitStrip(node._cwkImgObj, frames);
+          if (parts.length > 1) {
+            node._cwkAnimFrames = parts;
+            node._cwkAnimIndex  = 0;
+            _ensureTicker(node);               // VHS behaviour: keep animating
+          } else {
+            node._cwkAnimFrames = null;
+          }
+          app.canvas.setDirty(true, true);
+        };
+        node._cwkImgObj.src = image;
+
+        if (node._cwkImgEl) node._cwkImgEl.src = image;
+        node._cwkHasPreview = true;
       }
     });
   },
@@ -117,7 +179,6 @@ app.registerExtension({
     const onDrawBackground = nodeType.prototype.onDrawBackground;
 
     nodeType.prototype.onNodeCreated = function () {
-      // Create a DOM image element for the widget
       const img = document.createElement("img");
       img.style.width = "100%";
       img.style.height = "100%";
@@ -126,20 +187,14 @@ app.registerExtension({
       img.style.pointerEvents = "none";
       img.style.background = "transparent";
 
-      // hideOnZoom: false keeps the DOM widget visible at any zoom level
-      // instead of the default behavior (hidden below ~0.5 scale).
-      const widget = this.addCustomWidget({
-        hideOnZoom: false,
-        element: img,
-      });
+      this.addCustomWidget({ hideOnZoom: false, element: img });
 
       this.size = this.size && this.size[1] >= MIN_NODE_HEIGHT ? this.size : [320, 320];
       this._cwkImgEl = img;
       this._cwkHasPreview = false;
+      this._cwkAnimFrames = null;
+      this._cwkAnimIndex  = 0;
 
-      // Canvas-level fallback: if the DOM widget's own CSS scaling ever
-      // makes it unreadable/invisible at extreme zoom-out, also paint
-      // the image directly to canvas.
       this.onDrawBackground = function (ctx) {
         onDrawBackground?.apply(this, arguments);
         if (this.flags?.collapsed) return;
@@ -150,66 +205,55 @@ app.registerExtension({
         const h = this.size[1] - margin * 2 - titleGap;
         if (w <= 0 || h <= 0) return;
 
+        // Animated (video) mode: draw the current animation frame
+        if (this._cwkAnimFrames && this._cwkAnimFrames.length) {
+          const src = this._cwkAnimFrames[this._cwkAnimIndex % this._cwkAnimFrames.length];
+          const iw = src.width, ih = src.height;
+          const boxAspect = w / h, imgAspect = iw / ih;
+          let drawW, drawH, offsetX, offsetY;
+          if (imgAspect > boxAspect) { drawW = w; drawH = w / imgAspect; offsetX = 0; offsetY = (h - drawH) / 2; }
+          else                       { drawH = h; drawW = h * imgAspect; offsetX = (w - drawW) / 2; offsetY = 0; }
+          ctx.drawImage(src, margin + offsetX, margin + titleGap + offsetY, drawW, drawH);
+          return;
+        }
+
         const hasImage =
           this._cwkImgObj && this._cwkImgObj.complete && this._cwkImgObj.naturalWidth > 0;
 
         if (hasImage) {
-          // Draw with object-fit: contain semantics — fit the image inside
-          // the available box while preserving its natural aspect ratio,
-          // centered (letterboxed/pillarboxed) instead of stretched.
-          const img = this._cwkImgObj;
-          const imgAspect = img.naturalWidth / img.naturalHeight;
+          const im = this._cwkImgObj;
+          const imgAspect = im.naturalWidth / im.naturalHeight;
           const boxAspect = w / h;
-
           let drawW, drawH, offsetX, offsetY;
-          if (imgAspect > boxAspect) {
-            drawW = w; drawH = w / imgAspect;
-            offsetX = 0; offsetY = (h - drawH) / 2;
-          } else {
-            drawH = h; drawW = h * imgAspect;
-            offsetX = (w - drawW) / 2; offsetY = 0;
-          }
-
-          ctx.drawImage(img, margin + offsetX, margin + titleGap + offsetY, drawW, drawH);
+          if (imgAspect > boxAspect) { drawW = w; drawH = w / imgAspect; offsetX = 0; offsetY = (h - drawH) / 2; }
+          else                       { drawH = h; drawW = h * imgAspect; offsetX = (w - drawW) / 2; offsetY = 0; }
+          ctx.drawImage(im, margin + offsetX, margin + titleGap + offsetY, drawW, drawH);
           return;
         }
 
-        // No preview received yet — draw a placeholder box + label
-        // matching CWK's color scheme.
+        // No preview received yet
         ctx.save();
-        
-        // Placeholder background
         ctx.fillStyle = "rgba(26, 31, 46, 0.6)";
         ctx.fillRect(margin, margin + titleGap, w, h);
-        
-        // Border
         ctx.strokeStyle = C.border;
         ctx.lineWidth = 1;
         ctx.strokeRect(margin + 0.5, margin + titleGap + 0.5, w - 1, h - 1);
-
-        // Placeholder text
         ctx.fillStyle = C.textDim;
         ctx.font = "12px Inter, system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("No preview yet", margin + w / 2, margin + titleGap + h / 2);
-        
         ctx.restore();
       };
     };
-
-    nodeType.prototype.onNodeCreated?.call(nodeType.prototype);
   },
 
   async afterConfigureGraph() {
-    // Restore node colors and styles when loading from saved workflow
     for (const node of app.graph._nodes) {
       if (node.comfyClass !== NODE_TYPE) continue;
-      
       node.color = NODE_COLOR;
       node.bgcolor = NODE_BGCOLOR;
       node.size = node.size && node.size[1] >= MIN_NODE_HEIGHT ? node.size : [320, 320];
-      
       if (!node._cwkImgEl) {
         const img = document.createElement("img");
         img.style.width = "100%";
@@ -218,12 +262,7 @@ app.registerExtension({
         img.style.display = "block";
         img.style.pointerEvents = "none";
         img.style.background = "transparent";
-        
-        const widget = node.addCustomWidget({
-          hideOnZoom: false,
-          element: img,
-        });
-        
+        node.addCustomWidget({ hideOnZoom: false, element: img });
         node._cwkImgEl = img;
         node._cwkHasPreview = false;
       }

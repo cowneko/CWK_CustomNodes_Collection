@@ -1,6 +1,7 @@
+// ===== cwk_wan22_image_prep.js — PART 1/2 =====
 /**
  * CWK Wan2.2 Image Prep — ComfyUI Frontend Extension
- * Interactive image cropping with fixed aspect ratio and parameter output.
+ * a image cropping with fixed aspect ratio and parameter output.
  *
  * Fixes applied:
  *  #1 – Remove the IMAGE input slot so the node works without a connection.
@@ -9,6 +10,10 @@
  *       style / behaviour as cwk_preset_manager.js.
  *  #4 – Auto-scale node height to fit all controls, reduce output gap.
  *  #5 – Persist loaded image as base64 in node data so it survives tab switches.
+ *  #6 – Resolution + crop survive reloads: crop is ADOPTED from the saved
+ *       workflow widgets on image restore (was reset to center, wiping it),
+ *       and freshly added nodes start at the last-used resolution.
+ *       (Live sampler/scheduler lists — Res4lyf etc. — are in here too.)
  */
 
 import { app } from "../../scripts/app.js";
@@ -51,7 +56,7 @@ const PREVIEW_MAX_H = 300;
 function initState(node) {
   if (node._cwk_wan) return node._cwk_wan;
   node._cwk_wan = {
-    image: null, imageLoaded: false,
+    image: null, imageLoaded: false, imageLoading: false,
     cropFrame: { x: 0, y: 0, width: 512, height: 512 },
     aspectRatio: 16 / 9,
     isDragging: false, dragHandle: null,
@@ -64,33 +69,102 @@ function initState(node) {
   return node._cwk_wan;
 }
 
-// FIX #5: Load persisted image from filename widget
+// ─── Resolution aspects + last-used persistence ─────────────────
+const RESOLUTION_ASPECTS = {
+  "16:9 (832x480)":  16 / 9,
+  "16:9 (1280x720)": 16 / 9,
+  "9:16 (480x832)":  9  / 16,
+  "9:16 (720x1280)": 9  / 16,
+  "1:1 (1024x1024)": 1,
+};
+
+// Last-used preset for FRESHLY ADDED nodes (workflow-loaded nodes take their
+// values from the saved workflow — same pattern as CWK_LatentImage).
+const WAN_PREP_LS_KEY = "CWK_WanImagePrep_resolution";
+
+function persistResolutionPreset(preset) {
+  try { localStorage.setItem(WAN_PREP_LS_KEY, preset); } catch {}
+}
+
+function _applyPersistedResolution(node) {
+  let saved = null;
+  try { saved = localStorage.getItem(WAN_PREP_LS_KEY); } catch {}
+  if (!saved || !(saved in RESOLUTION_ASPECTS)) return;
+  const w = getWidget(node, "resolution_preset");
+  if (!w) return;
+  w.value = saved;
+  node._cwk_wan.aspectRatio = RESOLUTION_ASPECTS[saved];
+}
+
+function applyResolutionPreset(node, preset) {
+  const aspect = RESOLUTION_ASPECTS[preset];
+  if (!aspect) return;
+  persistResolutionPreset(preset);
+  const st = node._cwk_wan;
+  st.aspectRatio = aspect;
+  if (st.image) {
+    const img = st.image;
+    st.cropFrame.width  = Math.min(img.naturalWidth, img.naturalHeight * aspect);
+    st.cropFrame.height = st.cropFrame.width / aspect;
+    st.cropFrame.x      = (img.naturalWidth  - st.cropFrame.width)  / 2;
+    st.cropFrame.y      = (img.naturalHeight - st.cropFrame.height) / 2;
+    updateWidgetsFromState(node);
+  }
+  app.canvas.setDirty(true, true);
+}
+
+// ─── FIX #5 + persistence: load persisted image and ADOPT the saved crop ──
 function restoreImageFromFilename(node) {
-  // Only restore if image isn't already loaded
-  if (node._cwk_wan.imageLoaded) return;
-  
+  const st = node._cwk_wan;
+  if (st.imageLoaded || st.imageLoading) return;   // loading guard: one fetch, not one per repaint
+
   const imgFilenameWidget = getWidget(node, "image_filename");
   if (!imgFilenameWidget || !imgFilenameWidget.value) return;
-  
+
+  // Adopt the persisted resolution BEFORE load, so the restored crop and any
+  // fallback use the right aspect (was hardcoded 16/9 from initState).
+  const presetW = getWidget(node, "resolution_preset");
+  if (presetW?.value && RESOLUTION_ASPECTS[presetW.value]) {
+    st.aspectRatio = RESOLUTION_ASPECTS[presetW.value];
+  }
+
   const filename = imgFilenameWidget.value;
   const url = api.apiURL(`/view?filename=${encodeURIComponent(filename)}&type=input&rand=${Math.random()}`);
-  
+
   const img = new Image();
   img.crossOrigin = "anonymous";
+  st.imageLoading = true;
   img.onload = () => {
-    node._cwk_wan.image = img;
-    node._cwk_wan.imageLoaded = true;
-    
-    const asp = node._cwk_wan.aspectRatio;
-    node._cwk_wan.cropFrame.width  = Math.min(img.naturalWidth, img.naturalHeight * asp);
-    node._cwk_wan.cropFrame.height = node._cwk_wan.cropFrame.width / asp;
-    node._cwk_wan.cropFrame.x      = (img.naturalWidth  - node._cwk_wan.cropFrame.width)  / 2;
-    node._cwk_wan.cropFrame.y      = (img.naturalHeight - node._cwk_wan.cropFrame.height) / 2;
-    
-    updateWidgetsFromState(node);
+    st.image = img;
+    st.imageLoaded = true;
+    st.imageLoading = false;
+
+    // Adopt the crop saved in the workflow widgets (clamped to this image)
+    // instead of resetting to center — the reset is what wiped the crop
+    // on every reload.
+    const g = n => Number(getWidget(node, n)?.value);
+    let cx = g("crop_x"), cy = g("crop_y");
+    let cw = g("crop_width"), ch = g("crop_height");
+    if ([cx, cy, cw, ch].every(Number.isFinite) && cw >= 1 && ch >= 1) {
+      cw = Math.min(cw, img.naturalWidth);
+      ch = Math.min(ch, img.naturalHeight);
+      cx = Math.max(0, Math.min(cx, img.naturalWidth  - cw));
+      cy = Math.max(0, Math.min(cy, img.naturalHeight - ch));
+      st.cropFrame = { x: cx, y: cy, width: cw, height: ch };
+      updateWidgetsFromState(node);   // write clamped values back in sync
+    } else {
+      // No valid saved crop → centered default at the CURRENT aspect
+      const asp = st.aspectRatio;
+      st.cropFrame.width  = Math.min(img.naturalWidth, img.naturalHeight * asp);
+      st.cropFrame.height = st.cropFrame.width / asp;
+      st.cropFrame.x      = (img.naturalWidth  - st.cropFrame.width)  / 2;
+      st.cropFrame.y      = (img.naturalHeight - st.cropFrame.height) / 2;
+      updateWidgetsFromState(node);
+    }
     app.canvas.setDirty(true, true);
   };
   img.onerror = () => {
+    st.imageLoading = false;
     console.warn("[CWK] Failed to load image:", filename);
   };
   img.src = url;
@@ -147,30 +221,6 @@ function updateWidgetsFromState(node) {
     const w = getWidget(node, name);
     if (w) w.value = val;
   }
-}
-
-// ─── Resolution preset ─────────────────────────────────────────
-function applyResolutionPreset(node, preset) {
-  const map = {
-    "16:9 (832x480)":  16 / 9,
-    "16:9 (1280x720)": 16 / 9,
-    "9:16 (480x832)":  9  / 16,
-    "9:16 (720x1280)": 9  / 16,
-    "1:1 (1024x1024)": 1,
-  };
-  const aspect = map[preset];
-  if (!aspect) return;
-  const st = node._cwk_wan;
-  st.aspectRatio = aspect;
-  if (st.image) {
-    const img = st.image;
-    st.cropFrame.width  = Math.min(img.naturalWidth, img.naturalHeight * aspect);
-    st.cropFrame.height = st.cropFrame.width / aspect;
-    st.cropFrame.x      = (img.naturalWidth  - st.cropFrame.width)  / 2;
-    st.cropFrame.y      = (img.naturalHeight - st.cropFrame.height) / 2;
-    updateWidgetsFromState(node);
-  }
-  app.canvas.setDirty(true, true);
 }
 
 // ─── Image upload ──────────────────────────────────────────────
@@ -299,7 +349,7 @@ function openWanDropdown(node, widgetName, options, localX, localY, localW, loca
     outline:     "none",
     zIndex:      "99999",
     cursor:      "pointer",
-    padding:     "2px 0",
+    padding:    "2px 0",
     overflow:    "auto",
   });
 
@@ -448,7 +498,7 @@ function buildControls(node) {
   return [
     { section: "Crop Settings" },
     { label:"Resolution",  widget:"resolution_preset", type:"list",
-      options:["16:9 (832x480)","16:9 (1280x720)","9:16 (480x832)","9:16 (720x1280)","1:1 (1024x1024)"],
+      options:Object.keys(RESOLUTION_ASPECTS),
       value: () => gw("resolution_preset")?.value ?? "16:9 (832x480)" },
     { label:"Upscale",     widget:"upscale_method",    type:"list",
       options:["nearest-exact","bilinear","area","bicubic","lanczos"],
@@ -462,7 +512,7 @@ function buildControls(node) {
       value: () => gw("split_steps")?.value  ?? 25 },
     { label:"CFG Scale",   widget:"cfg_scale",          type:"float", min:0,   max:30,
       value: () => parseFloat(gw("cfg_scale")?.value    ?? 7.5).toFixed(1) },
-       { label:"Scheduler",   widget:"scheduler",          type:"list",
+    { label:"Scheduler",   widget:"scheduler",          type:"list",
       options: widgetComboOptions(node, "scheduler",
         ["simple","sgm_uniform","karras","exponential","ddim_uniform","beta","normal"]),
       value: () => gw("scheduler")?.value  ?? "karras" },
@@ -649,7 +699,7 @@ function dragCropFrame(node, lx, ly, type, lastLx, lastLy) {
       break;
     case "se":
       st.cropFrame.width  += dx;
-      st.cropFrame.height  = st.cropFrame.width / st.aspectRatio;
+      st.cropFrame.height = st.cropFrame.width / st.aspectRatio;
       break;
   }
   st.cropFrame.width  = Math.max(minW, Math.min(st.cropFrame.width,  img.naturalWidth));
@@ -757,6 +807,17 @@ function attachBehaviors(node) {
   node.color     = NODE_COLOR;
   node.bgcolor   = NODE_BGCOLOR;
   node.resizable = true;
+
+  // Mark nodes restored from a saved workflow — fresh nodes (menu-added)
+  // get the last-used resolution instead.
+  if (!node._cwk_wan_onConfigureHooked) {
+    node._cwk_wan_onConfigureHooked = true;
+    const prevOnConfigure = node.onConfigure;
+    node.onConfigure = function (info) {
+      node._cwk_wan_fromGraph = true;
+      return prevOnConfigure?.apply(this, arguments);
+    };
+  }
 
   node.onDrawForeground = ctx => {
     // FIX #5: Restore before drawing
@@ -900,6 +961,9 @@ app.registerExtension({
           w.computeSize = () => [0, -4];
         }
 
+        // Fresh node (not restored from a workflow): adopt last-used resolution
+        if (!node._cwk_wan_fromGraph) _applyPersistedResolution(node);
+
         if (node.size[0] < NODE_MIN_W) node.size[0] = NODE_MIN_W;
         const naturalH = computeNaturalHeight(node);
         node.size[1] = Math.max(NODE_MIN_H, naturalH);
@@ -927,3 +991,5 @@ app.registerExtension({
     }, 500);
   },
 });
+
+// ===== END OF FILE =====
